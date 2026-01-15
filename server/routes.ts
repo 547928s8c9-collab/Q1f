@@ -63,11 +63,16 @@ export async function registerRoutes(
       const portfolioSeries = await storage.getPortfolioSeries(userId, 90);
       const security = await storage.getSecuritySettings(userId);
       const latestConsent = await storage.getLatestConsent(userId, "combined");
+      const kycApplicant = await storage.getKycApplicant(userId);
 
       // Consent version (should match the constants in consent routes)
       const REQUIRED_CONSENT_VERSION = "1.0";
       const hasAcceptedConsent = !!latestConsent;
       const needsReaccept = latestConsent ? latestConsent.version !== REQUIRED_CONSENT_VERSION : false;
+
+      // KYC status from applicant table (primary) or security settings (fallback)
+      const kycApplicantStatus = kycApplicant?.status || "NOT_STARTED";
+      const isKycApproved = kycApplicantStatus === "APPROVED" || security?.kycStatus === "approved";
 
       // Calculate invested amounts
       const invested = positions.reduce(
@@ -90,7 +95,6 @@ export async function registerRoutes(
       // Build onboarding stage
       const contactVerified = security?.contactVerified ?? false;
       const consentAccepted = security?.consentAccepted ?? false;
-      const kycStatus = security?.kycStatus ?? "pending";
       
       type OnboardingStage = "welcome" | "verify" | "consent" | "kyc" | "done";
       let onboardingStage: OnboardingStage = "welcome";
@@ -98,15 +102,15 @@ export async function registerRoutes(
         onboardingStage = "verify";
       } else if (!consentAccepted) {
         onboardingStage = "consent";
-      } else if (kycStatus !== "approved") {
+      } else if (!isKycApproved) {
         onboardingStage = "kyc";
       } else {
         onboardingStage = "done";
       }
 
-      // Build gate flags (consent and kyc are now on security settings)
+      // Build gate flags
       const consentRequired = !consentAccepted;
-      const kycRequired = kycStatus !== "approved";
+      const kycRequired = !isKycApproved;
       const twoFactorRequired = !security?.twoFactorEnabled;
       
       // Check whitelist requirement
@@ -141,7 +145,7 @@ export async function registerRoutes(
           stage: onboardingStage,
           contactVerified,
           consentAccepted,
-          kycStatus,
+          kycStatus: kycApplicantStatus,
         },
         consent: {
           hasAccepted: hasAcceptedConsent,
@@ -518,6 +522,26 @@ export async function registerRoutes(
       });
       const { strategyId, amount } = schema.parse(req.body);
 
+      // Gate checks: consent and KYC required
+      const security = await storage.getSecuritySettings(userId);
+      const kycApplicant = await storage.getKycApplicant(userId);
+      
+      if (!security?.consentAccepted) {
+        return res.status(403).json({ 
+          error: "Consent required",
+          code: "CONSENT_REQUIRED",
+          message: "Please accept the terms and conditions before investing"
+        });
+      }
+      
+      if (kycApplicant?.status !== "APPROVED") {
+        return res.status(403).json({ 
+          error: "KYC required",
+          code: "KYC_REQUIRED",
+          message: "Please complete identity verification before investing"
+        });
+      }
+
       const strategy = await storage.getStrategy(strategyId);
       if (!strategy) {
         return res.status(404).json({ error: "Strategy not found" });
@@ -668,10 +692,33 @@ export async function registerRoutes(
       const { amount, address } = schema.parse(req.body);
 
       const security = await storage.getSecuritySettings(userId);
+      const kycApplicant = await storage.getKycApplicant(userId);
+
+      // Gate checks: consent required
+      if (!security?.consentAccepted) {
+        return res.status(403).json({ 
+          error: "Consent required",
+          code: "CONSENT_REQUIRED",
+          message: "Please accept the terms and conditions before withdrawing"
+        });
+      }
+
+      // Gate checks: KYC required
+      if (kycApplicant?.status !== "APPROVED") {
+        return res.status(403).json({ 
+          error: "KYC required",
+          code: "KYC_REQUIRED",
+          message: "Please complete identity verification before withdrawing"
+        });
+      }
 
       // Check 2FA
       if (!security?.twoFactorEnabled) {
-        return res.status(400).json({ error: "Two-factor authentication required for withdrawals" });
+        return res.status(403).json({ 
+          error: "2FA required",
+          code: "TWO_FACTOR_REQUIRED",
+          message: "Please enable two-factor authentication before withdrawing"
+        });
       }
 
       // Check whitelist
@@ -679,7 +726,11 @@ export async function registerRoutes(
         const whitelist = await storage.getWhitelistAddresses(userId);
         const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
         if (!whitelisted) {
-          return res.status(400).json({ error: "Address not in whitelist or not yet active" });
+          return res.status(403).json({ 
+            error: "Whitelist required",
+            code: "WHITELIST_REQUIRED",
+            message: "Address not in whitelist or not yet active"
+          });
         }
       }
 
@@ -1094,6 +1145,75 @@ export async function registerRoutes(
       res.json({ fromAsset, toAsset, fromAmount: amount, toAmount, rate: rate.toString() });
     } catch (error) {
       console.error("FX quote error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ==================== NOTIFICATION ROUTES ====================
+
+  // GET /api/notifications (protected)
+  app.get("/api/notifications", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const unreadOnly = req.query.unreadOnly === "true";
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      
+      const notificationsData = await storage.getNotifications(userId, unreadOnly, limit);
+      const unreadCount = await storage.getUnreadNotificationCount(userId);
+      
+      res.json({
+        notifications: notificationsData.map((n) => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          resourceType: n.resourceType,
+          resourceId: n.resourceId,
+          isRead: n.isRead,
+          createdAt: n.createdAt?.toISOString(),
+        })),
+        unreadCount,
+      });
+    } catch (error) {
+      console.error("Get notifications error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/notifications/count (protected)
+  app.get("/api/notifications/count", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const unreadCount = await storage.getUnreadNotificationCount(userId);
+      res.json({ unreadCount });
+    } catch (error) {
+      console.error("Get notification count error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/notifications/:id/read (protected)
+  app.post("/api/notifications/:id/read", isAuthenticated, async (req, res) => {
+    try {
+      const notification = await storage.markNotificationRead(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark notification read error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/notifications/read-all (protected)
+  app.post("/api/notifications/read-all", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Mark all notifications read error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
