@@ -1,0 +1,126 @@
+You are building a fintech web MVP called “ZEON” in a Replit workspace.
+
+GOAL:
+Create a production-grade, responsive fintech dashboard (Revolut-like structure) with an “Anthropic-inspired” soft minimal design: warm neutrals, calm accent, clean typography, lots of whitespace, clear money statuses.
+
+TECH STACK (strict):
+- Next.js 14+ App Router, TypeScript
+- Tailwind CSS
+- Recharts for charts (Line/Area/Bar with Tooltip and crosshair-like cursor)
+- Prisma + SQLite (for Replit simplicity)
+- Zod for validation
+- Lucide icons (or inline SVG), ensure icons fit buttons consistently
+
+DATA RULES (strict):
+- Money amounts are integer minor units stored as string (e.g. "12345"), never floats.
+- Assets: RUB (2 decimals), USDT (6 decimals). Network: TRC20.
+- Use RFC3339 timestamps.
+- Every user-facing money action creates an Operation record with a status state machine.
+
+FEATURES TO IMPLEMENT (MVP):
+1) App shell:
+   - Mobile bottom nav + Desktop sidebar
+   - Routes: Home, Analytics, Invest, Wallet, Activity, Settings
+2) Charts + period toggles:
+   - Period switch: 7 / 30 / 90 days on Home, Analytics, Strategy detail charts
+   - Portfolio chart (USDT) with Tooltip + cursor (crosshair feel)
+   - Quotes cards with sparklines: BTC/USDT, ETH/USDT, USDT/RUB (demo data)
+3) Strategy detail “performance sheet”:
+   - Compare chart: strategy equity vs benchmark
+   - Benchmark selector: BTC / ETH / USDT (0%) / Index (50/50 BTC+ETH)
+   - Metric tiles: Return %, Max Drawdown %, Win rate %, Fees text
+4) Activity:
+   - Search box (search in title, subtitle, amount, txHash, providerRef, strategy name)
+   - Filter chips: All / Deposits / Withdrawals / Invest / Payouts / FX / Subscription / KYC
+   - Receipt page: timeline steps + detail rows + copy buttons
+   - Use a single Operation copy mapping layer (type+status -> title/subtitle/eta/reason).
+5) Cashflow view (Analytics):
+   - Show KPI tiles: Net Deposits, Invested (current), Realized P&L, Unrealized P&L
+   - Unrealized = investedCurrent - investedPrincipal (principal from INVEST ops)
+   - Realized = sum of DAILY_PAYOUT completed ops
+   - Convert RUB deposits into USDT using current demo USDT/RUB quote (note: demo only)
+6) Vaults:
+   - Vaults: Principal, Profit, Taxes (USDT denominated for MVP)
+   - Transfers wallet <-> vault with operations and balance updates
+   - Auto-sweep toggle: after DAILY_PAYOUT credited, automatically move credited profit to Profit Vault (create separate operation)
+7) Security Center (Settings -> Security):
+   - 2FA toggle (demo), anti-phishing code (demo), address book/whitelist (demo), new address delay (0/24h)
+   - Whitelist gating: if whitelist enabled, USDT withdraw can only go to active whitelisted addresses
+   - Delay gating: newly added address is “pending activation” for 24h (demo time simulation)
+
+SCREENS (must exist):
+- / (Home)
+- /analytics (Analytics + cashflow)
+- /invest (Strategy list)
+- /invest/[id] (Strategy detail with compare chart + benchmark selector + metrics)
+- /invest/[id]/confirm
+- /wallet (balances + deposit/withdraw links + vault entry)
+- /wallet/vaults
+- /deposit/usdt (TRC20 address + simulate deposit)
+- /deposit/card (simulate card topup)
+- /withdraw (USDT TRC20 withdraw with whitelist checks)
+- /activity (search+filters list)
+- /activity/[operationId] (receipt)
+- /settings
+- /settings/security
+
+BACKEND (Next.js API routes):
+- GET /api/bootstrap (gate + balances + portfolio series + quotes + vaults summary)
+- GET /api/operations (cursor pagination + filter + q)
+- GET /api/operations/:id
+- POST /api/consent/accept
+- POST /api/kyc/start (demo -> approve)
+- POST /api/deposit/usdt/simulate
+- POST /api/deposit/card/simulate
+- POST /api/fx/quote (demo)
+- POST /api/invest
+- POST /api/payout/daily (demo)
+- POST /api/withdraw/usdt
+- POST /api/vault/transfer
+- POST /api/security/2fa/enable (demo)
+- POST /api/security/whitelist/add (demo)
+- POST /api/security/whitelist/remove (demo)
+- POST /api/security/whitelist/toggle
+- POST /api/security/address-delay (0/24h)
+- POST /api/security/anti-phishing (demo)
+
+GATING (must):
+- bootstrap returns gate flags:
+  - consentRequired, kycRequired
+  - canDeposit, canInvest, canWithdraw
+  - reasons[] for UI
+- Invest and Withdraw blocked until consent + kyc are satisfied
+- Withdraw blocked if 2FA is not enabled
+- Withdraw blocked if whitelist enabled and destination not active/allowed
+
+DESIGN:
+- Implement Tailwind theme tokens with CSS variables:
+  - background/surface/border/text/muted/primary/success/warn/error
+  - Anthropic-inspired warm neutrals + calm accent
+- Typography:
+  - use system-ui by default, tabular-nums for amounts
+  - consistent font scale and line heights
+- Buttons:
+  - min height 44px
+  - icons fixed: 18px (md), 16px (sm)
+- Focus states: :focus-visible rings everywhere
+
+DEMO DATA:
+Seed deterministic demo data:
+- portfolio equity series ~4-5% monthly drift with noise
+- quotes series for BTC/ETH/USDT-RUB
+- strategies: at least 2
+- operations: include deposits, invest, daily payouts, withdrawals, subscription, fx
+- positions: user invested in 1 strategy
+- vault balances: principal/profit/taxes (small demo values)
+
+OUTPUT REQUIREMENTS:
+- Generate the full codebase with Prisma schema and seed script.
+- Provide a clear file tree and README with:
+  - install
+  - prisma migrate/seed
+  - run dev
+- Ensure the app runs in Replit with one command (npm run dev).
+- Keep the UI calm and premium; no loud gradients; avoid clutter.
+
+Start by scaffolding the Next.js project in the Replit workspace, then implement Prisma, seed data, API routes, UI screens, and shared components. Do not stop at partial scaffolding; deliver a working MVP that I can run.

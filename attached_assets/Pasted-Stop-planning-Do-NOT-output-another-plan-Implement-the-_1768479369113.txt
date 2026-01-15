@@ -1,0 +1,122 @@
+Stop planning. Do NOT output another plan. Implement the code now by creating/updating files in the workspace.
+
+CONTEXT:
+You already described the plan for a ZEON fintech MVP (Next.js 14 App Router + TS + Tailwind + Prisma SQLite + Recharts). Now you must produce a running codebase.
+
+ABSOLUTE RULES:
+- Do not write another plan.
+- Create the full project code in the workspace.
+- Ensure `npm install` and `npm run dev` will run without TypeScript errors.
+- At the end, print a concise file tree and exact run instructions.
+- If something is missing in the Replit workspace, scaffold it inside the workspace (create package.json, configs, etc).
+
+TECH STACK (strict):
+- Next.js 14+ App Router, TypeScript
+- Tailwind CSS with CSS variables theme tokens (Anthropic-inspired warm neutrals + calm accent)
+- Prisma + SQLite
+- Recharts
+- Zod
+- lucide-react icons (set icon size: 18 for normal buttons, 16 for small)
+- Amounts stored as integer minor units as string, never floats
+
+MVP PAGES (must exist):
+/ (Home)
+/analytics
+/invest
+/invest/[id]
+/invest/[id]/confirm
+/wallet
+/wallet/vaults
+/deposit/usdt
+/deposit/card
+/withdraw
+/activity
+/activity/[operationId]
+/settings
+/settings/security
+
+MVP FEATURES (must work end-to-end with demo data):
+1) App shell responsive:
+   - desktop sidebar + mobile bottom nav
+2) Charts with 7/30/90 toggle:
+   - Home: portfolio chart
+   - Analytics: portfolio + monthly bars + cashflow tiles
+   - Strategy detail: compare chart (strategy vs benchmark) with benchmark selector BTC/ETH/USDT/Index
+   - Tooltips + cursor/crosshair feel
+3) Activity:
+   - search + filter chips
+   - receipt page with timeline + detail rows + copy buttons
+   - use a single operation copy mapping layer
+4) Cashflow view:
+   - Net Deposits, Invested(current), Realized P&L, Unrealized P&L
+5) Vaults:
+   - Principal/Profit/Taxes
+   - wallet<->vault transfers
+   - auto-sweep toggle: after DAILY_PAYOUT, move profit to Profit vault (create separate operation)
+6) Security Center:
+   - 2FA toggle (demo)
+   - anti-phishing code (demo)
+   - address whitelist enable/disable
+   - new address delay (0/24h)
+   - withdrawal gating: if whitelist enabled, withdraw only to active whitelisted addresses; if delay enabled, new address pending activation
+7) Demo flows:
+   - simulate USDT deposit credited
+   - simulate card deposit credited
+   - invest creates op and updates balances/invested
+   - daily payout creates op and updates balances (+ auto-sweep if enabled)
+   - withdraw creates op and updates balances (blocked by security rules)
+
+DATABASE (Prisma):
+- Add schema.prisma with models needed for the features above.
+- Create a seed script that generates deterministic demo data:
+  - portfolio series 90 days with ~4-5% monthly drift + noise
+  - quotes for BTC/ETH/USDT-RUB 90 days
+  - 2 strategies
+  - operations history with mixed types and statuses
+  - balances (RUB, USDT, invested USDT)
+  - vault balances (principal/profit/taxes)
+  - security settings (2FA off by default, whitelist off by default)
+- Provide npm scripts to migrate and seed:
+  - prisma migrate
+  - prisma db seed
+
+API ROUTES (Next.js route handlers):
+- GET /api/bootstrap
+- GET /api/operations (cursor + filter + q)
+- GET /api/operations/[id]
+- POST /api/consent/accept
+- POST /api/kyc/start (demo approve)
+- POST /api/deposit/usdt/simulate
+- POST /api/deposit/card/simulate
+- POST /api/fx/quote (demo)
+- POST /api/invest
+- POST /api/payout/daily
+- POST /api/withdraw/usdt
+- POST /api/vault/transfer
+- POST /api/security/2fa/toggle
+- POST /api/security/whitelist/toggle
+- POST /api/security/whitelist/add
+- POST /api/security/whitelist/remove
+- POST /api/security/address-delay
+- POST /api/security/anti-phishing
+
+DESIGN REQUIREMENTS:
+- Calm, premium, minimal, no loud gradients
+- Use Tailwind + CSS variables
+- Tabular numbers for amounts
+- Consistent type scale and spacing scale
+- Buttons min height 44px; icon sizes fixed
+
+IMPLEMENTATION ORDER (do it in code, not in text):
+1) Scaffold project + Tailwind theme tokens
+2) Prisma schema + seed + scripts
+3) API routes
+4) Shared UI components + layout
+5) Pages + charts + interactions
+6) Activity search/filter + receipts
+7) Vaults + Security gating
+
+Now implement everything. When done, print:
+- file tree
+- commands to run
+- any known limitations (short list)
