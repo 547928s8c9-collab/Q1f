@@ -81,6 +81,16 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        success: {
+          DEFAULT: "rgb(34 197 94)",
+          foreground: "rgb(255 255 255)",
+        },
+        warning: {
+          DEFAULT: "rgb(245 158 11)",
+          foreground: "rgb(255 255 255)",
+        },
+        positive: "rgb(34 197 94)",
+        negative: "rgb(239 68 68)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
