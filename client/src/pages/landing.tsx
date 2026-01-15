@@ -7,6 +7,10 @@ export default function Landing() {
     window.location.href = "/api/login";
   };
 
+  const handleDemoLogin = () => {
+    window.location.href = "/api/demo-login";
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -17,9 +21,14 @@ export default function Landing() {
             </div>
             <span className="text-xl font-semibold tracking-tight">ZEON</span>
           </div>
-          <Button onClick={handleLogin} data-testid="button-login-header">
-            Sign In
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleDemoLogin} data-testid="button-demo-header">
+              Demo
+            </Button>
+            <Button onClick={handleLogin} data-testid="button-login-header">
+              Sign In
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -38,6 +47,9 @@ export default function Landing() {
               <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
                 Get Started
                 <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+              <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-try-demo">
+                Try Demo
               </Button>
             </div>
           </div>
