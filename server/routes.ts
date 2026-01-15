@@ -4,12 +4,36 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 
+import { db } from "./db";
+import { sql } from "drizzle-orm";
+
 const DEMO_USER_ID = "demo-user";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  // GET /api/health - Health check endpoint
+  app.get("/api/health", async (_req, res) => {
+    try {
+      // DB Ping
+      await db.execute(sql`SELECT 1`);
+      
+      res.json({ 
+        status: "ok", 
+        database: "connected",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Health check error:", error);
+      res.status(503).json({ 
+        status: "error", 
+        database: "disconnected",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
 
   // GET /api/bootstrap - Main bootstrap endpoint
   app.get("/api/bootstrap", async (req, res) => {
