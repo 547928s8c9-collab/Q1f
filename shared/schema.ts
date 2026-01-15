@@ -203,6 +203,78 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 
+// ==================== KYC APPLICANTS ====================
+// KYC state machine with full status tracking
+export const KycStatus = {
+  NOT_STARTED: "NOT_STARTED",
+  IN_REVIEW: "IN_REVIEW",
+  APPROVED: "APPROVED",
+  NEEDS_ACTION: "NEEDS_ACTION",
+  REJECTED: "REJECTED",
+  ON_HOLD: "ON_HOLD",
+} as const;
+
+export type KycStatusType = typeof KycStatus[keyof typeof KycStatus];
+
+export const kycApplicants = pgTable("kyc_applicants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique(),
+  status: text("status").notNull().default("NOT_STARTED"), // KycStatus values
+  level: text("level").default("basic"), // basic, advanced
+  providerRef: text("provider_ref"), // Sumsub applicant ID
+  riskLevel: text("risk_level"), // low, medium, high
+  pepFlag: boolean("pep_flag").default(false), // Politically Exposed Person
+  rejectionReason: text("rejection_reason"),
+  needsActionReason: text("needs_action_reason"),
+  submittedAt: timestamp("submitted_at"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertKycApplicantSchema = createInsertSchema(kycApplicants).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertKycApplicant = z.infer<typeof insertKycApplicantSchema>;
+export type KycApplicant = typeof kycApplicants.$inferSelect;
+
+// KYC Status DTO for API responses
+export interface KycStatusDTO {
+  status: KycStatusType;
+  level: string | null;
+  providerRef: string | null;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  needsActionReason: string | null;
+  allowedTransitions: KycStatusType[];
+}
+
+// KYC state transition map
+export const KycTransitions: Record<KycStatusType, KycStatusType[]> = {
+  NOT_STARTED: ["IN_REVIEW"],
+  IN_REVIEW: ["APPROVED", "NEEDS_ACTION", "REJECTED", "ON_HOLD"],
+  APPROVED: [], // Terminal state
+  NEEDS_ACTION: ["IN_REVIEW"], // User resubmits
+  REJECTED: [], // Terminal state (may allow appeal later)
+  ON_HOLD: ["IN_REVIEW", "REJECTED"], // Manual review
+};
+
+// ==================== NOTIFICATIONS ====================
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(), // operation, security, kyc, system
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  resourceType: text("resource_type"), // operation, kyc, security
+  resourceId: varchar("resource_id"),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
 // Consent status response type
 export interface ConsentStatusResponse {
   hasAccepted: boolean;

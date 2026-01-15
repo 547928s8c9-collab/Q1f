@@ -277,28 +277,153 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/kyc/start - Demo auto-approve (protected)
+  // GET /api/kyc/status - Get KYC status (protected)
+  app.get("/api/kyc/status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const applicant = await storage.getKycApplicant(userId);
+      
+      const status = applicant?.status || "NOT_STARTED";
+      const { KycTransitions, KycStatus } = await import("@shared/schema");
+      const allowedTransitions = KycTransitions[status as keyof typeof KycTransitions] || [];
+
+      res.json({
+        status,
+        level: applicant?.level || null,
+        providerRef: applicant?.providerRef || null,
+        submittedAt: applicant?.submittedAt?.toISOString() || null,
+        reviewedAt: applicant?.reviewedAt?.toISOString() || null,
+        rejectionReason: applicant?.rejectionReason || null,
+        needsActionReason: applicant?.needsActionReason || null,
+        allowedTransitions,
+      });
+    } catch (error) {
+      console.error("KYC status error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/kyc/start - Start KYC process (demo: auto-approve after delay)
   app.post("/api/kyc/start", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
-      await storage.createOperation({
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      // Check if applicant exists
+      let applicant = await storage.getKycApplicant(userId);
+      const previousStatus = applicant?.status || "NOT_STARTED";
+
+      // Validate transition
+      const { KycTransitions, KycStatus } = await import("@shared/schema");
+      const allowedTransitions = KycTransitions[previousStatus as keyof typeof KycTransitions] || [];
+      if (!allowedTransitions.includes("IN_REVIEW")) {
+        return res.status(400).json({ 
+          error: "Invalid transition",
+          code: "INVALID_KYC_TRANSITION",
+          currentStatus: previousStatus,
+          allowedTransitions
+        });
+      }
+
+      // Create or update applicant to IN_REVIEW
+      if (!applicant) {
+        applicant = await storage.createKycApplicant({
+          userId,
+          status: "IN_REVIEW",
+          level: "basic",
+          submittedAt: new Date(),
+        });
+      } else {
+        applicant = await storage.updateKycApplicant(userId, {
+          status: "IN_REVIEW",
+          submittedAt: new Date(),
+          rejectionReason: null,
+          needsActionReason: null,
+        });
+      }
+
+      // Log audit event
+      await storage.createAuditLog({
         userId,
-        type: "KYC",
-        status: "completed",
-        asset: null,
-        amount: null,
-        fee: null,
-        txHash: null,
-        providerRef: null,
-        strategyId: null,
-        strategyName: null,
-        fromVault: null,
-        toVault: null,
-        metadata: null,
-        reason: null,
+        event: "KYC_STATUS_CHANGED",
+        resourceType: "kyc",
+        resourceId: applicant?.id,
+        details: { previousStatus, newStatus: "IN_REVIEW" },
+        ip,
+        userAgent,
       });
-      res.json({ success: true, status: "approved" });
+
+      // Create notification
+      await storage.createNotification({
+        userId,
+        type: "kyc",
+        title: "KYC Verification Started",
+        message: "Your identity verification is now being reviewed.",
+        resourceType: "kyc",
+        resourceId: applicant?.id,
+      });
+
+      // Demo mode: auto-approve after 2 seconds
+      setTimeout(async () => {
+        try {
+          const currentApplicant = await storage.getKycApplicant(userId);
+          if (currentApplicant?.status === "IN_REVIEW") {
+            await storage.updateKycApplicant(userId, {
+              status: "APPROVED",
+              reviewedAt: new Date(),
+            });
+            await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+
+            // Log audit event
+            await storage.createAuditLog({
+              userId,
+              event: "KYC_STATUS_CHANGED",
+              resourceType: "kyc",
+              resourceId: currentApplicant.id,
+              details: { previousStatus: "IN_REVIEW", newStatus: "APPROVED" },
+              ip: "system",
+              userAgent: "demo-auto-approve",
+            });
+
+            // Create notification
+            await storage.createNotification({
+              userId,
+              type: "kyc",
+              title: "KYC Approved",
+              message: "Your identity has been successfully verified.",
+              resourceType: "kyc",
+              resourceId: currentApplicant.id,
+            });
+
+            // Create operation record
+            await storage.createOperation({
+              userId,
+              type: "KYC",
+              status: "completed",
+              asset: null,
+              amount: null,
+              fee: null,
+              txHash: null,
+              providerRef: null,
+              strategyId: null,
+              strategyName: null,
+              fromVault: null,
+              toVault: null,
+              metadata: null,
+              reason: null,
+            });
+          }
+        } catch (err) {
+          console.error("Demo KYC auto-approve error:", err);
+        }
+      }, 2000);
+
+      res.json({ 
+        success: true, 
+        status: "IN_REVIEW",
+        message: "KYC verification started. Demo mode will auto-approve in ~2 seconds."
+      });
     } catch (error) {
       console.error("KYC start error:", error);
       res.status(500).json({ error: "Internal server error" });

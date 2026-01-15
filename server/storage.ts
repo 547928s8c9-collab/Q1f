@@ -13,6 +13,8 @@ import {
   whitelistAddresses,
   consents,
   auditLogs,
+  kycApplicants,
+  notifications,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -37,6 +39,10 @@ import {
   type InsertConsent,
   type AuditLog,
   type InsertAuditLog,
+  type KycApplicant,
+  type InsertKycApplicant,
+  type Notification,
+  type InsertNotification,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -89,6 +95,18 @@ export interface IStorage {
 
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(userId: string, limit?: number): Promise<AuditLog[]>;
+
+  // KYC Applicants
+  getKycApplicant(userId: string): Promise<KycApplicant | undefined>;
+  createKycApplicant(applicant: InsertKycApplicant): Promise<KycApplicant>;
+  updateKycApplicant(userId: string, updates: Partial<KycApplicant>): Promise<KycApplicant | undefined>;
+
+  // Notifications
+  getNotifications(userId: string, unreadOnly?: boolean, limit?: number): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsRead(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -353,6 +371,64 @@ export class DatabaseStorage implements IStorage {
       .where(eq(auditLogs.userId, userId))
       .orderBy(desc(auditLogs.createdAt))
       .limit(limit);
+  }
+
+  // KYC Applicants
+  async getKycApplicant(userId: string): Promise<KycApplicant | undefined> {
+    const [applicant] = await db.select().from(kycApplicants).where(eq(kycApplicants.userId, userId));
+    return applicant;
+  }
+
+  async createKycApplicant(applicant: InsertKycApplicant): Promise<KycApplicant> {
+    const [created] = await db.insert(kycApplicants).values(applicant).returning();
+    return created;
+  }
+
+  async updateKycApplicant(userId: string, updates: Partial<KycApplicant>): Promise<KycApplicant | undefined> {
+    const [updated] = await db.update(kycApplicants)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(kycApplicants.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  // Notifications
+  async getNotifications(userId: string, unreadOnly: boolean = false, limit: number = 50): Promise<Notification[]> {
+    if (unreadOnly) {
+      return db.select().from(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+    }
+    return db.select().from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result.length;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: string): Promise<Notification | undefined> {
+    const [updated] = await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
   }
 }
 
