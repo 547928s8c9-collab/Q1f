@@ -4,6 +4,7 @@ import {
   balances,
   vaults,
   strategies,
+  strategyPerformance,
   positions,
   operations,
   portfolioSeries,
@@ -21,6 +22,8 @@ import {
   type InsertVault,
   type Strategy,
   type InsertStrategy,
+  type StrategyPerformance,
+  type InsertStrategyPerformance,
   type Position,
   type InsertPosition,
   type Operation,
@@ -59,6 +62,10 @@ export interface IStorage {
   getStrategies(): Promise<Strategy[]>;
   getStrategy(id: string): Promise<Strategy | undefined>;
   createStrategy(strategy: InsertStrategy): Promise<Strategy>;
+  
+  getStrategyPerformance(strategyId: string, days?: number): Promise<StrategyPerformance[]>;
+  createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance>;
+  seedStrategies(): Promise<void>;
 
   getPositions(userId: string): Promise<Position[]>;
   getPosition(userId: string, strategyId: string): Promise<Position | undefined>;
@@ -195,6 +202,96 @@ export class DatabaseStorage implements IStorage {
   async createStrategy(strategy: InsertStrategy): Promise<Strategy> {
     const [created] = await db.insert(strategies).values(strategy).returning();
     return created;
+  }
+
+  async getStrategyPerformance(strategyId: string, days: number = 90): Promise<StrategyPerformance[]> {
+    return db.select().from(strategyPerformance)
+      .where(eq(strategyPerformance.strategyId, strategyId))
+      .orderBy(strategyPerformance.day)
+      .limit(days);
+  }
+
+  async createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance> {
+    const [created] = await db.insert(strategyPerformance).values(perf).returning();
+    return created;
+  }
+
+  async seedStrategies(): Promise<void> {
+    const existingStrategies = await this.getStrategies();
+    if (existingStrategies.length >= 8) return;
+
+    await db.delete(strategies);
+    await db.delete(strategyPerformance);
+
+    const strategyData = [
+      { name: "Stable Yield", tier: "LOW", desc: "Conservative stablecoin farming with minimal risk", pairs: ["USDT/USDC", "DAI/USDT"], minBps: 200, maxBps: 300, worst: "-0.8%", dd: "-1.2%" },
+      { name: "Fixed Income Plus", tier: "LOW", desc: "Enhanced fixed income with diversified lending", pairs: ["USDT/aUSDC", "USDT/cDAI"], minBps: 250, maxBps: 350, worst: "-1.0%", dd: "-1.5%" },
+      { name: "Balanced Growth", tier: "CORE", desc: "Balanced approach mixing stable and volatile assets", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 400, maxBps: 500, worst: "-3.5%", dd: "-8.0%" },
+      { name: "DeFi Momentum", tier: "CORE", desc: "Momentum-based DeFi token rotation strategy", pairs: ["UNI/USDT", "AAVE/USDT", "LINK/USDT"], minBps: 450, maxBps: 550, worst: "-4.2%", dd: "-10.0%" },
+      { name: "Market Neutral", tier: "CORE", desc: "Long-short strategy targeting absolute returns", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 350, maxBps: 450, worst: "-2.8%", dd: "-6.0%" },
+      { name: "Alpha Seeker", tier: "HIGH", desc: "Aggressive alpha generation through arbitrage", pairs: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], minBps: 600, maxBps: 700, worst: "-8.0%", dd: "-18.0%" },
+      { name: "Volatility Harvester", tier: "HIGH", desc: "Options-based volatility capture strategy", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 650, maxBps: 750, worst: "-10.0%", dd: "-22.0%" },
+      { name: "Moonshot Portfolio", tier: "HIGH", desc: "High-conviction altcoin picks for maximum growth", pairs: ["SOL/USDT", "AVAX/USDT", "DOT/USDT"], minBps: 700, maxBps: 800, worst: "-15.0%", dd: "-35.0%" },
+    ];
+
+    const baseAmount = 1000000000; // 1000 USDT in minor units
+
+    for (const s of strategyData) {
+      const [strategy] = await db.insert(strategies).values({
+        name: s.name,
+        description: s.desc,
+        riskTier: s.tier,
+        baseAsset: "USDT",
+        pairsJson: s.pairs,
+        expectedMonthlyRangeBpsMin: s.minBps,
+        expectedMonthlyRangeBpsMax: s.maxBps,
+        feesJson: { management: "0.5%", performance: "10%" },
+        termsJson: { profitPayout: s.tier === "LOW" ? "DAILY" : "MONTHLY", principalRedemption: "WEEKLY_WINDOW" },
+        minInvestment: "100000000",
+        worstMonth: s.worst,
+        maxDrawdown: s.dd,
+        isActive: true,
+      }).returning();
+
+      // Generate 90-day performance series
+      const dailyDrift = s.tier === "LOW" ? 0.0008 : s.tier === "CORE" ? 0.0015 : 0.0022;
+      const volatility = s.tier === "LOW" ? 0.002 : s.tier === "CORE" ? 0.008 : 0.015;
+      
+      let equity = baseAmount;
+      let btcBenchmark = baseAmount;
+      let ethBenchmark = baseAmount;
+      
+      const today = new Date();
+      
+      for (let day = 1; day <= 90; day++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - (90 - day));
+        const dateStr = date.toISOString().split("T")[0];
+        
+        // Seeded random for deterministic results
+        const seed = strategy.id.charCodeAt(0) + day;
+        const rand1 = Math.sin(seed * 9999) * 10000;
+        const rand2 = Math.sin(seed * 7777) * 10000;
+        const random = (rand1 - Math.floor(rand1)) * 2 - 1;
+        
+        // Add drawdown days for HIGH tier
+        const isDrawdownDay = s.tier === "HIGH" && day % 15 === 0;
+        const dailyReturn = isDrawdownDay ? -volatility * 2 : dailyDrift + random * volatility;
+        
+        equity = Math.round(equity * (1 + dailyReturn));
+        btcBenchmark = Math.round(btcBenchmark * (1 + 0.001 + (rand2 - Math.floor(rand2)) * 0.015 - 0.0075));
+        ethBenchmark = Math.round(ethBenchmark * (1 + 0.0012 + (rand1 - Math.floor(rand1)) * 0.018 - 0.009));
+        
+        await db.insert(strategyPerformance).values({
+          strategyId: strategy.id,
+          day,
+          date: dateStr,
+          equityMinor: equity.toString(),
+          benchmarkBtcMinor: btcBenchmark.toString(),
+          benchmarkEthMinor: ethBenchmark.toString(),
+        });
+      }
+    }
   }
 
   async getPositions(userId: string): Promise<Position[]> {

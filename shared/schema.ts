@@ -40,12 +40,16 @@ export const strategies = pgTable("strategies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
-  riskLevel: text("risk_level").notNull(), // low, medium, high
-  minInvestment: text("min_investment").notNull(), // minor units
-  expectedReturn: text("expected_return"), // percentage as string
-  maxDrawdown: text("max_drawdown"),
-  winRate: text("win_rate"),
-  fees: text("fees"),
+  riskTier: text("risk_tier").notNull(), // LOW, CORE, HIGH
+  baseAsset: text("base_asset").notNull().default("USDT"),
+  pairsJson: jsonb("pairs_json"), // e.g., ["BTC/USDT", "ETH/USDT"]
+  expectedMonthlyRangeBpsMin: integer("expected_monthly_range_bps_min"), // basis points min
+  expectedMonthlyRangeBpsMax: integer("expected_monthly_range_bps_max"), // basis points max
+  feesJson: jsonb("fees_json"), // { management: "0.5%", performance: "10%" }
+  termsJson: jsonb("terms_json"), // { profitPayout: "DAILY", principalRedemption: "WEEKLY_WINDOW" }
+  minInvestment: text("min_investment").notNull().default("100000000"), // 100 USDT minor units
+  worstMonth: text("worst_month"), // worst monthly return percentage
+  maxDrawdown: text("max_drawdown"), // max drawdown percentage
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -53,6 +57,21 @@ export const strategies = pgTable("strategies", {
 export const insertStrategySchema = createInsertSchema(strategies).omit({ id: true, createdAt: true });
 export type InsertStrategy = z.infer<typeof insertStrategySchema>;
 export type Strategy = typeof strategies.$inferSelect;
+
+// ==================== STRATEGY PERFORMANCE ====================
+export const strategyPerformance = pgTable("strategy_performance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  strategyId: varchar("strategy_id").notNull(),
+  day: integer("day").notNull(), // day number 1-90
+  date: text("date").notNull(), // RFC3339 date
+  equityMinor: text("equity_minor").notNull(), // strategy equity in minor units (starts at 1000 USDT = 1000000000)
+  benchmarkBtcMinor: text("benchmark_btc_minor"), // BTC benchmark normalized
+  benchmarkEthMinor: text("benchmark_eth_minor"), // ETH benchmark normalized
+});
+
+export const insertStrategyPerformanceSchema = createInsertSchema(strategyPerformance).omit({ id: true });
+export type InsertStrategyPerformance = z.infer<typeof insertStrategyPerformanceSchema>;
+export type StrategyPerformance = typeof strategyPerformance.$inferSelect;
 
 // ==================== POSITIONS ====================
 export const positions = pgTable("positions", {
