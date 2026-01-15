@@ -1601,21 +1601,51 @@ export async function registerRoutes(
 
       const { strategyId, frequency, addressId, minPayoutMinor, active } = parseResult.data;
 
-      // If activating, verify address is ACTIVE
-      if (active && addressId) {
+      // Gate checks if activating
+      if (active) {
+        const security = await storage.getSecuritySettings(userId);
+        const kycApplicant = await storage.getKycApplicant(userId);
+        
+        // Check consent
+        if (!security?.consentAccepted) {
+          return res.status(403).json({ 
+            error: "Consent required",
+            code: "CONSENT_REQUIRED",
+            message: "Please accept the terms and conditions before enabling payouts"
+          });
+        }
+        
+        // Check KYC
+        if (kycApplicant?.status !== "APPROVED") {
+          return res.status(403).json({ 
+            error: "KYC required",
+            code: "KYC_REQUIRED",
+            message: "Please complete identity verification before enabling payouts"
+          });
+        }
+        
+        // Check address is provided
+        if (!addressId) {
+          return res.status(400).json({ 
+            error: "Address required",
+            code: "ADDRESS_REQUIRED",
+            message: "Please select a whitelisted address before enabling payouts"
+          });
+        }
+        
+        // Check address is ACTIVE
         const address = await storage.getWhitelistAddress(addressId);
         if (!address || address.status !== "ACTIVE") {
           return res.status(400).json({ 
-            error: "Cannot activate payout: selected address is not active. Please add and activate a whitelisted address first." 
+            error: "Address not active",
+            code: "ADDRESS_NOT_ACTIVE",
+            message: "Selected address is not active. Please add and activate a whitelisted address first."
           });
         }
       }
 
-      if (active && !addressId) {
-        return res.status(400).json({ 
-          error: "Cannot activate payout without selecting a whitelisted address." 
-        });
-      }
+      // Get strategy name for operation record
+      const strategy = await storage.getStrategy(strategyId);
 
       const instruction = await storage.upsertPayoutInstruction({
         userId,
@@ -1624,6 +1654,29 @@ export async function registerRoutes(
         addressId: addressId || null,
         minPayoutMinor,
         active,
+      });
+
+      // Create operation for audit trail
+      await storage.createOperation({
+        userId,
+        type: "PAYOUT_SETTINGS_CHANGED",
+        status: "completed",
+        asset: "USDT",
+        amount: "0",
+        fee: "0",
+        txHash: null,
+        providerRef: null,
+        strategyId,
+        strategyName: strategy?.name || null,
+        fromVault: null,
+        toVault: null,
+        metadata: {
+          frequency,
+          active,
+          minPayoutMinor,
+          addressId: addressId || null,
+        },
+        reason: null,
       });
 
       res.json(instruction);

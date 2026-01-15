@@ -1,0 +1,56 @@
+Stop planning. Implement code.
+
+STEP 2: Implement Profit Payout Settings per strategy (daily/monthly) with whitelist address selection, min payout threshold, and “network fee deducted from payout” messaging.
+
+REQUIREMENTS:
+1) Prisma / DB:
+- Add or confirm models:
+  - PayoutInstruction: (userId, strategyId, frequency DAILY|MONTHLY, addressId, minPayoutMinor string, active boolean, updatedAt)
+  - AddressBook: (userId, network TRC20, address, label, status PENDING_ACTIVATION|ACTIVE|DISABLED, activatesAt)
+- Seed:
+  - at least 1 ACTIVE TRC20 address and 1 PENDING address (activatesAt in future)
+  - default PayoutInstruction for 1 strategy: monthly, active=false, minPayout=10 USDT
+
+2) API routes:
+- GET /api/payout-instructions?strategyId=...
+- POST /api/payout-instructions (Idempotency-Key supported)
+  - Validate with Zod:
+    - frequency in [DAILY, MONTHLY]
+    - minPayoutMinor is integer string >= 0
+    - if active=true then addressId must exist and be ACTIVE
+- GET /api/security/addresses (return only user addresses)
+- Keep existing whitelist endpoints; if missing, implement:
+  - POST /api/security/whitelist/add (creates PENDING_ACTIVATION with activatesAt based on delay setting)
+  - POST /api/security/address-delay (0h/24h)
+  - POST /api/security/whitelist/toggle
+
+3) UI:
+- On /invest/[id] (Strategy detail) add “Payouts” section:
+  - Toggle: Daily / Monthly (segmented control)
+  - Address dropdown: only ACTIVE addresses; show PENDING addresses disabled with “activates at …”
+  - Min payout input (default 10 USDT)
+  - Active switch: “Автовыплата профита”
+  - Info text:
+    - “Комиссия сети вычитается из выплаты.”
+    - “Если сумма после комиссии меньше порога — прибыль копится до следующей выплаты.”
+  - Save button
+
+- If no ACTIVE addresses:
+  - Show CTA “Добавить адрес” linking to /settings/security
+  - Disallow enabling payouts
+
+4) Gating:
+- Enforce server-side: cannot enable payouts unless consent accepted + KYC approved.
+- Return structured errors:
+  - CONSENT_REQUIRED, KYC_REQUIRED, ADDRESS_REQUIRED, ADDRESS_NOT_ACTIVE
+
+5) Operations/Audit (recommended):
+- Create an Operation when payout settings change:
+  - type = PAYOUT_SETTINGS_CHANGED
+  - include strategyId, frequency, active, minPayout, addressId in metadata
+  - show it in Activity/Receipt.
+
+OUTPUT:
+- Implement changes in code (no more planning).
+- List files changed.
+- Confirm npm run dev works.

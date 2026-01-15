@@ -1,18 +1,22 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { PageHeader } from "@/components/ui/page-header";
 import { CompareChart } from "@/components/charts/compare-chart";
 import { PeriodToggle } from "@/components/charts/period-toggle";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
-import { TrendingUp, AlertTriangle, Shield, Zap, Calculator } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TrendingUp, AlertTriangle, Shield, Zap, Calculator, Wallet, Info, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Strategy, type StrategyPerformance } from "@shared/schema";
+import { type Strategy, type StrategyPerformance, type PayoutInstruction, type WhitelistAddress, formatMoney } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type Benchmark = "BTC" | "ETH" | "USDT" | "INDEX";
 
@@ -31,9 +35,16 @@ const riskConfig: Record<string, { color: string; icon: React.ElementType; label
 
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
+  const { toast } = useToast();
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
   const [benchmark, setBenchmark] = useState<Benchmark>("BTC");
   const [demoAmount, setDemoAmount] = useState("1000");
+  
+  // Payout settings state
+  const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
+  const [payoutAddressId, setPayoutAddressId] = useState<string>("");
+  const [payoutMinAmount, setPayoutMinAmount] = useState("10");
+  const [payoutActive, setPayoutActive] = useState(false);
 
   const { data: strategy, isLoading: strategyLoading } = useQuery<Strategy>({
     queryKey: ["/api/strategies", params.id],
@@ -42,6 +53,64 @@ export default function StrategyDetail() {
   const { data: performance, isLoading: perfLoading } = useQuery<StrategyPerformance[]>({
     queryKey: ["/api/strategies", params.id, "performance"],
   });
+
+  const { data: payoutInstruction } = useQuery<PayoutInstruction | null>({
+    queryKey: ["/api/payout-instructions", params.id],
+    enabled: !!params.id,
+  });
+
+  const { data: whitelistAddresses } = useQuery<WhitelistAddress[]>({
+    queryKey: ["/api/security/whitelist"],
+  });
+
+  // Initialize payout settings from fetched instruction
+  useEffect(() => {
+    if (payoutInstruction) {
+      setPayoutFrequency(payoutInstruction.frequency as "DAILY" | "MONTHLY");
+      setPayoutAddressId(payoutInstruction.addressId || "");
+      setPayoutMinAmount(formatMoney(payoutInstruction.minPayoutMinor, "USDT"));
+      setPayoutActive(payoutInstruction.active || false);
+    }
+  }, [payoutInstruction]);
+
+  const savePayoutMutation = useMutation({
+    mutationFn: async (data: { 
+      strategyId: string; 
+      frequency: string; 
+      addressId?: string; 
+      minPayoutMinor: string; 
+      active: boolean 
+    }) => {
+      return apiRequest("POST", "/api/payout-instructions", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payout-instructions", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
+      toast({ title: "Настройки выплат сохранены" });
+    },
+    onError: (error: Error & { code?: string }) => {
+      toast({ 
+        title: "Ошибка сохранения", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleSavePayout = () => {
+    const minPayoutMinor = (parseFloat(payoutMinAmount) * 1000000).toString();
+    savePayoutMutation.mutate({
+      strategyId: params.id!,
+      frequency: payoutFrequency,
+      addressId: payoutAddressId || undefined,
+      minPayoutMinor,
+      active: payoutActive,
+    });
+  };
+
+  const activeAddresses = whitelistAddresses?.filter(a => a.status === "ACTIVE") || [];
+  const pendingAddresses = whitelistAddresses?.filter(a => a.status === "PENDING_ACTIVATION") || [];
+  const hasActiveAddress = activeAddresses.length > 0;
 
   const isLoading = strategyLoading || perfLoading;
 
@@ -212,6 +281,137 @@ export default function StrategyDetail() {
             <p className="text-xs text-muted-foreground mt-4">
               Result can be negative. This is a simulation based on historical demo data only.
             </p>
+          </Card>
+
+          {/* Payouts Section */}
+          <Card className="p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Wallet className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-semibold">Настройки выплат</h3>
+            </div>
+
+            <div className="space-y-5">
+              {/* Frequency Toggle */}
+              <div>
+                <Label className="text-sm text-muted-foreground mb-2 block">Частота выплат</Label>
+                <div className="flex gap-2">
+                  <Button
+                    variant={payoutFrequency === "DAILY" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPayoutFrequency("DAILY")}
+                    data-testid="button-frequency-daily"
+                  >
+                    Ежедневно
+                  </Button>
+                  <Button
+                    variant={payoutFrequency === "MONTHLY" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPayoutFrequency("MONTHLY")}
+                    data-testid="button-frequency-monthly"
+                  >
+                    Ежемесячно
+                  </Button>
+                </div>
+              </div>
+
+              {/* Address Selection */}
+              <div>
+                <Label className="text-sm text-muted-foreground mb-2 block">Адрес для выплат (TRC20)</Label>
+                {hasActiveAddress ? (
+                  <Select value={payoutAddressId} onValueChange={setPayoutAddressId}>
+                    <SelectTrigger data-testid="select-payout-address">
+                      <SelectValue placeholder="Выберите адрес" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeAddresses.map((addr) => (
+                        <SelectItem key={addr.id} value={addr.id}>
+                          <span className="font-mono text-xs">
+                            {addr.label ? `${addr.label}: ` : ""}{addr.address.slice(0, 8)}...{addr.address.slice(-6)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                      {pendingAddresses.map((addr) => (
+                        <SelectItem key={addr.id} value={addr.id} disabled>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {addr.label ? `${addr.label}: ` : ""}{addr.address.slice(0, 8)}...{addr.address.slice(-6)}
+                            <span className="ml-2 text-warning">
+                              (активируется {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString() : "..."})
+                            </span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="p-4 border border-dashed rounded-lg text-center">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Нет активных адресов для выплат
+                    </p>
+                    <Link href="/settings/security">
+                      <Button variant="outline" size="sm" data-testid="button-add-address">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Добавить адрес
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Min Payout Amount */}
+              <div>
+                <Label htmlFor="min-payout" className="text-sm text-muted-foreground mb-2 block">
+                  Минимальная сумма выплаты (USDT)
+                </Label>
+                <Input
+                  id="min-payout"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={payoutMinAmount}
+                  onChange={(e) => setPayoutMinAmount(e.target.value)}
+                  className="max-w-[200px]"
+                  data-testid="input-min-payout"
+                />
+              </div>
+
+              {/* Active Switch */}
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="font-medium">Автовыплата профита</p>
+                  <p className="text-xs text-muted-foreground">
+                    Автоматически выплачивать прибыль на выбранный адрес
+                  </p>
+                </div>
+                <Switch
+                  checked={payoutActive}
+                  onCheckedChange={setPayoutActive}
+                  disabled={!hasActiveAddress}
+                  data-testid="switch-payout-active"
+                />
+              </div>
+
+              {/* Info Messages */}
+              <div className="space-y-2">
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Комиссия сети (1 USDT) вычитается из выплаты.</span>
+                </div>
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Если сумма после комиссии меньше порога — прибыль копится до следующей выплаты.</span>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <Button 
+                onClick={handleSavePayout} 
+                disabled={savePayoutMutation.isPending}
+                className="w-full"
+                data-testid="button-save-payout"
+              >
+                {savePayoutMutation.isPending ? "Сохранение..." : "Сохранить настройки"}
+              </Button>
+            </div>
           </Card>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

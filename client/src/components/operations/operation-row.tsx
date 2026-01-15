@@ -9,7 +9,8 @@ import {
   Wallet,
   ChevronRight,
   PiggyBank,
-  Banknote
+  Banknote,
+  Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMoney, getOperationCopy, type Operation } from "@shared/schema";
@@ -27,6 +28,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   PROFIT_ACCRUAL: PiggyBank,
   PROFIT_PAYOUT: Banknote,
   PRINCIPAL_REDEEM_EXECUTED: ArrowDownLeft,
+  PAYOUT_SETTINGS_CHANGED: Settings,
   FX: RefreshCw,
   SUBSCRIPTION: CreditCard,
   KYC: Shield,
@@ -42,6 +44,7 @@ const iconColorMap: Record<string, string> = {
   PROFIT_ACCRUAL: "bg-positive/10 text-positive",
   PROFIT_PAYOUT: "bg-positive/10 text-positive",
   PRINCIPAL_REDEEM_EXECUTED: "bg-positive/10 text-positive",
+  PAYOUT_SETTINGS_CHANGED: "bg-blue-500/10 text-blue-500",
   FX: "bg-blue-500/10 text-blue-500",
   SUBSCRIPTION: "bg-muted text-muted-foreground",
   KYC: "bg-blue-500/10 text-blue-500",

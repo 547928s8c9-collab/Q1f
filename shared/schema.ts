@@ -374,6 +374,7 @@ export const OperationType = {
   PROFIT_ACCRUAL: "PROFIT_ACCRUAL",
   PROFIT_PAYOUT: "PROFIT_PAYOUT",
   PRINCIPAL_REDEEM_EXECUTED: "PRINCIPAL_REDEEM_EXECUTED",
+  PAYOUT_SETTINGS_CHANGED: "PAYOUT_SETTINGS_CHANGED",
   FX: "FX",
   SUBSCRIPTION: "SUBSCRIPTION",
   KYC: "KYC",
@@ -515,6 +516,9 @@ export function getOperationCopy(type: string, status: string, metadata?: any): 
     PRINCIPAL_REDEEM_EXECUTED: {
       pending: { title: "Principal Redemption", subtitle: "Processing" },
       completed: { title: "Principal Redemption", subtitle: `Principal from ${metadata?.strategyName || "strategy"}` },
+    },
+    PAYOUT_SETTINGS_CHANGED: {
+      completed: { title: "Payout Settings", subtitle: `Settings updated for ${metadata?.strategyName || "strategy"}` },
     },
   };
 
