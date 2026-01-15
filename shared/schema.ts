@@ -167,6 +167,52 @@ export const insertWhitelistAddressSchema = createInsertSchema(whitelistAddresse
 export type InsertWhitelistAddress = z.infer<typeof insertWhitelistAddressSchema>;
 export type WhitelistAddress = typeof whitelistAddresses.$inferSelect;
 
+// ==================== CONSENTS ====================
+// Versioned consent records with audit trail
+export const consents = pgTable("consents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  version: text("version").notNull(), // e.g., "1.0", "2.0"
+  documentType: text("document_type").notNull(), // "terms", "privacy", "combined"
+  docHash: text("doc_hash").notNull(), // SHA-256 hash of document content
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertConsentSchema = createInsertSchema(consents).omit({ id: true, createdAt: true });
+export type InsertConsent = z.infer<typeof insertConsentSchema>;
+export type Consent = typeof consents.$inferSelect;
+
+// ==================== AUDIT LOGS ====================
+// General purpose audit log for compliance tracking
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"),
+  event: text("event").notNull(), // CONSENT_ACCEPTED, LOGIN, LOGOUT, KYC_STARTED, etc.
+  resourceType: text("resource_type"), // consent, user, operation, etc.
+  resourceId: varchar("resource_id"),
+  details: jsonb("details"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Consent status response type
+export interface ConsentStatusResponse {
+  hasAccepted: boolean;
+  currentVersion: string;
+  requiredVersion: string;
+  needsReaccept: boolean;
+  lastAcceptedAt: string | null;
+  documentHash: string;
+}
+
 // ==================== API TYPES ====================
 export const OperationType = {
   DEPOSIT_USDT: "DEPOSIT_USDT",
