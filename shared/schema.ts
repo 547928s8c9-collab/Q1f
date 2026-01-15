@@ -252,6 +252,13 @@ export interface BootstrapResponse {
     consentAccepted: boolean;
     kycStatus: string;
   };
+  consent: {
+    hasAccepted: boolean;
+    currentVersion: string | null;
+    requiredVersion: string;
+    needsReaccept: boolean;
+    lastAcceptedAt: string | null;
+  };
   gate: {
     consentRequired: boolean;
     kycRequired: boolean;

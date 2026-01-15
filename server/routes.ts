@@ -62,6 +62,12 @@ export async function registerRoutes(
       const positions = await storage.getPositions(userId);
       const portfolioSeries = await storage.getPortfolioSeries(userId, 90);
       const security = await storage.getSecuritySettings(userId);
+      const latestConsent = await storage.getLatestConsent(userId, "combined");
+
+      // Consent version (should match the constants in consent routes)
+      const REQUIRED_CONSENT_VERSION = "1.0";
+      const hasAcceptedConsent = !!latestConsent;
+      const needsReaccept = latestConsent ? latestConsent.version !== REQUIRED_CONSENT_VERSION : false;
 
       // Calculate invested amounts
       const invested = positions.reduce(
@@ -136,6 +142,13 @@ export async function registerRoutes(
           contactVerified,
           consentAccepted,
           kycStatus,
+        },
+        consent: {
+          hasAccepted: hasAcceptedConsent,
+          currentVersion: latestConsent?.version || null,
+          requiredVersion: REQUIRED_CONSENT_VERSION,
+          needsReaccept,
+          lastAcceptedAt: latestConsent?.acceptedAt?.toISOString() || null,
         },
         gate: {
           consentRequired,
