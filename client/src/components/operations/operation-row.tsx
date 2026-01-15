@@ -7,7 +7,9 @@ import {
   CreditCard, 
   Shield, 
   Wallet,
-  ChevronRight
+  ChevronRight,
+  PiggyBank,
+  Banknote
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMoney, getOperationCopy, type Operation } from "@shared/schema";
@@ -22,6 +24,9 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   WITHDRAW_USDT: ArrowUpRight,
   INVEST: TrendingUp,
   DAILY_PAYOUT: TrendingUp,
+  PROFIT_ACCRUAL: PiggyBank,
+  PROFIT_PAYOUT: Banknote,
+  PRINCIPAL_REDEEM_EXECUTED: ArrowDownLeft,
   FX: RefreshCw,
   SUBSCRIPTION: CreditCard,
   KYC: Shield,
@@ -34,6 +39,9 @@ const iconColorMap: Record<string, string> = {
   WITHDRAW_USDT: "bg-negative/10 text-negative",
   INVEST: "bg-primary/10 text-primary",
   DAILY_PAYOUT: "bg-positive/10 text-positive",
+  PROFIT_ACCRUAL: "bg-positive/10 text-positive",
+  PROFIT_PAYOUT: "bg-positive/10 text-positive",
+  PRINCIPAL_REDEEM_EXECUTED: "bg-positive/10 text-positive",
   FX: "bg-blue-500/10 text-blue-500",
   SUBSCRIPTION: "bg-muted text-muted-foreground",
   KYC: "bg-blue-500/10 text-blue-500",
@@ -45,7 +53,7 @@ export function OperationRow({ operation }: OperationRowProps) {
   const iconColor = iconColorMap[operation.type] || "bg-muted text-muted-foreground";
   const copy = getOperationCopy(operation.type, operation.status, { strategyName: operation.strategyName });
 
-  const isCredit = ["DEPOSIT_USDT", "DEPOSIT_CARD", "DAILY_PAYOUT"].includes(operation.type);
+  const isCredit = ["DEPOSIT_USDT", "DEPOSIT_CARD", "DAILY_PAYOUT", "PROFIT_PAYOUT", "PRINCIPAL_REDEEM_EXECUTED"].includes(operation.type);
   const isDebit = ["WITHDRAW_USDT", "INVEST", "SUBSCRIPTION"].includes(operation.type);
 
   const formattedDate = operation.createdAt

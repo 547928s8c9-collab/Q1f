@@ -504,6 +504,18 @@ export function getOperationCopy(type: string, status: string, metadata?: any): 
       pending: { title: "Vault Transfer", subtitle: "Processing" },
       completed: { title: "Vault Transfer", subtitle: "Transfer complete" },
     },
+    PROFIT_ACCRUAL: {
+      pending: { title: "Profit Accrual", subtitle: "Calculating daily returns" },
+      completed: { title: "Profit Accrual", subtitle: `Return from ${metadata?.strategyName || "strategy"}` },
+    },
+    PROFIT_PAYOUT: {
+      pending: { title: "Profit Payout", subtitle: "Processing withdrawal" },
+      completed: { title: "Profit Payout", subtitle: `Payout from ${metadata?.strategyName || "strategy"}` },
+    },
+    PRINCIPAL_REDEEM_EXECUTED: {
+      pending: { title: "Principal Redemption", subtitle: "Processing" },
+      completed: { title: "Principal Redemption", subtitle: `Principal from ${metadata?.strategyName || "strategy"}` },
+    },
   };
 
   return copyMap[type]?.[status] || { title: type, subtitle: status };
