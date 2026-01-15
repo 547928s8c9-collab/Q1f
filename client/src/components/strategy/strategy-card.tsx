@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, ChevronRight } from "lucide-react";
+import { TrendingUp, ChevronRight, AlertTriangle, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Strategy } from "@shared/schema";
 
@@ -9,31 +9,42 @@ interface StrategyCardProps {
   strategy: Strategy;
 }
 
-const riskColors: Record<string, string> = {
-  low: "bg-positive/10 text-positive border-positive/20",
-  medium: "bg-warning/10 text-warning border-warning/20",
-  high: "bg-negative/10 text-negative border-negative/20",
+const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+  LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
+  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Core" },
+  HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "High Risk" },
 };
 
 export function StrategyCard({ strategy }: StrategyCardProps) {
+  const tier = strategy.riskTier || "CORE";
+  const config = riskConfig[tier] || riskConfig.CORE;
+  const Icon = config.icon;
+  
+  const minReturn = strategy.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0";
+  const maxReturn = strategy.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0";
+
   return (
     <Link href={`/invest/${strategy.id}`}>
       <Card
         className="p-5 hover-elevate cursor-pointer transition-all border border-card-border hover:border-primary/30"
         data-testid={`strategy-card-${strategy.id}`}
       >
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-primary" />
+            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center", 
+              tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
+            )}>
+              <Icon className={cn("w-5 h-5", 
+                tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
+              )} />
             </div>
             <div>
               <h3 className="font-semibold text-foreground">{strategy.name}</h3>
               <Badge
                 variant="outline"
-                className={cn("text-xs mt-1", riskColors[strategy.riskLevel])}
+                className={cn("text-xs mt-1", config.color)}
               >
-                {strategy.riskLevel.charAt(0).toUpperCase() + strategy.riskLevel.slice(1)} Risk
+                {config.label}
               </Badge>
             </div>
           </div>
@@ -46,19 +57,30 @@ export function StrategyCard({ strategy }: StrategyCardProps) {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-3 mb-3">
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Expected Return</p>
-            <p className="text-lg font-semibold text-positive tabular-nums">
-              +{strategy.expectedReturn}%
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Monthly Range</p>
+            <p className="text-sm font-semibold text-positive tabular-nums">
+              {minReturn}% - {maxReturn}%
             </p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Max Drawdown</p>
-            <p className="text-lg font-semibold text-negative tabular-nums">
-              -{strategy.maxDrawdown}%
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Worst Month</p>
+            <p className="text-sm font-semibold text-negative tabular-nums">
+              {strategy.worstMonth || "N/A"}
             </p>
           </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Max DD</p>
+            <p className="text-sm font-semibold text-negative tabular-nums">
+              {strategy.maxDrawdown || "N/A"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-3 border-t border-border">
+          <AlertTriangle className="w-3 h-3 text-warning" />
+          <span className="text-xs text-muted-foreground">DEMO - Past performance is not indicative of future results</span>
         </div>
       </Card>
     </Link>

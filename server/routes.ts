@@ -248,6 +248,29 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/strategies/:id/performance - Get strategy performance with benchmarks
+  app.get("/api/strategies/:id/performance", async (req, res) => {
+    try {
+      const days = req.query.days ? parseInt(req.query.days as string) : 90;
+      const performance = await storage.getStrategyPerformance(req.params.id, days);
+      res.json(performance);
+    } catch (error) {
+      console.error("Get strategy performance error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/strategies/seed - Seed strategies (dev only)
+  app.post("/api/strategies/seed", async (req, res) => {
+    try {
+      await storage.seedStrategies();
+      res.json({ success: true, message: "Strategies seeded" });
+    } catch (error) {
+      console.error("Seed strategies error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // GET /api/operations (protected)
   app.get("/api/operations", isAuthenticated, async (req, res) => {
     try {

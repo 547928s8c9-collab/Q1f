@@ -4,61 +4,98 @@ import { useParams, Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { CompareChart } from "@/components/charts/compare-chart";
 import { PeriodToggle } from "@/components/charts/period-toggle";
-import { MetricCard } from "@/components/ui/metric-card";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, AlertTriangle, Shield, Zap, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Strategy, type StrategySeries } from "@shared/schema";
+import { type Strategy, type StrategyPerformance } from "@shared/schema";
 
 type Benchmark = "BTC" | "ETH" | "USDT" | "INDEX";
 
 const benchmarkOptions: { value: Benchmark; label: string }[] = [
   { value: "BTC", label: "BTC" },
   { value: "ETH", label: "ETH" },
-  { value: "USDT", label: "USDT (0%)" },
-  { value: "INDEX", label: "Index (50/50)" },
+  { value: "USDT", label: "USDT" },
+  { value: "INDEX", label: "Index" },
 ];
+
+const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
+  LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
+  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Core" },
+  HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "High Risk" },
+};
 
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
   const [benchmark, setBenchmark] = useState<Benchmark>("BTC");
+  const [demoAmount, setDemoAmount] = useState("1000");
 
   const { data: strategy, isLoading: strategyLoading } = useQuery<Strategy>({
     queryKey: ["/api/strategies", params.id],
   });
 
-  const { data: series, isLoading: seriesLoading } = useQuery<StrategySeries[]>({
-    queryKey: ["/api/strategies", params.id, "series"],
+  const { data: performance, isLoading: perfLoading } = useQuery<StrategyPerformance[]>({
+    queryKey: ["/api/strategies", params.id, "performance"],
   });
 
-  const isLoading = strategyLoading || seriesLoading;
+  const isLoading = strategyLoading || perfLoading;
 
-  const strategyData = (series || []).slice(-period).map((s) => ({
-    date: s.date,
-    value: parseFloat(s.value),
+  const tier = strategy?.riskTier || "CORE";
+  const config = riskConfig[tier] || riskConfig.CORE;
+  const Icon = config.icon;
+
+  const filteredPerf = (performance || []).slice(-period);
+  
+  const baseValue = filteredPerf[0]?.equityMinor ? parseFloat(filteredPerf[0].equityMinor) : 1000000000;
+  
+  const strategyData = filteredPerf.map((p) => ({
+    date: p.date,
+    value: (parseFloat(p.equityMinor) / baseValue) * 100,
   }));
 
-  const benchmarkData = strategyData.map((s, i) => {
-    let value = 100;
-    if (benchmark === "BTC") {
-      value = 100 + (Math.random() - 0.45) * i * 0.3;
-    } else if (benchmark === "ETH") {
-      value = 100 + (Math.random() - 0.4) * i * 0.25;
-    } else if (benchmark === "INDEX") {
-      value = 100 + (Math.random() - 0.42) * i * 0.2;
+  const getBenchmarkValue = (p: StrategyPerformance, index: number): number => {
+    if (benchmark === "USDT") return 100;
+    
+    const btcBase = filteredPerf[0]?.benchmarkBtcMinor ? parseFloat(filteredPerf[0].benchmarkBtcMinor) : 1000000000;
+    const ethBase = filteredPerf[0]?.benchmarkEthMinor ? parseFloat(filteredPerf[0].benchmarkEthMinor) : 1000000000;
+    
+    if (benchmark === "BTC" && p.benchmarkBtcMinor) {
+      return (parseFloat(p.benchmarkBtcMinor) / btcBase) * 100;
     }
-    return { date: s.date, value };
-  });
-
-  const riskColors: Record<string, string> = {
-    low: "bg-positive/10 text-positive border-positive/20",
-    medium: "bg-warning/10 text-warning border-warning/20",
-    high: "bg-negative/10 text-negative border-negative/20",
+    if (benchmark === "ETH" && p.benchmarkEthMinor) {
+      return (parseFloat(p.benchmarkEthMinor) / ethBase) * 100;
+    }
+    if (benchmark === "INDEX" && p.benchmarkBtcMinor && p.benchmarkEthMinor) {
+      const btcNorm = (parseFloat(p.benchmarkBtcMinor) / btcBase) * 100;
+      const ethNorm = (parseFloat(p.benchmarkEthMinor) / ethBase) * 100;
+      return (btcNorm + ethNorm) / 2;
+    }
+    return 100;
   };
+
+  const benchmarkData = filteredPerf.map((p, i) => ({
+    date: p.date,
+    value: getBenchmarkValue(p, i),
+  }));
+
+  const lastStrategyValue = strategyData[strategyData.length - 1]?.value || 100;
+  const strategyReturn = ((lastStrategyValue - 100) / 100) * 100;
+  
+  const demoAmountNum = parseFloat(demoAmount) || 1000;
+  const demoResult = demoAmountNum * (1 + strategyReturn / 100);
+  const demoPnL = demoResult - demoAmountNum;
+
+  const minReturn = strategy?.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0";
+  const maxReturn = strategy?.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0";
+
+  const pairs = Array.isArray(strategy?.pairsJson) ? strategy.pairsJson : [];
+  const fees = strategy?.feesJson as { management?: string; performance?: string } | null;
+  const terms = strategy?.termsJson as { profitPayout?: string; principalRedemption?: string } | null;
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -82,18 +119,24 @@ export default function StrategyDetail() {
       ) : (
         <>
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-primary" />
+            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center",
+              tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
+            )}>
+              <Icon className={cn("w-5 h-5",
+                tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
+              )} />
             </div>
             <div>
               <h2 className="text-xl font-semibold">{strategy?.name}</h2>
-              <Badge
-                variant="outline"
-                className={cn("text-xs", riskColors[strategy?.riskLevel || "medium"])}
-              >
-                {strategy?.riskLevel?.charAt(0).toUpperCase()}{strategy?.riskLevel?.slice(1)} Risk
+              <Badge variant="outline" className={cn("text-xs", config.color)}>
+                {config.label}
               </Badge>
             </div>
+          </div>
+
+          <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
+            <span className="text-sm text-warning">DEMO DATA - Past performance is not indicative of future results. Your investment may lose value.</span>
           </div>
 
           <Card className="p-5 mb-6">
@@ -127,32 +170,94 @@ export default function StrategyDetail() {
               benchmarkName={benchmarkOptions.find((b) => b.value === benchmark)?.label || benchmark}
               height={320}
             />
+            <div className="mt-4 text-center text-sm text-muted-foreground">
+              {period}-day return: <span className={strategyReturn >= 0 ? "text-positive" : "text-negative"}>
+                {strategyReturn >= 0 ? "+" : ""}{strategyReturn.toFixed(2)}%
+              </span>
+            </div>
+          </Card>
+
+          <Card className="p-5 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Calculator className="w-5 h-5 text-primary" />
+              <h3 className="text-lg font-semibold">Demo Calculator</h3>
+              <Badge variant="outline" className="text-xs">DEMO</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              See what your investment would have returned over the selected {period}-day period.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="demo-amount">Initial Investment (USDT)</Label>
+                <Input
+                  id="demo-amount"
+                  type="number"
+                  value={demoAmount}
+                  onChange={(e) => setDemoAmount(e.target.value)}
+                  className="mt-1"
+                  data-testid="input-demo-amount"
+                />
+              </div>
+              <div className="flex flex-col justify-end">
+                <Label className="text-muted-foreground">Final Value</Label>
+                <p className="text-2xl font-bold tabular-nums">{demoResult.toFixed(2)} USDT</p>
+              </div>
+              <div className="flex flex-col justify-end">
+                <Label className="text-muted-foreground">Profit/Loss</Label>
+                <p className={cn("text-2xl font-bold tabular-nums", demoPnL >= 0 ? "text-positive" : "text-negative")}>
+                  {demoPnL >= 0 ? "+" : ""}{demoPnL.toFixed(2)} USDT
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-4">
+              Result can be negative. This is a simulation based on historical demo data only.
+            </p>
           </Card>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <MetricCard
-              label="Expected Return"
-              value={`+${strategy?.expectedReturn || 0}`}
-              suffix="%"
-              trend="positive"
-            />
-            <MetricCard
-              label="Max Drawdown"
-              value={`-${strategy?.maxDrawdown || 0}`}
-              suffix="%"
-              trend="negative"
-            />
-            <MetricCard
-              label="Win Rate"
-              value={strategy?.winRate || "0"}
-              suffix="%"
-            />
-            <MetricCard
-              label="Fees"
-              value={strategy?.fees || "0"}
-              suffix="%"
-            />
+            <Card className="p-4">
+              <p className="text-xs text-muted-foreground uppercase">Monthly Range</p>
+              <p className="text-xl font-semibold text-positive">{minReturn}% - {maxReturn}%</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-muted-foreground uppercase">Worst Month</p>
+              <p className="text-xl font-semibold text-negative">{strategy?.worstMonth || "N/A"}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-muted-foreground uppercase">Max Drawdown</p>
+              <p className="text-xl font-semibold text-negative">{strategy?.maxDrawdown || "N/A"}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-muted-foreground uppercase">Min Investment</p>
+              <p className="text-xl font-semibold">100 USDT</p>
+            </Card>
           </div>
+
+          <Card className="p-5 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Strategy Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Trading Pairs</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {pairs.map((pair: string) => (
+                    <Badge key={pair} variant="outline" className="text-xs">{pair}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Fees</p>
+                <p className="text-sm">Management: {fees?.management || "0.5%"} | Performance: {fees?.performance || "10%"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Profit Payout</p>
+                <p className="text-sm">{terms?.profitPayout === "DAILY" ? "Daily" : "Monthly"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Principal Redemption</p>
+                <p className="text-sm">Weekly Window</p>
+              </div>
+            </div>
+          </Card>
 
           <Link href={`/invest/${params.id}/confirm`}>
             <Button className="w-full min-h-[44px]" data-testid="button-invest">
