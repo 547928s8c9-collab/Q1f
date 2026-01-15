@@ -3,22 +3,8 @@ import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// ==================== USERS ====================
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-  consentAccepted: boolean("consent_accepted").default(false),
-  kycStatus: text("kyc_status").default("pending"), // pending, approved, rejected
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// Export auth models (users, sessions tables)
+export * from "./models/auth";
 
 // ==================== BALANCES ====================
 // Amounts stored as string of integer minor units
@@ -150,6 +136,8 @@ export type Quote = typeof quotes.$inferSelect;
 export const securitySettings = pgTable("security_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
+  consentAccepted: boolean("consent_accepted").default(false),
+  kycStatus: text("kyc_status").default("pending"), // pending, approved, rejected
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
   antiPhishingCode: text("anti_phishing_code"),
   whitelistEnabled: boolean("whitelist_enabled").default(false),
@@ -203,9 +191,10 @@ export const OperationStatus = {
 export interface BootstrapResponse {
   user: {
     id: string;
-    username: string;
-    consentAccepted: boolean;
-    kycStatus: string;
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    profileImageUrl: string | null;
   };
   gate: {
     consentRequired: boolean;

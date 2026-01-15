@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
@@ -6,15 +6,23 @@ import { randomUUID } from "crypto";
 
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 
-const DEMO_USER_ID = "demo-user";
+// Helper to get userId from authenticated request
+function getUserId(req: Request): string {
+  return (req.user as any)?.claims?.sub;
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  // GET /api/health - Health check endpoint
+  // Setup authentication first
+  await setupAuth(app);
+  registerAuthRoutes(app);
+
+  // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {
     try {
       // DB Ping
@@ -35,19 +43,25 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/bootstrap - Main bootstrap endpoint
-  app.get("/api/bootstrap", async (req, res) => {
+  // GET /api/bootstrap - Main bootstrap endpoint (protected)
+  app.get("/api/bootstrap", isAuthenticated, async (req, res) => {
     try {
-      const user = await storage.getUser(DEMO_USER_ID);
+      const userId = getUserId(req);
+      
+      // Get user from auth storage
+      const user = await authStorage.getUser(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const balances = await storage.getBalances(DEMO_USER_ID);
-      const vaults = await storage.getVaults(DEMO_USER_ID);
-      const positions = await storage.getPositions(DEMO_USER_ID);
-      const portfolioSeries = await storage.getPortfolioSeries(DEMO_USER_ID, 90);
-      const security = await storage.getSecuritySettings(DEMO_USER_ID);
+      // Ensure user data is initialized
+      await storage.ensureUserData(userId);
+
+      const balances = await storage.getBalances(userId);
+      const vaults = await storage.getVaults(userId);
+      const positions = await storage.getPositions(userId);
+      const portfolioSeries = await storage.getPortfolioSeries(userId, 90);
+      const security = await storage.getSecuritySettings(userId);
 
       // Calculate invested amounts
       const invested = positions.reduce(
@@ -67,13 +81,13 @@ export async function registerRoutes(
       const latestEth = ethQuotes[ethQuotes.length - 1];
       const latestRub = rubQuotes[rubQuotes.length - 1];
 
-      // Build gate flags
-      const consentRequired = !user.consentAccepted;
-      const kycRequired = user.kycStatus !== "approved";
+      // Build gate flags (consent and kyc are now on security settings)
+      const consentRequired = !security?.consentAccepted;
+      const kycRequired = security?.kycStatus !== "approved";
       const twoFactorRequired = !security?.twoFactorEnabled;
       
       // Check whitelist requirement
-      const whitelistAddresses = await storage.getWhitelistAddresses(DEMO_USER_ID);
+      const whitelistAddresses = await storage.getWhitelistAddresses(userId);
       const hasActiveWhitelistAddress = whitelistAddresses.some((a) => a.status === "active");
       const whitelistRequired = security?.whitelistEnabled && !hasActiveWhitelistAddress;
 
@@ -94,9 +108,10 @@ export async function registerRoutes(
       res.json({
         user: {
           id: user.id,
-          username: user.username,
-          consentAccepted: user.consentAccepted,
-          kycStatus: user.kycStatus,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImageUrl: user.profileImageUrl,
         },
         gate: {
           consentRequired,
@@ -135,6 +150,8 @@ export async function registerRoutes(
           },
         },
         security: security || {
+          consentAccepted: false,
+          kycStatus: "pending",
           twoFactorEnabled: false,
           antiPhishingCode: null,
           whitelistEnabled: false,
@@ -184,12 +201,13 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/operations
-  app.get("/api/operations", async (req, res) => {
+  // GET /api/operations (protected)
+  app.get("/api/operations", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const { filter, q, cursor, limit } = req.query;
       const result = await storage.getOperations(
-        DEMO_USER_ID,
+        userId,
         filter as string,
         q as string,
         cursor as string,
@@ -202,8 +220,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/operations/:id
-  app.get("/api/operations/:id", async (req, res) => {
+  // GET /api/operations/:id (protected)
+  app.get("/api/operations/:id", isAuthenticated, async (req, res) => {
     try {
       const operation = await storage.getOperation(req.params.id);
       if (!operation) {
@@ -216,10 +234,11 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/consent/accept
-  app.post("/api/consent/accept", async (req, res) => {
+  // POST /api/consent/accept (protected)
+  app.post("/api/consent/accept", isAuthenticated, async (req, res) => {
     try {
-      await storage.updateUser(DEMO_USER_ID, { consentAccepted: true });
+      const userId = getUserId(req);
+      await storage.updateSecuritySettings(userId, { consentAccepted: true });
       res.json({ success: true });
     } catch (error) {
       console.error("Consent accept error:", error);
@@ -227,12 +246,13 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/kyc/start - Demo auto-approve
-  app.post("/api/kyc/start", async (req, res) => {
+  // POST /api/kyc/start - Demo auto-approve (protected)
+  app.post("/api/kyc/start", isAuthenticated, async (req, res) => {
     try {
-      await storage.updateUser(DEMO_USER_ID, { kycStatus: "approved" });
+      const userId = getUserId(req);
+      await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "KYC",
         status: "completed",
         asset: null,
@@ -254,18 +274,19 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/deposit/usdt/simulate
-  app.post("/api/deposit/usdt/simulate", async (req, res) => {
+  // POST /api/deposit/usdt/simulate (protected)
+  app.post("/api/deposit/usdt/simulate", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ amount: z.string() });
       const { amount } = schema.parse(req.body);
 
-      const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+      const balance = await storage.getBalance(userId, "USDT");
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
-      await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance?.locked || "0");
+      await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
 
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "DEPOSIT_USDT",
         status: "completed",
         asset: "USDT",
@@ -288,9 +309,10 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/deposit/card/simulate
-  app.post("/api/deposit/card/simulate", async (req, res) => {
+  // POST /api/deposit/card/simulate (protected)
+  app.post("/api/deposit/card/simulate", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ amount: z.string() }); // RUB in kopeks
       const { amount } = schema.parse(req.body);
 
@@ -298,12 +320,12 @@ export async function registerRoutes(
       const rubAmount = BigInt(amount);
       const usdtAmount = (rubAmount * 1000000n / 9250n).toString(); // Convert with 6 decimals
 
-      const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+      const balance = await storage.getBalance(userId, "USDT");
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(usdtAmount)).toString();
-      await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance?.locked || "0");
+      await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
 
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "DEPOSIT_CARD",
         status: "completed",
         asset: "USDT",
@@ -326,9 +348,10 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/invest
-  app.post("/api/invest", async (req, res) => {
+  // POST /api/invest (protected)
+  app.post("/api/invest", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({
         strategyId: z.string(),
         amount: z.string(),
@@ -340,7 +363,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Strategy not found" });
       }
 
-      const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+      const balance = await storage.getBalance(userId, "USDT");
       if (BigInt(balance?.available || "0") < BigInt(amount)) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
@@ -351,10 +374,10 @@ export async function registerRoutes(
 
       // Deduct from balance
       const newAvailable = (BigInt(balance!.available) - BigInt(amount)).toString();
-      await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance!.locked);
+      await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
 
       // Create or update position
-      let position = await storage.getPosition(DEMO_USER_ID, strategyId);
+      let position = await storage.getPosition(userId, strategyId);
       if (position) {
         await storage.updatePosition(position.id, {
           principal: (BigInt(position.principal) + BigInt(amount)).toString(),
@@ -362,7 +385,7 @@ export async function registerRoutes(
         });
       } else {
         await storage.createPosition({
-          userId: DEMO_USER_ID,
+          userId,
           strategyId,
           principal: amount,
           currentValue: amount,
@@ -371,7 +394,7 @@ export async function registerRoutes(
 
       // Create operation
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "INVEST",
         status: "completed",
         asset: "USDT",
@@ -394,10 +417,11 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/payout/daily - Demo daily payout simulation
-  app.post("/api/payout/daily", async (req, res) => {
+  // POST /api/payout/daily - Demo daily payout simulation (protected)
+  app.post("/api/payout/daily", isAuthenticated, async (req, res) => {
     try {
-      const positions = await storage.getPositions(DEMO_USER_ID);
+      const userId = getUserId(req);
+      const positions = await storage.getPositions(userId);
       
       for (const position of positions) {
         // Simulate ~0.1-0.3% daily return
@@ -409,15 +433,15 @@ export async function registerRoutes(
         await storage.updatePosition(position.id, { currentValue: newCurrentValue });
 
         // Credit to balance
-        const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+        const balance = await storage.getBalance(userId, "USDT");
         const newAvailable = (BigInt(balance?.available || "0") + BigInt(payoutAmount)).toString();
-        await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance?.locked || "0");
+        await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
 
         const strategy = await storage.getStrategy(position.strategyId);
 
         // Create payout operation
         await storage.createOperation({
-          userId: DEMO_USER_ID,
+          userId,
           type: "DAILY_PAYOUT",
           status: "completed",
           asset: "USDT",
@@ -434,21 +458,21 @@ export async function registerRoutes(
         });
 
         // Auto-sweep if enabled
-        const security = await storage.getSecuritySettings(DEMO_USER_ID);
+        const security = await storage.getSecuritySettings(userId);
         if (security?.autoSweepEnabled) {
           // Move to profit vault
-          const profitVault = await storage.getVault(DEMO_USER_ID, "profit");
+          const profitVault = await storage.getVault(userId, "profit");
           const newVaultBalance = (BigInt(profitVault?.balance || "0") + BigInt(payoutAmount)).toString();
-          await storage.updateVault(DEMO_USER_ID, "profit", newVaultBalance);
+          await storage.updateVault(userId, "profit", newVaultBalance);
 
           // Deduct from balance
-          const updatedBalance = await storage.getBalance(DEMO_USER_ID, "USDT");
+          const updatedBalance = await storage.getBalance(userId, "USDT");
           const afterSweep = (BigInt(updatedBalance?.available || "0") - BigInt(payoutAmount)).toString();
-          await storage.updateBalance(DEMO_USER_ID, "USDT", afterSweep, updatedBalance?.locked || "0");
+          await storage.updateBalance(userId, "USDT", afterSweep, updatedBalance?.locked || "0");
 
           // Create sweep operation
           await storage.createOperation({
-            userId: DEMO_USER_ID,
+            userId,
             type: "VAULT_TRANSFER",
             status: "completed",
             asset: "USDT",
@@ -473,16 +497,17 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/withdraw/usdt
-  app.post("/api/withdraw/usdt", async (req, res) => {
+  // POST /api/withdraw/usdt (protected)
+  app.post("/api/withdraw/usdt", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({
         amount: z.string(),
         address: z.string().min(30),
       });
       const { amount, address } = schema.parse(req.body);
 
-      const security = await storage.getSecuritySettings(DEMO_USER_ID);
+      const security = await storage.getSecuritySettings(userId);
 
       // Check 2FA
       if (!security?.twoFactorEnabled) {
@@ -491,14 +516,14 @@ export async function registerRoutes(
 
       // Check whitelist
       if (security?.whitelistEnabled) {
-        const whitelist = await storage.getWhitelistAddresses(DEMO_USER_ID);
+        const whitelist = await storage.getWhitelistAddresses(userId);
         const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
         if (!whitelisted) {
           return res.status(400).json({ error: "Address not in whitelist or not yet active" });
         }
       }
 
-      const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+      const balance = await storage.getBalance(userId, "USDT");
       if (BigInt(balance?.available || "0") < BigInt(amount)) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
@@ -507,11 +532,11 @@ export async function registerRoutes(
       const fee = "1000000"; // 1 USDT
       const totalDeduct = (BigInt(amount) + BigInt(fee)).toString();
       const newAvailable = (BigInt(balance!.available) - BigInt(totalDeduct)).toString();
-      await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance!.locked);
+      await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
 
       // Create withdrawal operation
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "WITHDRAW_USDT",
         status: "completed",
         asset: "USDT",
@@ -534,9 +559,10 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/vault/transfer
-  app.post("/api/vault/transfer", async (req, res) => {
+  // POST /api/vault/transfer (protected)
+  app.post("/api/vault/transfer", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({
         fromVault: z.string(),
         toVault: z.string(),
@@ -546,35 +572,35 @@ export async function registerRoutes(
 
       if (fromVault === "wallet") {
         // Transfer from wallet to vault
-        const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+        const balance = await storage.getBalance(userId, "USDT");
         if (BigInt(balance?.available || "0") < BigInt(amount)) {
           return res.status(400).json({ error: "Insufficient balance" });
         }
 
         const newAvailable = (BigInt(balance!.available) - BigInt(amount)).toString();
-        await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance!.locked);
+        await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
 
-        const vault = await storage.getVault(DEMO_USER_ID, toVault);
+        const vault = await storage.getVault(userId, toVault);
         const newVaultBalance = (BigInt(vault?.balance || "0") + BigInt(amount)).toString();
-        await storage.updateVault(DEMO_USER_ID, toVault, newVaultBalance);
+        await storage.updateVault(userId, toVault, newVaultBalance);
       } else if (toVault === "wallet") {
         // Transfer from vault to wallet
-        const vault = await storage.getVault(DEMO_USER_ID, fromVault);
+        const vault = await storage.getVault(userId, fromVault);
         if (BigInt(vault?.balance || "0") < BigInt(amount)) {
           return res.status(400).json({ error: "Insufficient vault balance" });
         }
 
         const newVaultBalance = (BigInt(vault!.balance) - BigInt(amount)).toString();
-        await storage.updateVault(DEMO_USER_ID, fromVault, newVaultBalance);
+        await storage.updateVault(userId, fromVault, newVaultBalance);
 
-        const balance = await storage.getBalance(DEMO_USER_ID, "USDT");
+        const balance = await storage.getBalance(userId, "USDT");
         const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
-        await storage.updateBalance(DEMO_USER_ID, "USDT", newAvailable, balance?.locked || "0");
+        await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
       }
 
       // Create operation
       await storage.createOperation({
-        userId: DEMO_USER_ID,
+        userId,
         type: "VAULT_TRANSFER",
         status: "completed",
         asset: "USDT",
@@ -597,13 +623,14 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/2fa/toggle
-  app.post("/api/security/2fa/toggle", async (req, res) => {
+  // POST /api/security/2fa/toggle (protected)
+  app.post("/api/security/2fa/toggle", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
       const { enabled } = schema.parse(req.body);
 
-      await storage.updateSecuritySettings(DEMO_USER_ID, { twoFactorEnabled: enabled });
+      await storage.updateSecuritySettings(userId, { twoFactorEnabled: enabled });
       res.json({ success: true });
     } catch (error) {
       console.error("2FA toggle error:", error);
@@ -611,13 +638,14 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/whitelist/toggle
-  app.post("/api/security/whitelist/toggle", async (req, res) => {
+  // POST /api/security/whitelist/toggle (protected)
+  app.post("/api/security/whitelist/toggle", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
       const { enabled } = schema.parse(req.body);
 
-      await storage.updateSecuritySettings(DEMO_USER_ID, { whitelistEnabled: enabled });
+      await storage.updateSecuritySettings(userId, { whitelistEnabled: enabled });
       res.json({ success: true });
     } catch (error) {
       console.error("Whitelist toggle error:", error);
@@ -625,10 +653,11 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/security/whitelist
-  app.get("/api/security/whitelist", async (req, res) => {
+  // GET /api/security/whitelist (protected)
+  app.get("/api/security/whitelist", isAuthenticated, async (req, res) => {
     try {
-      const addresses = await storage.getWhitelistAddresses(DEMO_USER_ID);
+      const userId = getUserId(req);
+      const addresses = await storage.getWhitelistAddresses(userId);
       res.json(addresses);
     } catch (error) {
       console.error("Get whitelist error:", error);
@@ -636,23 +665,24 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/whitelist/add
-  app.post("/api/security/whitelist/add", async (req, res) => {
+  // POST /api/security/whitelist/add (protected)
+  app.post("/api/security/whitelist/add", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({
         address: z.string().min(30),
         label: z.string().optional(),
       });
       const { address, label } = schema.parse(req.body);
 
-      const security = await storage.getSecuritySettings(DEMO_USER_ID);
+      const security = await storage.getSecuritySettings(userId);
       const delay = security?.addressDelay || 0;
 
       const activatesAt = delay > 0 ? new Date(Date.now() + delay * 60 * 60 * 1000) : new Date();
       const status = delay > 0 ? "pending" : "active";
 
       await storage.createWhitelistAddress({
-        userId: DEMO_USER_ID,
+        userId,
         address,
         label: label || null,
         network: "TRC20",
@@ -667,8 +697,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/whitelist/remove
-  app.post("/api/security/whitelist/remove", async (req, res) => {
+  // POST /api/security/whitelist/remove (protected)
+  app.post("/api/security/whitelist/remove", isAuthenticated, async (req, res) => {
     try {
       const schema = z.object({ addressId: z.string() });
       const { addressId } = schema.parse(req.body);
@@ -681,13 +711,14 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/address-delay
-  app.post("/api/security/address-delay", async (req, res) => {
+  // POST /api/security/address-delay (protected)
+  app.post("/api/security/address-delay", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ delay: z.number().min(0).max(24) });
       const { delay } = schema.parse(req.body);
 
-      await storage.updateSecuritySettings(DEMO_USER_ID, { addressDelay: delay });
+      await storage.updateSecuritySettings(userId, { addressDelay: delay });
       res.json({ success: true });
     } catch (error) {
       console.error("Address delay error:", error);
@@ -695,13 +726,14 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/anti-phishing
-  app.post("/api/security/anti-phishing", async (req, res) => {
+  // POST /api/security/anti-phishing (protected)
+  app.post("/api/security/anti-phishing", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ code: z.string().min(1).max(20) });
       const { code } = schema.parse(req.body);
 
-      await storage.updateSecuritySettings(DEMO_USER_ID, { antiPhishingCode: code });
+      await storage.updateSecuritySettings(userId, { antiPhishingCode: code });
       res.json({ success: true });
     } catch (error) {
       console.error("Anti-phishing error:", error);
@@ -709,13 +741,14 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/security/auto-sweep
-  app.post("/api/security/auto-sweep", async (req, res) => {
+  // POST /api/security/auto-sweep (protected)
+  app.post("/api/security/auto-sweep", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
       const { enabled } = schema.parse(req.body);
 
-      await storage.updateSecuritySettings(DEMO_USER_ID, { autoSweepEnabled: enabled });
+      await storage.updateSecuritySettings(userId, { autoSweepEnabled: enabled });
       res.json({ success: true });
     } catch (error) {
       console.error("Auto-sweep toggle error:", error);

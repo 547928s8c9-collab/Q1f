@@ -1,7 +1,6 @@
 import { db } from "./db";
 import { eq, and, desc, gte, or, ilike } from "drizzle-orm";
 import {
-  users,
   balances,
   vaults,
   strategies,
@@ -12,8 +11,6 @@ import {
   quotes,
   securitySettings,
   whitelistAddresses,
-  type User,
-  type InsertUser,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -37,10 +34,7 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  ensureUserData(userId: string): Promise<void>;
 
   getBalances(userId: string): Promise<Balance[]>;
   getBalance(userId: string, asset: string): Promise<Balance | undefined>;
@@ -85,24 +79,36 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
+  async ensureUserData(userId: string): Promise<void> {
+    // Check if user data already exists
+    const existingBalances = await this.getBalances(userId);
+    if (existingBalances.length > 0) {
+      return; // User data already initialized
+    }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
-  }
+    // Initialize default balances
+    await db.insert(balances).values([
+      { userId, asset: "USDT", available: "0", locked: "0" },
+      { userId, asset: "RUB", available: "0", locked: "0" },
+    ]).onConflictDoNothing();
 
-  async createUser(user: InsertUser): Promise<User> {
-    const [created] = await db.insert(users).values(user).returning();
-    return created;
-  }
+    // Initialize default vaults
+    await db.insert(vaults).values([
+      { userId, type: "principal", asset: "USDT", balance: "0" },
+      { userId, type: "profit", asset: "USDT", balance: "0" },
+      { userId, type: "taxes", asset: "USDT", balance: "0" },
+    ]).onConflictDoNothing();
 
-  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
-    const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
-    return updated;
+    // Initialize security settings
+    await db.insert(securitySettings).values({
+      userId,
+      consentAccepted: false,
+      kycStatus: "pending",
+      twoFactorEnabled: false,
+      whitelistEnabled: false,
+      addressDelay: 0,
+      autoSweepEnabled: false,
+    }).onConflictDoNothing();
   }
 
   async getBalances(userId: string): Promise<Balance[]> {
