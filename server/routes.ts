@@ -787,15 +787,23 @@ export async function registerRoutes(
         });
       }
 
-      // Check whitelist
+      // Check whitelist and activation delay
       if (security?.whitelistEnabled) {
         const whitelist = await storage.getWhitelistAddresses(userId);
-        const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
+        const whitelisted = whitelist.find((w) => w.address === address && w.status === "ACTIVE");
         if (!whitelisted) {
           return res.status(403).json({ 
             error: "Whitelist required",
             code: "WHITELIST_REQUIRED",
             message: "Address not in whitelist or not yet active"
+          });
+        }
+        // Check activation delay has passed
+        if (whitelisted.activatesAt && new Date(whitelisted.activatesAt) > new Date()) {
+          return res.status(403).json({ 
+            error: "Address not yet active",
+            code: "ADDRESS_DELAY_PENDING",
+            message: `Address will be active after ${whitelisted.activatesAt.toISOString()}`
           });
         }
       }
@@ -1195,7 +1203,6 @@ export async function registerRoutes(
   app.get("/api/sumsub/access-token", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const user = await storage.getUser(userId);
       
       // In production, this would call Sumsub's API to generate a token
       // For demo, we generate a mock token

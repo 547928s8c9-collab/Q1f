@@ -87,7 +87,10 @@ export default function InvestConfirm() {
             <p className="text-sm text-muted-foreground mb-4">{strategy?.description}</p>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Expected Return</span>
-              <span className="text-positive font-medium">+{strategy?.expectedReturn}%</span>
+              <span className="text-positive font-medium">
+                +{strategy?.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0"}% - 
+                {strategy?.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0"}%
+              </span>
             </div>
           </Card>
 

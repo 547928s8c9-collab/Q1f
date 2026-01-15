@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, gte, or, ilike, lte } from "drizzle-orm";
+import { eq, and, desc, gte, or, ilike, lte, sql } from "drizzle-orm";
 import {
   balances,
   vaults,
@@ -624,7 +624,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(redemptionRequests)
       .where(and(
         eq(redemptionRequests.status, "PENDING"),
-        gte(now, redemptionRequests.executeAt)
+        sql`${redemptionRequests.executeAt} <= ${now}`
       ));
   }
 

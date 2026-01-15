@@ -74,12 +74,12 @@ export default function Settings() {
               <Skeleton className="h-6 w-20" />
             ) : (
               <div className="flex items-center gap-2">
-                {bootstrap?.user.kycStatus === "approved" ? (
+                {bootstrap?.onboarding.kycStatus === "APPROVED" ? (
                   <span className="flex items-center gap-1.5 text-xs text-positive">
                     <CheckCircle2 className="w-4 h-4" />
                     Verified
                   </span>
-                ) : bootstrap?.user.kycStatus === "pending" ? (
+                ) : bootstrap?.onboarding.kycStatus === "IN_REVIEW" ? (
                   <span className="flex items-center gap-1.5 text-xs text-warning">
                     <Clock className="w-4 h-4" />
                     Pending
