@@ -102,7 +102,7 @@ function TopBar() {
   const initials = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background border-b border-border sticky top-0 z-40">
+    <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background border-b border-border sticky top-0 z-[999]">
       <div className="flex items-center gap-3">
         <h1 
           className="text-lg font-semibold tracking-tight md:hidden"

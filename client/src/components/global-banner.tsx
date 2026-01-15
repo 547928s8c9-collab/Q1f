@@ -105,7 +105,7 @@ export function GlobalBanner() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs font-medium"
+                  className="text-xs font-medium"
                   data-testid={`button-banner-action-${banner.id}`}
                 >
                   {banner.action.label}
@@ -116,11 +116,10 @@ export function GlobalBanner() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
                 onClick={() => handleDismiss(banner.id)}
                 data-testid={`button-dismiss-${banner.id}`}
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>
