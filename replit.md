@@ -33,13 +33,25 @@ Preferred communication style: Simple, everyday language.
 - **Schema Location**: `shared/schema.ts` contains all table definitions
 - **Migrations**: Drizzle Kit for schema migrations (`drizzle-kit push`)
 
+### Authentication
+- **Replit Auth**: OIDC-based authentication via `server/replit_integrations/auth/index.ts`
+- **User Schema**: Users managed via auth table in `shared/schema.ts`, types in `shared/models/auth.ts`
+- **Protected Routes**: All API routes use `isAuthenticated` middleware and `getUserId(req)` to get user ID
+- **User Initialization**: `storage.ensureUserData(userId)` creates default balances, vaults, and security settings for new users
+- **Auth Endpoints**:
+  - `GET /api/login` - Initiates OIDC login flow
+  - `GET /api/logout` - Logs out user and redirects to landing page
+  - `GET /api/auth/user` - Returns current user or 401 if not authenticated
+
 ### Key Design Decisions
+
+**Multi-User Architecture**: All data is scoped to authenticated users. User ID is obtained from `req.user.claims.sub` in authenticated routes. New users are automatically initialized with default balances, vaults, and security settings on first login.
 
 **Money Handling**: All monetary amounts are stored as strings representing integer minor units (never floats). USDT uses 6 decimal places, RUB uses 2 decimal places. This prevents floating-point precision errors in financial calculations.
 
 **Shared Schema**: The `shared/` directory contains schema definitions and types used by both frontend and backend, ensuring type safety across the stack.
 
-**Database Storage**: The `server/storage.ts` implements a `DatabaseStorage` class using Drizzle ORM for all data persistence. The `server/db.ts` establishes the PostgreSQL connection. Demo data is seeded via `server/seed.ts` (run with `npx tsx server/seed.ts`).
+**Database Storage**: The `server/storage.ts` implements a `DatabaseStorage` class using Drizzle ORM for all data persistence. The `server/db.ts` establishes the PostgreSQL connection.
 
 **Operation-Driven Flow**: All money actions (deposits, withdrawals, investments, vault transfers) create Operation records with proper status transitions. The Activity page reads exclusively from the operations table.
 
