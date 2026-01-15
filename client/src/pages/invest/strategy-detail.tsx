@@ -64,7 +64,7 @@ export default function StrategyDetail() {
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
         title={strategy?.name || "Strategy"}
-        subtitle={strategy?.description}
+        subtitle={strategy?.description || undefined}
         backHref="/invest"
       />
 

@@ -1,7 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { Home, BarChart3, TrendingUp, Wallet, Activity, Settings } from "lucide-react";
+import { Home, BarChart3, TrendingUp, Wallet, Activity, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +35,7 @@ const navItems: NavItem[] = [
 
 function AppSidebar() {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <Sidebar>
@@ -65,10 +68,49 @@ function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-sidebar-border">
-        <ThemeToggle />
+      <SidebarFooter className="p-4 border-t border-sidebar-border space-y-3">
+        {user && (
+          <div className="px-2">
+            <p className="text-sm font-medium text-sidebar-foreground truncate">
+              {user.firstName || user.email?.split("@")[0]}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => logout()}
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function MobileHeader() {
+  const { logout } = useAuth();
+
+  return (
+    <header className="md:hidden flex items-center justify-between px-4 py-3 bg-sidebar border-b border-sidebar-border sticky top-0 z-40">
+      <h1 className="text-xl font-semibold tracking-tight">ZEON</h1>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => logout()}
+          data-testid="button-mobile-logout"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    </header>
   );
 }
 
@@ -119,13 +161,8 @@ export function AppShell({ children }: AppShellProps) {
           <AppSidebar />
         </div>
         <div className="flex-1 flex flex-col min-h-screen w-full">
-          <header className="md:hidden flex items-center justify-between px-4 py-3 bg-sidebar border-b border-sidebar-border sticky top-0 z-40">
-            <h1 className="text-xl font-semibold tracking-tight">ZEON</h1>
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <SidebarTrigger data-testid="button-sidebar-trigger" />
-            </div>
-          </header>
+          <MobileHeader />
+        
           <main className="flex-1 pb-20 md:pb-0">
             {children}
           </main>
