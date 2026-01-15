@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { CreditCard, Loader2, AlertCircle } from "lucide-react";
+import type { BootstrapResponse } from "@shared/schema";
 
 export default function DepositCard() {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
+
+  const { data: bootstrap } = useQuery<BootstrapResponse>({
+    queryKey: ["/api/bootstrap"],
+  });
+
+  const usdtRubRate = parseFloat(bootstrap?.quotes["USDT/RUB"]?.price || "92.5");
 
   const simulateMutation = useMutation({
     mutationFn: async (amountRub: string) => {
@@ -41,7 +48,7 @@ export default function DepositCard() {
     simulateMutation.mutate(amountInKopeks);
   };
 
-  const estimatedUsdt = amount ? (parseFloat(amount) / 92.5).toFixed(2) : "0.00";
+  const estimatedUsdt = amount ? (parseFloat(amount) / usdtRubRate).toFixed(2) : "0.00";
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
@@ -80,7 +87,7 @@ export default function DepositCard() {
             </div>
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">Rate</span>
-              <span className="font-medium tabular-nums">1 USDT = 92.50 RUB</span>
+              <span className="font-medium tabular-nums">1 USDT = {usdtRubRate.toFixed(2)} RUB</span>
             </div>
           </div>
 

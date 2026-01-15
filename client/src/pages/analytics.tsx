@@ -91,14 +91,14 @@ export default function Analytics() {
                 label="Realized P&L"
                 value={formatMoney(cashflow.realizedPnl, "USDT")}
                 suffix="USDT"
-                trend={BigInt(cashflow.realizedPnl) >= 0n ? "positive" : "negative"}
+                trend={BigInt(cashflow.realizedPnl) >= BigInt(0) ? "positive" : "negative"}
               />
               <MetricCard
                 label="Unrealized P&L"
                 value={formatMoney(cashflow.unrealizedPnl, "USDT")}
                 suffix="USDT"
-                trend={BigInt(cashflow.unrealizedPnl) >= 0n ? "positive" : "negative"}
-                change={BigInt(cashflow.unrealizedPnl) >= 0n ? `+${formatMoney(cashflow.unrealizedPnl, "USDT")}` : formatMoney(cashflow.unrealizedPnl, "USDT")}
+                trend={BigInt(cashflow.unrealizedPnl) >= BigInt(0) ? "positive" : "negative"}
+                change={BigInt(cashflow.unrealizedPnl) >= BigInt(0) ? `+${formatMoney(cashflow.unrealizedPnl, "USDT")}` : formatMoney(cashflow.unrealizedPnl, "USDT")}
               />
             </>
           )}

@@ -38,7 +38,7 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
             {formatMoney(available, asset)}
           </span>
         </div>
-        {BigInt(locked) > 0n && (
+        {BigInt(locked) > BigInt(0) && (
           <div className="flex justify-between items-baseline">
             <span className="text-sm text-muted-foreground">Locked</span>
             <span className="text-sm text-muted-foreground tabular-nums">

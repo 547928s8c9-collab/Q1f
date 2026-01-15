@@ -158,6 +158,12 @@ export async function registerRoutes(
           addressDelay: 0,
           autoSweepEnabled: false,
         },
+        config: {
+          depositAddress: "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL",
+          networkFee: "1000000", // 1 USDT in minor units
+          minWithdrawal: "10000000", // 10 USDT in minor units
+          minDeposit: "10000000", // 10 USDT in minor units
+        },
       });
     } catch (error) {
       console.error("Bootstrap error:", error);
@@ -316,9 +322,13 @@ export async function registerRoutes(
       const schema = z.object({ amount: z.string() }); // RUB in kopeks
       const { amount } = schema.parse(req.body);
 
-      // Convert RUB to USDT (demo rate: 92.5 RUB per USDT)
+      // Convert RUB to USDT using current quote rate
+      const rubQuotes = await storage.getQuotes("USDT/RUB", 1);
+      const currentRate = rubQuotes.length > 0 ? parseFloat(rubQuotes[0].price) : 92.5;
       const rubAmount = BigInt(amount);
-      const usdtAmount = (rubAmount * 1000000n / 9250n).toString(); // Convert with 6 decimals
+      // rubAmount is in kopeks (RUB * 100), convert to USDT minor units (6 decimals)
+      // Formula: (rubAmount / 100) / rate * 1000000 = rubAmount * 10000 / rate
+      const usdtAmount = (rubAmount * BigInt(10000) / BigInt(Math.round(currentRate * 100))).toString();
 
       const balance = await storage.getBalance(userId, "USDT");
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(usdtAmount)).toString();

@@ -128,7 +128,7 @@ export default function Receipt() {
             <DetailRow label="Transaction Hash" value={operation.txHash} copyable />
             <DetailRow label="Provider Reference" value={operation.providerRef} copyable />
             <DetailRow label="Strategy" value={operation.strategyName} />
-            {operation.fee && BigInt(operation.fee) > 0n && (
+            {operation.fee && BigInt(operation.fee) > BigInt(0) && (
               <DetailRow label="Fee" value={`${formatMoney(operation.fee, operation.asset || "USDT")} ${operation.asset || "USDT"}`} />
             )}
             {operation.reason && <DetailRow label="Reason" value={operation.reason} />}

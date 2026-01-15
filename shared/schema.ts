@@ -224,6 +224,12 @@ export interface BootstrapResponse {
     "USDT/RUB": { price: string; change24h: string; series: Array<{ date: string; price: string }> };
   };
   security: SecuritySettings;
+  config: {
+    depositAddress: string;
+    networkFee: string;
+    minWithdrawal: string;
+    minDeposit: string;
+  };
 }
 
 // Operation copy mapping

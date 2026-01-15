@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,20 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
+import { formatMoney, type BootstrapResponse } from "@shared/schema";
 
-const DEMO_TRC20_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
+const FALLBACK_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
 
 export default function DepositUSDT() {
   const { toast } = useToast();
   const [simulateAmount, setSimulateAmount] = useState("");
+
+  const { data: bootstrap } = useQuery<BootstrapResponse>({
+    queryKey: ["/api/bootstrap"],
+  });
+
+  const depositAddress = bootstrap?.config?.depositAddress || FALLBACK_ADDRESS;
+  const minDeposit = bootstrap?.config?.minDeposit || "10000000";
 
   const simulateMutation = useMutation({
     mutationFn: async (amount: string) => {
@@ -58,8 +66,8 @@ export default function DepositUSDT() {
 
         <div className="bg-muted rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-2">
-            <code className="text-sm font-mono break-all">{DEMO_TRC20_ADDRESS}</code>
-            <CopyButton value={DEMO_TRC20_ADDRESS} />
+            <code className="text-sm font-mono break-all">{depositAddress}</code>
+            <CopyButton value={depositAddress} />
           </div>
         </div>
 
@@ -69,7 +77,7 @@ export default function DepositUSDT() {
             <p className="font-medium text-warning">Important</p>
             <ul className="text-muted-foreground mt-1 space-y-1 text-xs">
               <li>Only send USDT (TRC20) to this address</li>
-              <li>Minimum deposit: 10 USDT</li>
+              <li>Minimum deposit: {formatMoney(minDeposit, "USDT")} USDT</li>
               <li>Deposits typically confirm within 10 minutes</li>
             </ul>
           </div>

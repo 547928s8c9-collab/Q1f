@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const NETWORK_FEE_MINOR = "1000000"; // 1 USDT fallback
+
 export default function Withdraw() {
   const { toast } = useToast();
   const [amount, setAmount] = useState("");
@@ -57,7 +59,7 @@ export default function Withdraw() {
 
   const availableBalance = bootstrap?.balances.USDT.available || "0";
   const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
-  const isValidAmount = BigInt(amountInMinor) > 0n && BigInt(amountInMinor) <= BigInt(availableBalance);
+  const isValidAmount = BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
   const finalAddress = selectedWhitelist || address;
   const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
 
@@ -172,12 +174,12 @@ export default function Withdraw() {
           <div className="bg-muted rounded-lg p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Network Fee</span>
-              <span className="font-medium tabular-nums">~1.00 USDT</span>
+              <span className="font-medium tabular-nums">~{formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT")} USDT</span>
             </div>
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">You'll receive</span>
               <span className="font-medium tabular-nums">
-                {amount ? (parseFloat(amount) - 1).toFixed(2) : "0.00"} USDT
+                {amount ? (parseFloat(amount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
               </span>
             </div>
           </div>
