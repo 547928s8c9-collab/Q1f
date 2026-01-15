@@ -98,6 +98,7 @@ export interface IStorage {
 
   // KYC Applicants
   getKycApplicant(userId: string): Promise<KycApplicant | undefined>;
+  getKycApplicantByProviderRef(providerRef: string): Promise<KycApplicant | undefined>;
   createKycApplicant(applicant: InsertKycApplicant): Promise<KycApplicant>;
   updateKycApplicant(userId: string, updates: Partial<KycApplicant>): Promise<KycApplicant | undefined>;
 
@@ -376,6 +377,11 @@ export class DatabaseStorage implements IStorage {
   // KYC Applicants
   async getKycApplicant(userId: string): Promise<KycApplicant | undefined> {
     const [applicant] = await db.select().from(kycApplicants).where(eq(kycApplicants.userId, userId));
+    return applicant;
+  }
+
+  async getKycApplicantByProviderRef(providerRef: string): Promise<KycApplicant | undefined> {
+    const [applicant] = await db.select().from(kycApplicants).where(eq(kycApplicants.providerRef, providerRef));
     return applicant;
   }
 

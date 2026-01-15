@@ -281,6 +281,49 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/operations/export - Export operations as CSV (protected)
+  app.get("/api/operations/export", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { filter, q } = req.query;
+      
+      // Use same filters as UI
+      const result = await storage.getOperations(
+        userId,
+        filter as string,
+        q as string,
+        undefined,
+        1000
+      );
+      const operations = result.operations;
+
+      // Build CSV
+      const headers = ["Date", "Type", "Status", "Asset", "Amount", "Fee", "Strategy", "Reference"];
+      const rows = operations.map((op) => [
+        op.createdAt?.toISOString() || "",
+        op.type || "",
+        op.status || "",
+        op.asset || "",
+        op.amount || "",
+        op.fee || "",
+        op.strategyName || "",
+        op.providerRef || op.txHash || "",
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      ].join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="zeon-activity-${new Date().toISOString().split("T")[0]}.csv"`);
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Export operations error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // GET /api/kyc/status - Get KYC status (protected)
   app.get("/api/kyc/status", isAuthenticated, async (req, res) => {
     try {
@@ -1119,6 +1162,271 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Accept consent error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ==================== SUMSUB INTEGRATION (DEMO) ====================
+
+  // GET /api/sumsub/access-token - Generate access token for SDK (demo mode)
+  app.get("/api/sumsub/access-token", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await storage.getUser(userId);
+      
+      // In production, this would call Sumsub's API to generate a token
+      // For demo, we generate a mock token
+      const mockToken = `demo_${userId}_${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 3600000).toISOString(); // 1 hour
+
+      // Check if applicant exists, create if not
+      let applicant = await storage.getKycApplicant(userId);
+      if (!applicant) {
+        applicant = await storage.createKycApplicant({
+          userId,
+          status: "NOT_STARTED",
+          level: "basic",
+          providerRef: `sumsub_${userId}`,
+        });
+      }
+
+      res.json({
+        token: mockToken,
+        expiresAt,
+        applicantId: applicant.providerRef || `sumsub_${userId}`,
+        flowName: "basic-kyc-demo",
+        isDemoMode: true,
+      });
+    } catch (error) {
+      console.error("Sumsub access token error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/sumsub/webhook - Handle Sumsub callbacks (demo mode)
+  // In production, this would verify HMAC signature from Sumsub
+  const IS_PRODUCTION = process.env.NODE_ENV === "production";
+  const SUMSUB_WEBHOOK_SECRET = process.env.SUMSUB_WEBHOOK_SECRET;
+  
+  app.post("/api/sumsub/webhook", async (req, res) => {
+    try {
+      // In production, require webhook secret
+      if (IS_PRODUCTION && !SUMSUB_WEBHOOK_SECRET) {
+        console.error("Sumsub webhook: SUMSUB_WEBHOOK_SECRET not configured");
+        return res.status(500).json({ error: "Service not configured" });
+      }
+
+      // Verify webhook secret
+      const webhookSecret = req.headers["x-sumsub-secret"] || req.headers["x-webhook-secret"];
+      const expectedSecret = SUMSUB_WEBHOOK_SECRET || "demo-webhook-secret";
+      
+      if (webhookSecret !== expectedSecret) {
+        console.warn("Sumsub webhook: invalid or missing secret");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Validate request body with Zod
+      const webhookSchema = z.object({
+        applicantId: z.string().min(1),
+        type: z.enum(["applicantReviewed", "applicantPending", "applicantOnHold"]),
+        reviewResult: z.object({
+          reviewAnswer: z.enum(["GREEN", "RED", "YELLOW"]).optional(),
+          rejectLabels: z.array(z.string()).optional(),
+          moderationComment: z.string().optional(),
+        }).optional(),
+      });
+
+      const parseResult = webhookSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parseResult.error.issues });
+      }
+
+      const { applicantId, reviewResult, type } = parseResult.data;
+      
+      if (!applicantId) {
+        return res.status(400).json({ error: "Missing applicantId" });
+      }
+
+      // Look up applicant by providerRef (the actual stored reference)
+      // This prevents applicantId manipulation attacks
+      const applicant = await storage.getKycApplicantByProviderRef(applicantId);
+      
+      if (!applicant) {
+        console.warn(`Sumsub webhook: unknown applicantId ${applicantId}`);
+        return res.status(404).json({ error: "Applicant not found" });
+      }
+
+      const userId = applicant.userId;
+
+      const previousStatus = applicant.status;
+      let newStatus: string | null = null;
+      let rejectionReason: string | null = null;
+      let needsActionReason: string | null = null;
+
+      // Map Sumsub review result to KYC status
+      if (type === "applicantReviewed" || type === "applicantPending") {
+        const reviewAnswer = reviewResult?.reviewAnswer;
+        
+        if (reviewAnswer === "GREEN") {
+          newStatus = "APPROVED";
+        } else if (reviewAnswer === "RED") {
+          newStatus = "REJECTED";
+          rejectionReason = reviewResult?.rejectLabels?.join(", ") || "Identity verification failed";
+        } else if (reviewAnswer === "YELLOW") {
+          newStatus = "NEEDS_ACTION";
+          needsActionReason = reviewResult?.moderationComment || "Additional documents required";
+        } else if (type === "applicantPending") {
+          newStatus = "IN_REVIEW";
+        }
+      } else if (type === "applicantOnHold") {
+        newStatus = "ON_HOLD";
+      }
+
+      if (newStatus && newStatus !== previousStatus) {
+        await storage.updateKycApplicant(userId, {
+          status: newStatus,
+          reviewedAt: ["APPROVED", "REJECTED"].includes(newStatus) ? new Date() : undefined,
+          rejectionReason,
+          needsActionReason,
+        });
+
+        // Update security settings if approved
+        if (newStatus === "APPROVED") {
+          await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+        }
+
+        // Create audit log
+        const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+        await storage.createAuditLog({
+          userId,
+          event: "KYC_STATUS_CHANGED",
+          resourceType: "kyc",
+          resourceId: applicant.id,
+          details: { previousStatus, newStatus, source: "sumsub_webhook", type },
+          ip,
+          userAgent: "sumsub-webhook",
+        });
+
+        // Create notification
+        const notificationMessages: Record<string, { title: string; message: string }> = {
+          APPROVED: { title: "KYC Approved", message: "Your identity has been successfully verified." },
+          REJECTED: { title: "KYC Rejected", message: rejectionReason || "Your verification was not successful." },
+          NEEDS_ACTION: { title: "Action Required", message: needsActionReason || "Additional documents are needed." },
+          ON_HOLD: { title: "Verification On Hold", message: "Your verification is temporarily on hold." },
+          IN_REVIEW: { title: "Verification In Progress", message: "Your documents are being reviewed." },
+        };
+
+        const notification = notificationMessages[newStatus];
+        if (notification) {
+          await storage.createNotification({
+            userId,
+            type: "kyc",
+            title: notification.title,
+            message: notification.message,
+            resourceType: "kyc",
+            resourceId: applicant.id,
+          });
+        }
+      }
+
+      res.json({ success: true, status: newStatus || previousStatus });
+    } catch (error) {
+      console.error("Sumsub webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/sumsub/demo-callback - Trigger a demo callback (for testing)
+  app.post("/api/sumsub/demo-callback", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      // Validate request body with Zod
+      const demoCallbackSchema = z.object({
+        status: z.enum(["APPROVED", "REJECTED", "NEEDS_ACTION", "ON_HOLD"]),
+      });
+
+      const parseResult = demoCallbackSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ 
+          error: "Invalid status", 
+          validStatuses: ["APPROVED", "REJECTED", "NEEDS_ACTION", "ON_HOLD"],
+          details: parseResult.error.issues
+        });
+      }
+
+      const { status } = parseResult.data;
+
+      const applicant = await storage.getKycApplicant(userId);
+      if (!applicant) {
+        return res.status(400).json({ error: "No KYC application found. Start KYC first." });
+      }
+
+      // Simulate a Sumsub webhook callback
+      const reviewResult: Record<string, unknown> = {};
+      if (status === "APPROVED") {
+        reviewResult.reviewAnswer = "GREEN";
+      } else if (status === "REJECTED") {
+        reviewResult.reviewAnswer = "RED";
+        reviewResult.rejectLabels = ["DOCUMENT_DAMAGED", "FORGERY"];
+      } else if (status === "NEEDS_ACTION") {
+        reviewResult.reviewAnswer = "YELLOW";
+        reviewResult.moderationComment = "Please upload a clearer photo of your ID";
+      }
+
+      // Call our own webhook endpoint to simulate
+      const webhookBody = {
+        applicantId: applicant.providerRef || `sumsub_${userId}`,
+        type: status === "ON_HOLD" ? "applicantOnHold" : "applicantReviewed",
+        reviewResult,
+      };
+
+      // Process inline (in production this would be an HTTP call)
+      const previousStatus = applicant.status;
+      let newStatus = status;
+      let rejectionReason: string | null = null;
+      let needsActionReason: string | null = null;
+
+      if (status === "REJECTED") {
+        rejectionReason = "Document damaged, possible forgery detected";
+      } else if (status === "NEEDS_ACTION") {
+        needsActionReason = "Please upload a clearer photo of your ID";
+      }
+
+      await storage.updateKycApplicant(userId, {
+        status: newStatus,
+        reviewedAt: ["APPROVED", "REJECTED"].includes(newStatus) ? new Date() : undefined,
+        rejectionReason,
+        needsActionReason,
+      });
+
+      if (newStatus === "APPROVED") {
+        await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+      }
+
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      await storage.createAuditLog({
+        userId,
+        event: "KYC_STATUS_CHANGED",
+        resourceType: "kyc",
+        resourceId: applicant.id,
+        details: { previousStatus, newStatus, source: "demo_callback" },
+        ip,
+        userAgent: req.headers["user-agent"] || "demo",
+      });
+
+      await storage.createNotification({
+        userId,
+        type: "kyc",
+        title: `KYC ${status.charAt(0) + status.slice(1).toLowerCase().replace("_", " ")}`,
+        message: `Demo: KYC status changed to ${status}`,
+        resourceType: "kyc",
+        resourceId: applicant.id,
+      });
+
+      res.json({ success: true, previousStatus, newStatus });
+    } catch (error) {
+      console.error("Sumsub demo callback error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

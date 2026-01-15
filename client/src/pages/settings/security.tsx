@@ -132,7 +132,7 @@ export default function SecuritySettings() {
               label="Two-Factor Authentication"
               description="Add an extra layer of security to your account"
               type="toggle"
-              value={bootstrap?.security.twoFactorEnabled}
+              value={bootstrap?.security.twoFactorEnabled ?? false}
               onChange={(enabled) => toggle2FAMutation.mutate(enabled)}
             />
             <SecuritySettingRow
@@ -153,7 +153,7 @@ export default function SecuritySettings() {
               label="Address Whitelist"
               description="Only allow withdrawals to approved addresses"
               type="toggle"
-              value={bootstrap?.security.whitelistEnabled}
+              value={bootstrap?.security.whitelistEnabled ?? false}
               onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
             />
             <div className="p-4">

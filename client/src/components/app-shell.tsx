@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   Sidebar,
   SidebarContent,
@@ -78,6 +79,7 @@ function AppSidebar() {
           </div>
         )}
         <div className="flex items-center justify-between gap-2">
+          <NotificationBell />
           <ThemeToggle />
           <Button
             variant="ghost"
@@ -100,6 +102,7 @@ function MobileHeader() {
     <header className="md:hidden flex items-center justify-between px-4 py-3 bg-sidebar border-b border-sidebar-border sticky top-0 z-40">
       <h1 className="text-xl font-semibold tracking-tight">ZEON</h1>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <ThemeToggle />
         <Button
           variant="ghost"
