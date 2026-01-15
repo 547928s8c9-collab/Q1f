@@ -39,7 +39,11 @@ Preferred communication style: Simple, everyday language.
 
 **Shared Schema**: The `shared/` directory contains schema definitions and types used by both frontend and backend, ensuring type safety across the stack.
 
-**In-Memory Storage Fallback**: The `server/storage.ts` implements an in-memory storage layer that can be used when the database is not available, facilitating development and testing.
+**Database Storage**: The `server/storage.ts` implements a `DatabaseStorage` class using Drizzle ORM for all data persistence. The `server/db.ts` establishes the PostgreSQL connection. Demo data is seeded via `server/seed.ts` (run with `npx tsx server/seed.ts`).
+
+**Operation-Driven Flow**: All money actions (deposits, withdrawals, investments, vault transfers) create Operation records with proper status transitions. The Activity page reads exclusively from the operations table.
+
+**Bootstrap Endpoint**: `/api/bootstrap` is the single source of truth for balances, vaults, invested amounts, portfolio series, quotes, and gate flags. Frontend pages use this endpoint rather than hardcoded values.
 
 **Component Organization**: 
 - `client/src/components/ui/` - Reusable shadcn/ui components
