@@ -25,6 +25,9 @@ export function registerAuthRoutes(app: Express): void {
       // Initialize demo user data (balances, vaults, security settings)
       await storage.ensureUserData(DEMO_USER_ID);
 
+      // Seed historical demo data (positions, operations, portfolio series)
+      await storage.seedDemoUserData(DEMO_USER_ID);
+
       // Set demo user as fully onboarded with demo balances
       await storage.updateSecuritySettings(DEMO_USER_ID, {
         contactVerified: true,

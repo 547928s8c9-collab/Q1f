@@ -57,6 +57,7 @@ import {
 
 export interface IStorage {
   ensureUserData(userId: string): Promise<void>;
+  seedDemoUserData(userId: string): Promise<void>;
 
   getBalances(userId: string): Promise<Balance[]>;
   getBalance(userId: string, asset: string): Promise<Balance | undefined>;
@@ -173,6 +174,191 @@ export class DatabaseStorage implements IStorage {
       addressDelay: 0,
       autoSweepEnabled: false,
     }).onConflictDoNothing();
+  }
+
+  async seedDemoUserData(userId: string): Promise<void> {
+    // Check if demo data already exists
+    const existingPositions = await this.getPositions(userId);
+    if (existingPositions.length > 0) {
+      return; // Demo data already seeded
+    }
+
+    // Get available strategies
+    const allStrategies = await this.getStrategies();
+    if (allStrategies.length === 0) return;
+
+    // Pick 3 strategies for demo positions
+    const selectedStrategies = allStrategies.slice(0, 3);
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+
+    // Investment amounts for each strategy (in minor units - 6 decimals for USDT)
+    const investmentAmounts = [
+      5000_000000, // 5,000 USDT in Stable Yield
+      3000_000000, // 3,000 USDT in Fixed Income Plus
+      2000_000000, // 2,000 USDT in Balanced Growth
+    ];
+
+    // Create positions with accumulated profits (simulating ~60 days of investing)
+    for (let i = 0; i < selectedStrategies.length; i++) {
+      const strategy = selectedStrategies[i];
+      const principal = investmentAmounts[i];
+      // Simulate ~2 months of returns based on strategy tier
+      const monthlyReturnBps = strategy.expectedMonthlyRangeBpsMin || 300;
+      const daysInvested = 60;
+      // Use integer math: profit = principal * bps * days / (30 * 10000)
+      const accumulatedProfit = Math.floor((principal * monthlyReturnBps * daysInvested) / (30 * 10000));
+      const currentValue = principal + accumulatedProfit;
+
+      // Legacy fields use integer USDT (no decimals), minor fields use 6 decimal places
+      const principalUsdt = Math.floor(principal / 1000000);
+      const currentValueUsdt = Math.floor(currentValue / 1000000);
+
+      await db.insert(positions).values({
+        userId,
+        strategyId: strategy.id,
+        principal: principalUsdt.toString(),
+        currentValue: currentValueUsdt.toString(),
+        principalMinor: principal.toString(),
+        investedCurrentMinor: currentValue.toString(),
+        accruedProfitPayableMinor: accumulatedProfit.toString(),
+        lastAccrualDate: today,
+      });
+    }
+
+    // Generate 90 days of portfolio history
+    const startingValue = 8000_000000; // Started with 8,000 USDT invested
+    const portfolioData: InsertPortfolioSeries[] = [];
+    
+    for (let i = 90; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split("T")[0];
+      
+      // Simulate gradual growth with some volatility
+      const daysSinceStart = 90 - i;
+      const baseGrowth = daysSinceStart * 0.003; // ~0.3% daily average
+      const noise = (Math.sin(daysSinceStart * 0.5) * 0.02) + (Math.random() - 0.5) * 0.01;
+      const growthFactor = 1 + baseGrowth + noise;
+      
+      // Also simulate deposits at day 30 and day 60
+      let additionalDeposits = 0;
+      if (daysSinceStart >= 30) additionalDeposits += 1000_000000;
+      if (daysSinceStart >= 60) additionalDeposits += 1000_000000;
+      
+      const value = Math.floor((startingValue + additionalDeposits) * growthFactor);
+      
+      portfolioData.push({
+        userId,
+        date: dateStr,
+        value: value.toString(),
+      });
+    }
+
+    if (portfolioData.length > 0) {
+      await db.insert(portfolioSeries).values(portfolioData).onConflictDoNothing();
+    }
+
+    // Create historical operations using raw insert (need to set createdAt/completedAt)
+    const day90 = new Date(now);
+    day90.setDate(day90.getDate() - 90);
+    const day89 = new Date(now);
+    day89.setDate(day89.getDate() - 89);
+    const day60 = new Date(now);
+    day60.setDate(day60.getDate() - 60);
+    const day30 = new Date(now);
+    day30.setDate(day30.getDate() - 30);
+    const day7 = new Date(now);
+    day7.setDate(day7.getDate() - 7);
+
+    // Initial deposit 90 days ago
+    await db.insert(operations).values({
+      userId,
+      type: "DEPOSIT_USDT",
+      status: "completed",
+      asset: "USDT",
+      amount: "8000000000",
+      fee: "0",
+    }).onConflictDoNothing();
+
+    // Update created_at via SQL for the initial deposit
+    await db.execute(sql`UPDATE operations SET created_at = ${day90} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '8000000000'`);
+
+    // Initial investments 89 days ago
+    for (let i = 0; i < selectedStrategies.length; i++) {
+      await db.insert(operations).values({
+        userId,
+        type: "INVEST",
+        status: "completed",
+        asset: "USDT",
+        amount: investmentAmounts[i].toString(),
+        strategyId: selectedStrategies[i].id,
+        strategyName: selectedStrategies[i].name,
+      });
+    }
+    await db.execute(sql`UPDATE operations SET created_at = ${day89} WHERE user_id = ${userId} AND type = 'INVEST' AND created_at > ${day89}`);
+
+    // Additional deposits
+    await db.insert(operations).values({
+      userId,
+      type: "DEPOSIT_USDT",
+      status: "completed",
+      asset: "USDT",
+      amount: "1000000000",
+      fee: "0",
+    });
+    await db.execute(sql`UPDATE operations SET created_at = ${day60} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '1000000000' AND created_at > ${day60}`);
+
+    await db.insert(operations).values({
+      userId,
+      type: "DEPOSIT_USDT",
+      status: "completed",
+      asset: "USDT",
+      amount: "1000000000",
+      fee: "0",
+    });
+    await db.execute(sql`UPDATE operations SET created_at = ${day30} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '1000000000' AND created_at > ${day30}`);
+
+    // Some profit accrual operations (weekly samples)
+    for (let week = 1; week <= 8; week++) {
+      const accrualDate = new Date(now);
+      accrualDate.setDate(accrualDate.getDate() - (90 - week * 7));
+      
+      for (let i = 0; i < selectedStrategies.length; i++) {
+        const weeklyProfit = Math.floor(investmentAmounts[i] * 0.007);
+        const op = await db.insert(operations).values({
+          userId,
+          type: "PROFIT_ACCRUAL",
+          status: "completed",
+          asset: "USDT",
+          amount: weeklyProfit.toString(),
+          strategyId: selectedStrategies[i].id,
+          strategyName: selectedStrategies[i].name,
+        }).returning();
+        if (op[0]) {
+          await db.execute(sql`UPDATE operations SET created_at = ${accrualDate} WHERE id = ${op[0].id}`);
+        }
+      }
+    }
+
+    // Recent activity - a small withdrawal
+    const withdrawOp = await db.insert(operations).values({
+      userId,
+      type: "WITHDRAW_USDT",
+      status: "completed",
+      asset: "USDT",
+      amount: "500000000",
+      fee: "1000000",
+      txHash: "0xdemo" + Math.random().toString(36).substring(2, 15),
+    }).returning();
+    if (withdrawOp[0]) {
+      await db.execute(sql`UPDATE operations SET created_at = ${day7} WHERE id = ${withdrawOp[0].id}`);
+    }
+
+    // Update vaults with demo values
+    await this.updateVault(userId, "principal", "10000000000"); // 10,000 USDT in principal vault
+    await this.updateVault(userId, "profit", "850000000"); // 850 USDT accumulated profit
+    await this.updateVault(userId, "taxes", "150000000"); // 150 USDT set aside for taxes
   }
 
   async getBalances(userId: string): Promise<Balance[]> {
