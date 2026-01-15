@@ -38,24 +38,33 @@ export function registerAuthRoutes(app: Express): void {
       await storage.updateBalance(DEMO_USER_ID, "USDT", "10000000000", "0"); // 10,000 USDT
       await storage.updateBalance(DEMO_USER_ID, "RUB", "50000000", "0"); // 500,000 RUB
 
-      // Set up demo session
-      req.user = {
+      // Create demo user object matching passport format
+      // expires_at is required by isAuthenticated middleware
+      const demoUser = {
         claims: {
           sub: DEMO_USER_ID,
           email: "demo@example.com",
           first_name: "Demo",
           last_name: "User",
         },
+        expires_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 1 week from now
       };
 
-      // Save to session
-      req.session.passport = { user: req.user };
-      req.session.save((err: any) => {
+      // Use passport's login method for proper session handling
+      req.login(demoUser, (err: any) => {
         if (err) {
-          console.error("Session save error:", err);
+          console.error("Demo login error:", err);
           return res.status(500).json({ error: "Failed to create demo session" });
         }
-        res.redirect("/");
+        // Ensure session is saved before redirect
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error("Session save error:", saveErr);
+            return res.status(500).json({ error: "Failed to save session" });
+          }
+          console.log("Demo login successful, session saved for user:", DEMO_USER_ID);
+          res.redirect("/");
+        });
       });
     } catch (error) {
       console.error("Demo login error:", error);

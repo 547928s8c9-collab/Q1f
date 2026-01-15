@@ -27,14 +27,18 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "sessions",
   });
+  
+  // In Replit environment, we need proper cookie settings for HTTPS proxy
+  const isProduction = process.env.NODE_ENV === "production";
+  
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
-    resave: true,
-    saveUninitialized: true,
+    resave: false,
+    saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: "auto", // automatically set based on connection
       sameSite: "lax",
       maxAge: sessionTtl,
     },
