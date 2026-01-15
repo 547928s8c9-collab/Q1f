@@ -277,18 +277,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/consent/accept (protected)
-  app.post("/api/consent/accept", isAuthenticated, async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      await storage.updateSecuritySettings(userId, { consentAccepted: true });
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Consent accept error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
   // POST /api/kyc/start - Demo auto-approve (protected)
   app.post("/api/kyc/start", isAuthenticated, async (req, res) => {
     try {
