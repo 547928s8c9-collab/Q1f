@@ -1549,5 +1549,426 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== PAYOUT INSTRUCTIONS ROUTES ====================
+
+  // GET /api/payout-instructions (protected)
+  app.get("/api/payout-instructions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const instructions = await storage.getPayoutInstructions(userId);
+      res.json(instructions);
+    } catch (error) {
+      console.error("Get payout instructions error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/payout-instructions/:strategyId (protected)
+  app.get("/api/payout-instructions/:strategyId", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const instruction = await storage.getPayoutInstruction(userId, req.params.strategyId);
+      res.json(instruction || null);
+    } catch (error) {
+      console.error("Get payout instruction error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/payout-instructions (protected)
+  app.post("/api/payout-instructions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const schema = z.object({
+        strategyId: z.string(),
+        frequency: z.enum(["DAILY", "MONTHLY"]),
+        addressId: z.string().optional(),
+        minPayoutMinor: z.string().default("10000000"), // 10 USDT
+        active: z.boolean().default(false),
+      });
+      
+      const parseResult = schema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request", details: parseResult.error.issues });
+      }
+
+      const { strategyId, frequency, addressId, minPayoutMinor, active } = parseResult.data;
+
+      // If activating, verify address is ACTIVE
+      if (active && addressId) {
+        const address = await storage.getWhitelistAddress(addressId);
+        if (!address || address.status !== "ACTIVE") {
+          return res.status(400).json({ 
+            error: "Cannot activate payout: selected address is not active. Please add and activate a whitelisted address first." 
+          });
+        }
+      }
+
+      if (active && !addressId) {
+        return res.status(400).json({ 
+          error: "Cannot activate payout without selecting a whitelisted address." 
+        });
+      }
+
+      const instruction = await storage.upsertPayoutInstruction({
+        userId,
+        strategyId,
+        frequency,
+        addressId: addressId || null,
+        minPayoutMinor,
+        active,
+      });
+
+      res.json(instruction);
+    } catch (error) {
+      console.error("Save payout instruction error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ==================== REDEMPTION ROUTES ====================
+
+  // Helper function to calculate next weekly window (Sunday 00:00 UTC)
+  function getNextWeeklyWindow(): Date {
+    const now = new Date();
+    const daysUntilSunday = (7 - now.getUTCDay()) % 7 || 7; // next Sunday
+    const nextSunday = new Date(now);
+    nextSunday.setUTCDate(now.getUTCDate() + daysUntilSunday);
+    nextSunday.setUTCHours(0, 0, 0, 0);
+    return nextSunday;
+  }
+
+  // GET /api/redemptions (protected)
+  app.get("/api/redemptions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const strategyId = req.query.strategyId as string | undefined;
+      const requests = await storage.getRedemptionRequests(userId, strategyId);
+      res.json({
+        requests: requests.map(r => ({
+          id: r.id,
+          strategyId: r.strategyId,
+          amountMinor: r.amountMinor,
+          requestedAt: r.requestedAt?.toISOString(),
+          executeAt: r.executeAt?.toISOString(),
+          status: r.status,
+          executedAmountMinor: r.executedAmountMinor,
+        })),
+        nextWindow: getNextWeeklyWindow().toISOString(),
+      });
+    } catch (error) {
+      console.error("Get redemptions error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/redemptions (protected)
+  app.post("/api/redemptions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const schema = z.object({
+        strategyId: z.string(),
+        amountMinor: z.string().optional(), // null = ALL
+      });
+      
+      const parseResult = schema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request", details: parseResult.error.issues });
+      }
+
+      const { strategyId, amountMinor } = parseResult.data;
+
+      // Check position exists
+      const position = await storage.getPosition(userId, strategyId);
+      if (!position) {
+        return res.status(400).json({ error: "No position found for this strategy" });
+      }
+
+      const principalMinor = BigInt(position.principalMinor || position.principal || "0");
+      if (principalMinor <= 0n) {
+        return res.status(400).json({ error: "No principal to redeem" });
+      }
+
+      // Validate amount if specified
+      if (amountMinor) {
+        const requestedAmount = BigInt(amountMinor);
+        if (requestedAmount <= 0n) {
+          return res.status(400).json({ error: "Amount must be positive" });
+        }
+        if (requestedAmount > principalMinor) {
+          return res.status(400).json({ 
+            error: "Insufficient principal", 
+            available: principalMinor.toString(),
+            requested: amountMinor 
+          });
+        }
+      }
+
+      const executeAt = getNextWeeklyWindow();
+      
+      const request = await storage.createRedemptionRequest({
+        userId,
+        strategyId,
+        amountMinor: amountMinor || null,
+        executeAt,
+        status: "PENDING",
+      });
+
+      res.json({
+        id: request.id,
+        strategyId: request.strategyId,
+        amountMinor: request.amountMinor,
+        executeAt: executeAt.toISOString(),
+        status: request.status,
+      });
+    } catch (error) {
+      console.error("Create redemption error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ==================== JOB ROUTES (DEV TRIGGERS) ====================
+
+  // POST /api/jobs/accrue-daily - Apply daily strategy returns to positions
+  app.post("/api/jobs/accrue-daily", async (req, res) => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const positions = await storage.getAllPositions();
+      const results: Array<{ positionId: string; accrued: string; status: string }> = [];
+
+      for (const position of positions) {
+        // Skip if already accrued today
+        if (position.lastAccrualDate === today) {
+          results.push({ positionId: position.id, accrued: "0", status: "already_processed" });
+          continue;
+        }
+
+        const invested = BigInt(position.investedCurrentMinor || position.currentValue || "0");
+        if (invested <= 0n) {
+          results.push({ positionId: position.id, accrued: "0", status: "no_investment" });
+          continue;
+        }
+
+        // Get strategy for return calculation (demo: use expected range)
+        const strategy = await storage.getStrategy(position.strategyId);
+        if (!strategy) {
+          results.push({ positionId: position.id, accrued: "0", status: "strategy_not_found" });
+          continue;
+        }
+
+        // Demo: calculate daily return based on monthly range (divide by 30)
+        const monthlyBps = (strategy.expectedMonthlyRangeBpsMin || 300) + 
+          Math.floor(Math.random() * ((strategy.expectedMonthlyRangeBpsMax || 500) - (strategy.expectedMonthlyRangeBpsMin || 300)));
+        const dailyBps = Math.round(monthlyBps / 30);
+        
+        // Apply return (can be negative for HIGH risk strategies occasionally)
+        const isNegativeDay = strategy.riskTier === "HIGH" && Math.random() < 0.1;
+        const effectiveBps = isNegativeDay ? -dailyBps : dailyBps;
+        
+        const profitMinor = (invested * BigInt(effectiveBps)) / 10000n;
+        const newInvested = invested + profitMinor;
+        
+        // Accrued profit payable only increases for positive returns
+        const currentAccrued = BigInt(position.accruedProfitPayableMinor || "0");
+        const newAccrued = profitMinor > 0n ? currentAccrued + profitMinor : currentAccrued;
+
+        await storage.updatePosition(position.id, {
+          investedCurrentMinor: newInvested.toString(),
+          accruedProfitPayableMinor: newAccrued.toString(),
+          currentValue: newInvested.toString(), // Keep legacy field in sync
+          lastAccrualDate: today,
+        });
+
+        // Create PROFIT_ACCRUAL operation
+        await storage.createOperation({
+          userId: position.userId,
+          type: "PROFIT_ACCRUAL",
+          status: "completed",
+          asset: "USDT",
+          amount: profitMinor.toString(),
+          strategyId: position.strategyId,
+          strategyName: strategy.name,
+          metadata: { dailyBps: effectiveBps, date: today },
+        });
+
+        results.push({ 
+          positionId: position.id, 
+          accrued: profitMinor.toString(), 
+          status: "processed" 
+        });
+      }
+
+      res.json({ success: true, date: today, results });
+    } catch (error) {
+      console.error("Accrue daily error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/jobs/payout-run - Execute profit payouts
+  app.post("/api/jobs/payout-run", async (req, res) => {
+    try {
+      const frequency = (req.query.frequency as string) || "DAILY";
+      const NETWORK_FEE_MINOR = "1000000"; // 1 USDT demo network fee
+      
+      const instructions = await storage.getActivePayoutInstructionsByFrequency(frequency);
+      const results: Array<{ instructionId: string; status: string; netPayout?: string }> = [];
+
+      for (const instruction of instructions) {
+        // Get position
+        const position = await storage.getPosition(instruction.userId, instruction.strategyId);
+        if (!position) {
+          results.push({ instructionId: instruction.id, status: "no_position" });
+          continue;
+        }
+
+        const gross = BigInt(position.accruedProfitPayableMinor || "0");
+        const networkFee = BigInt(NETWORK_FEE_MINOR);
+        const minPayout = BigInt(instruction.minPayoutMinor);
+        const net = gross - networkFee;
+
+        if (net < minPayout) {
+          results.push({ instructionId: instruction.id, status: "below_minimum", netPayout: net.toString() });
+          continue;
+        }
+
+        // Verify address is still active
+        if (!instruction.addressId) {
+          results.push({ instructionId: instruction.id, status: "no_address" });
+          continue;
+        }
+
+        const address = await storage.getWhitelistAddress(instruction.addressId);
+        if (!address || address.status !== "ACTIVE") {
+          results.push({ instructionId: instruction.id, status: "address_not_active" });
+          continue;
+        }
+
+        // Get strategy for operation
+        const strategy = await storage.getStrategy(instruction.strategyId);
+
+        // Create PROFIT_PAYOUT operation
+        const txHash = `demo_tx_${randomUUID().slice(0, 8)}`;
+        await storage.createOperation({
+          userId: instruction.userId,
+          type: "PROFIT_PAYOUT",
+          status: "completed",
+          asset: "USDT",
+          amount: net.toString(),
+          fee: NETWORK_FEE_MINOR,
+          txHash,
+          strategyId: instruction.strategyId,
+          strategyName: strategy?.name,
+          metadata: { 
+            frequency, 
+            addressId: instruction.addressId, 
+            address: address.address,
+            gross: gross.toString(),
+            networkFee: NETWORK_FEE_MINOR,
+          },
+        });
+
+        // Decrease accrued profit
+        await storage.updatePosition(position.id, {
+          accruedProfitPayableMinor: "0", // Reset after payout
+        });
+
+        results.push({ instructionId: instruction.id, status: "paid", netPayout: net.toString() });
+      }
+
+      res.json({ success: true, frequency, results });
+    } catch (error) {
+      console.error("Payout run error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/jobs/redemption-weekly-run - Execute due redemption requests
+  app.post("/api/jobs/redemption-weekly-run", async (req, res) => {
+    try {
+      const dueRequests = await storage.getPendingRedemptionsDue();
+      const results: Array<{ requestId: string; status: string; amount?: string }> = [];
+
+      for (const request of dueRequests) {
+        const position = await storage.getPosition(request.userId, request.strategyId);
+        if (!position) {
+          await storage.updateRedemptionRequest(request.id, { status: "CANCELLED" });
+          results.push({ requestId: request.id, status: "cancelled_no_position" });
+          continue;
+        }
+
+        const principalAvailable = BigInt(position.principalMinor || position.principal || "0");
+        const investedCurrent = BigInt(position.investedCurrentMinor || position.currentValue || "0");
+        
+        // Determine amount to redeem
+        let redeemAmount: bigint;
+        if (!request.amountMinor) {
+          // Redeem ALL
+          redeemAmount = principalAvailable;
+        } else {
+          redeemAmount = BigInt(request.amountMinor);
+          if (redeemAmount > principalAvailable) {
+            redeemAmount = principalAvailable; // Cap at available
+          }
+        }
+
+        if (redeemAmount <= 0n) {
+          await storage.updateRedemptionRequest(request.id, { status: "CANCELLED" });
+          results.push({ requestId: request.id, status: "cancelled_no_principal" });
+          continue;
+        }
+
+        // Calculate proportional reduction in invested current
+        const ratio = principalAvailable > 0n ? 
+          (redeemAmount * 10000n) / principalAvailable : 10000n;
+        const investedReduction = (investedCurrent * ratio) / 10000n;
+
+        // Update position
+        await storage.updatePosition(position.id, {
+          principalMinor: (principalAvailable - redeemAmount).toString(),
+          investedCurrentMinor: (investedCurrent - investedReduction).toString(),
+          principal: (principalAvailable - redeemAmount).toString(),
+          currentValue: (investedCurrent - investedReduction).toString(),
+        });
+
+        // Credit to wallet
+        const balance = await storage.getBalance(request.userId, "USDT");
+        const currentAvailable = BigInt(balance?.available || "0");
+        await storage.updateBalance(request.userId, "USDT", 
+          (currentAvailable + redeemAmount).toString(),
+          balance?.locked || "0"
+        );
+
+        // Get strategy for operation
+        const strategy = await storage.getStrategy(request.strategyId);
+
+        // Create operation
+        await storage.createOperation({
+          userId: request.userId,
+          type: "PRINCIPAL_REDEEM_EXECUTED",
+          status: "completed",
+          asset: "USDT",
+          amount: redeemAmount.toString(),
+          strategyId: request.strategyId,
+          strategyName: strategy?.name,
+          metadata: { redemptionRequestId: request.id },
+        });
+
+        // Update redemption request
+        await storage.updateRedemptionRequest(request.id, {
+          status: "EXECUTED",
+          executedAmountMinor: redeemAmount.toString(),
+        });
+
+        results.push({ requestId: request.id, status: "executed", amount: redeemAmount.toString() });
+      }
+
+      res.json({ success: true, results });
+    } catch (error) {
+      console.error("Redemption weekly run error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   return httpServer;
 }

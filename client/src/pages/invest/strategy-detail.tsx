@@ -145,19 +145,19 @@ export default function StrategyDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
                   {benchmarkOptions.map((option) => (
-                    <button
+                    <Button
                       key={option.value}
+                      variant={benchmark === option.value ? "secondary" : "ghost"}
+                      size="sm"
                       onClick={() => setBenchmark(option.value)}
                       className={cn(
-                        "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                        benchmark === option.value
-                          ? "bg-secondary text-secondary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                        "text-xs",
+                        benchmark !== option.value && "text-muted-foreground"
                       )}
-                      data-testid={`benchmark-${option.value.toLowerCase()}`}
+                      data-testid={`button-benchmark-${option.value.toLowerCase()}`}
                     >
                       {option.label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
                 <PeriodToggle value={period} onChange={setPeriod} />

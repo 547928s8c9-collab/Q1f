@@ -78,8 +78,12 @@ export const positions = pgTable("positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   strategyId: varchar("strategy_id").notNull(),
-  principal: text("principal").notNull().default("0"), // invested amount
-  currentValue: text("current_value").notNull().default("0"),
+  principal: text("principal").notNull().default("0"), // legacy field (keep for compatibility)
+  currentValue: text("current_value").notNull().default("0"), // legacy field
+  principalMinor: text("principal_minor").notNull().default("0"), // original invested amount
+  investedCurrentMinor: text("invested_current_minor").notNull().default("0"), // current value including gains/losses
+  accruedProfitPayableMinor: text("accrued_profit_payable_minor").notNull().default("0"), // profit available for payout
+  lastAccrualDate: text("last_accrual_date"), // last date accrual was processed
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -87,6 +91,31 @@ export const positions = pgTable("positions", {
 export const insertPositionSchema = createInsertSchema(positions).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPosition = z.infer<typeof insertPositionSchema>;
 export type Position = typeof positions.$inferSelect;
+
+// ==================== REDEMPTION REQUESTS ====================
+export const RedemptionStatus = {
+  PENDING: "PENDING",
+  EXECUTED: "EXECUTED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type RedemptionStatusType = typeof RedemptionStatus[keyof typeof RedemptionStatus];
+
+export const redemptionRequests = pgTable("redemption_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  strategyId: varchar("strategy_id").notNull(),
+  amountMinor: text("amount_minor"), // null means ALL principal
+  requestedAt: timestamp("requested_at").defaultNow(),
+  executeAt: timestamp("execute_at").notNull(), // next weekly window
+  status: text("status").notNull().default("PENDING"), // PENDING, EXECUTED, CANCELLED
+  executedAmountMinor: text("executed_amount_minor"), // actual amount redeemed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRedemptionRequestSchema = createInsertSchema(redemptionRequests).omit({ id: true, createdAt: true });
+export type InsertRedemptionRequest = z.infer<typeof insertRedemptionRequestSchema>;
+export type RedemptionRequest = typeof redemptionRequests.$inferSelect;
 
 // ==================== OPERATIONS ====================
 // All money actions create operation records
@@ -171,13 +200,21 @@ export type InsertSecuritySettings = z.infer<typeof insertSecuritySettingsSchema
 export type SecuritySettings = typeof securitySettings.$inferSelect;
 
 // ==================== WHITELIST ADDRESSES ====================
+export const AddressStatus = {
+  PENDING_ACTIVATION: "PENDING_ACTIVATION",
+  ACTIVE: "ACTIVE",
+  DISABLED: "DISABLED",
+} as const;
+
+export type AddressStatusType = typeof AddressStatus[keyof typeof AddressStatus];
+
 export const whitelistAddresses = pgTable("whitelist_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   address: text("address").notNull(),
   label: text("label"),
   network: text("network").default("TRC20"),
-  status: text("status").default("pending"), // pending, active
+  status: text("status").default("PENDING_ACTIVATION"), // PENDING_ACTIVATION, ACTIVE, DISABLED
   activatesAt: timestamp("activates_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -185,6 +222,29 @@ export const whitelistAddresses = pgTable("whitelist_addresses", {
 export const insertWhitelistAddressSchema = createInsertSchema(whitelistAddresses).omit({ id: true, createdAt: true });
 export type InsertWhitelistAddress = z.infer<typeof insertWhitelistAddressSchema>;
 export type WhitelistAddress = typeof whitelistAddresses.$inferSelect;
+
+// ==================== PAYOUT INSTRUCTIONS ====================
+export const PayoutFrequency = {
+  DAILY: "DAILY",
+  MONTHLY: "MONTHLY",
+} as const;
+
+export type PayoutFrequencyType = typeof PayoutFrequency[keyof typeof PayoutFrequency];
+
+export const payoutInstructions = pgTable("payout_instructions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  strategyId: varchar("strategy_id").notNull(),
+  frequency: text("frequency").notNull().default("MONTHLY"), // DAILY or MONTHLY
+  addressId: varchar("address_id"), // references whitelist address
+  minPayoutMinor: text("min_payout_minor").notNull().default("10000000"), // 10 USDT in minor units
+  active: boolean("active").default(false),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPayoutInstructionSchema = createInsertSchema(payoutInstructions).omit({ id: true, updatedAt: true });
+export type InsertPayoutInstruction = z.infer<typeof insertPayoutInstructionSchema>;
+export type PayoutInstruction = typeof payoutInstructions.$inferSelect;
 
 // ==================== CONSENTS ====================
 // Versioned consent records with audit trail
@@ -311,6 +371,9 @@ export const OperationType = {
   WITHDRAW_USDT: "WITHDRAW_USDT",
   INVEST: "INVEST",
   DAILY_PAYOUT: "DAILY_PAYOUT",
+  PROFIT_ACCRUAL: "PROFIT_ACCRUAL",
+  PROFIT_PAYOUT: "PROFIT_PAYOUT",
+  PRINCIPAL_REDEEM_EXECUTED: "PRINCIPAL_REDEEM_EXECUTED",
   FX: "FX",
   SUBSCRIPTION: "SUBSCRIPTION",
   KYC: "KYC",

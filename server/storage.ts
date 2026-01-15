@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, gte, or, ilike } from "drizzle-orm";
+import { eq, and, desc, gte, or, ilike, lte } from "drizzle-orm";
 import {
   balances,
   vaults,
@@ -12,10 +12,13 @@ import {
   quotes,
   securitySettings,
   whitelistAddresses,
+  payoutInstructions,
+  redemptionRequests,
   consents,
   auditLogs,
   kycApplicants,
   notifications,
+  AddressStatus,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -38,6 +41,10 @@ import {
   type InsertSecuritySettings,
   type WhitelistAddress,
   type InsertWhitelistAddress,
+  type PayoutInstruction,
+  type InsertPayoutInstruction,
+  type RedemptionRequest,
+  type InsertRedemptionRequest,
   type Consent,
   type InsertConsent,
   type AuditLog,
@@ -115,6 +122,24 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification | undefined>;
   markAllNotificationsRead(userId: string): Promise<void>;
+
+  // Payout Instructions
+  getPayoutInstruction(userId: string, strategyId: string): Promise<PayoutInstruction | undefined>;
+  getPayoutInstructions(userId: string): Promise<PayoutInstruction[]>;
+  upsertPayoutInstruction(instruction: InsertPayoutInstruction): Promise<PayoutInstruction>;
+  getActivePayoutInstructionsByFrequency(frequency: string): Promise<PayoutInstruction[]>;
+
+  // Active whitelist addresses
+  getActiveWhitelistAddresses(userId: string): Promise<WhitelistAddress[]>;
+
+  // Redemption Requests
+  getRedemptionRequests(userId: string, strategyId?: string): Promise<RedemptionRequest[]>;
+  createRedemptionRequest(request: InsertRedemptionRequest): Promise<RedemptionRequest>;
+  updateRedemptionRequest(id: string, updates: Partial<RedemptionRequest>): Promise<RedemptionRequest | undefined>;
+  getPendingRedemptionsDue(): Promise<RedemptionRequest[]>;
+
+  // All positions (for jobs)
+  getAllPositions(): Promise<Position[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -532,6 +557,80 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.userId, userId));
+  }
+
+  // Payout Instructions
+  async getPayoutInstruction(userId: string, strategyId: string): Promise<PayoutInstruction | undefined> {
+    const [instruction] = await db.select().from(payoutInstructions)
+      .where(and(eq(payoutInstructions.userId, userId), eq(payoutInstructions.strategyId, strategyId)));
+    return instruction;
+  }
+
+  async getPayoutInstructions(userId: string): Promise<PayoutInstruction[]> {
+    return db.select().from(payoutInstructions).where(eq(payoutInstructions.userId, userId));
+  }
+
+  async upsertPayoutInstruction(instruction: InsertPayoutInstruction): Promise<PayoutInstruction> {
+    const existing = await this.getPayoutInstruction(instruction.userId, instruction.strategyId);
+    if (existing) {
+      const [updated] = await db.update(payoutInstructions)
+        .set({ ...instruction, updatedAt: new Date() })
+        .where(eq(payoutInstructions.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(payoutInstructions).values(instruction).returning();
+    return created;
+  }
+
+  async getActivePayoutInstructionsByFrequency(frequency: string): Promise<PayoutInstruction[]> {
+    return db.select().from(payoutInstructions)
+      .where(and(eq(payoutInstructions.active, true), eq(payoutInstructions.frequency, frequency)));
+  }
+
+  // Active whitelist addresses
+  async getActiveWhitelistAddresses(userId: string): Promise<WhitelistAddress[]> {
+    return db.select().from(whitelistAddresses)
+      .where(and(eq(whitelistAddresses.userId, userId), eq(whitelistAddresses.status, AddressStatus.ACTIVE)));
+  }
+
+  // Redemption Requests
+  async getRedemptionRequests(userId: string, strategyId?: string): Promise<RedemptionRequest[]> {
+    if (strategyId) {
+      return db.select().from(redemptionRequests)
+        .where(and(eq(redemptionRequests.userId, userId), eq(redemptionRequests.strategyId, strategyId)))
+        .orderBy(desc(redemptionRequests.createdAt));
+    }
+    return db.select().from(redemptionRequests)
+      .where(eq(redemptionRequests.userId, userId))
+      .orderBy(desc(redemptionRequests.createdAt));
+  }
+
+  async createRedemptionRequest(request: InsertRedemptionRequest): Promise<RedemptionRequest> {
+    const [created] = await db.insert(redemptionRequests).values(request).returning();
+    return created;
+  }
+
+  async updateRedemptionRequest(id: string, updates: Partial<RedemptionRequest>): Promise<RedemptionRequest | undefined> {
+    const [updated] = await db.update(redemptionRequests)
+      .set(updates)
+      .where(eq(redemptionRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPendingRedemptionsDue(): Promise<RedemptionRequest[]> {
+    const now = new Date();
+    return db.select().from(redemptionRequests)
+      .where(and(
+        eq(redemptionRequests.status, "PENDING"),
+        gte(now, redemptionRequests.executeAt)
+      ));
+  }
+
+  // Get all positions (for job processing)
+  async getAllPositions(): Promise<Position[]> {
+    return db.select().from(positions);
   }
 }
 
