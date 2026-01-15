@@ -11,6 +11,8 @@ import {
   quotes,
   securitySettings,
   whitelistAddresses,
+  consents,
+  auditLogs,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -31,6 +33,10 @@ import {
   type InsertSecuritySettings,
   type WhitelistAddress,
   type InsertWhitelistAddress,
+  type Consent,
+  type InsertConsent,
+  type AuditLog,
+  type InsertAuditLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -76,6 +82,13 @@ export interface IStorage {
   createWhitelistAddress(address: InsertWhitelistAddress): Promise<WhitelistAddress>;
   updateWhitelistAddress(id: string, updates: Partial<WhitelistAddress>): Promise<WhitelistAddress | undefined>;
   deleteWhitelistAddress(id: string): Promise<void>;
+
+  getLatestConsent(userId: string, documentType: string): Promise<Consent | undefined>;
+  getUserConsents(userId: string): Promise<Consent[]>;
+  createConsent(consent: InsertConsent): Promise<Consent>;
+
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(userId: string, limit?: number): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -309,6 +322,37 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWhitelistAddress(id: string): Promise<void> {
     await db.delete(whitelistAddresses).where(eq(whitelistAddresses.id, id));
+  }
+
+  async getLatestConsent(userId: string, documentType: string): Promise<Consent | undefined> {
+    const [consent] = await db.select().from(consents)
+      .where(and(eq(consents.userId, userId), eq(consents.documentType, documentType)))
+      .orderBy(desc(consents.acceptedAt))
+      .limit(1);
+    return consent;
+  }
+
+  async getUserConsents(userId: string): Promise<Consent[]> {
+    return db.select().from(consents)
+      .where(eq(consents.userId, userId))
+      .orderBy(desc(consents.acceptedAt));
+  }
+
+  async createConsent(consent: InsertConsent): Promise<Consent> {
+    const [created] = await db.insert(consents).values(consent).returning();
+    return created;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(log).returning();
+    return created;
+  }
+
+  async getAuditLogs(userId: string, limit: number = 100): Promise<AuditLog[]> {
+    return db.select().from(auditLogs)
+      .where(eq(auditLogs.userId, userId))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
   }
 }
 
