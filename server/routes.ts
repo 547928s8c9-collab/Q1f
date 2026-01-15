@@ -859,6 +859,93 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== CONSENT ROUTES ====================
+
+  // Current consent version and document hash (would be managed separately in production)
+  const CURRENT_CONSENT_VERSION = "1.0";
+  const CURRENT_DOC_HASH = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+  // GET /api/consent/status (protected)
+  app.get("/api/consent/status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const latestConsent = await storage.getLatestConsent(userId, "combined");
+
+      const hasAccepted = !!latestConsent;
+      const needsReaccept = latestConsent?.version !== CURRENT_CONSENT_VERSION;
+
+      res.json({
+        hasAccepted,
+        currentVersion: latestConsent?.version || null,
+        requiredVersion: CURRENT_CONSENT_VERSION,
+        needsReaccept: hasAccepted && needsReaccept,
+        lastAcceptedAt: latestConsent?.acceptedAt?.toISOString() || null,
+        documentHash: CURRENT_DOC_HASH,
+      });
+    } catch (error) {
+      console.error("Consent status error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/consent/accept (protected, idempotent)
+  app.post("/api/consent/accept", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      // Check if user already accepted current version (idempotent)
+      const latestConsent = await storage.getLatestConsent(userId, "combined");
+      if (latestConsent?.version === CURRENT_CONSENT_VERSION) {
+        return res.json({
+          success: true,
+          alreadyAccepted: true,
+          consentId: latestConsent.id,
+          acceptedAt: latestConsent.acceptedAt?.toISOString(),
+        });
+      }
+
+      // Create new consent record
+      const consent = await storage.createConsent({
+        userId,
+        version: CURRENT_CONSENT_VERSION,
+        documentType: "combined",
+        docHash: CURRENT_DOC_HASH,
+        acceptedAt: new Date(),
+        ip,
+        userAgent,
+      });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId,
+        event: "CONSENT_ACCEPTED",
+        resourceType: "consent",
+        resourceId: consent.id,
+        details: {
+          version: CURRENT_CONSENT_VERSION,
+          docHash: CURRENT_DOC_HASH,
+        },
+        ip,
+        userAgent,
+      });
+
+      // Update security settings
+      await storage.updateSecuritySettings(userId, { consentAccepted: true });
+
+      res.json({
+        success: true,
+        alreadyAccepted: false,
+        consentId: consent.id,
+        acceptedAt: consent.acceptedAt?.toISOString(),
+      });
+    } catch (error) {
+      console.error("Accept consent error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // POST /api/fx/quote - Demo FX quote
   app.post("/api/fx/quote", async (req, res) => {
     try {
