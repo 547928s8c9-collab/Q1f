@@ -3,10 +3,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StrategyCard } from "@/components/strategy/strategy-card";
 import { StrategyCardSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { TrendingUp, AlertTriangle } from "lucide-react";
 import { type Strategy } from "@shared/schema";
 
 export default function Invest() {
+  useSetPageTitle("Invest");
   const { data: strategies, isLoading } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
   });

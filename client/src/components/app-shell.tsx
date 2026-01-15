@@ -1,10 +1,13 @@
 import { Link, useLocation } from "wouter";
-import { Home, BarChart3, TrendingUp, Wallet, Activity, Settings, LogOut } from "lucide-react";
+import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
+import { GlobalBanner } from "@/components/global-banner";
+import { PageProvider, usePageTitle } from "@/contexts/page-context";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +18,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarTrigger,
   SidebarFooter,
 } from "@/components/ui/sidebar";
 
@@ -27,9 +29,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/invest", label: "Invest", icon: TrendingUp },
   { href: "/wallet", label: "Wallet", icon: Wallet },
+  { href: "/invest", label: "Invest", icon: TrendingUp },
   { href: "/activity", label: "Activity", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -95,23 +96,37 @@ function AppSidebar() {
   );
 }
 
-function MobileHeader() {
-  const { logout } = useAuth();
+function TopBar() {
+  const { title } = usePageTitle();
+  const { user } = useAuth();
+  const initials = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="md:hidden flex items-center justify-between px-4 py-3 bg-sidebar border-b border-sidebar-border sticky top-0 z-40">
-      <h1 className="text-xl font-semibold tracking-tight">ZEON</h1>
+    <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background border-b border-border sticky top-0 z-40">
+      <div className="flex items-center gap-3">
+        <h1 
+          className="text-lg font-semibold tracking-tight md:hidden"
+          data-testid="text-page-title"
+        >
+          {title}
+        </h1>
+        <h1 
+          className="hidden md:block text-xl font-semibold tracking-tight"
+          data-testid="text-page-title-desktop"
+        >
+          {title}
+        </h1>
+      </div>
       <div className="flex items-center gap-2">
         <NotificationBell />
         <ThemeToggle />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => logout()}
-          data-testid="button-mobile-logout"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <Link href="/settings">
+          <Avatar className="h-8 w-8 cursor-pointer hover-elevate" data-testid="button-avatar">
+            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </Link>
       </div>
     </header>
   );
@@ -119,25 +134,31 @@ function MobileHeader() {
 
 function MobileBottomNav() {
   const [location] = useLocation();
-  const mobileNavItems = navItems.slice(0, 5);
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-sidebar border-t border-sidebar-border z-50">
-      <div className="flex justify-around items-center h-16 px-2">
-        {mobileNavItems.map((item) => {
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-pb">
+      <div className="flex justify-around items-center h-16 px-1">
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
           return (
             <Link key={item.href} href={item.href}>
               <div
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-colors cursor-pointer min-h-[44px]",
-                  isActive ? "text-primary" : "text-muted-foreground"
+                  "flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[64px] transition-colors",
+                  isActive 
+                    ? "text-primary" 
+                    : "text-muted-foreground active:text-foreground"
                 )}
                 data-testid={`mobile-nav-${item.label.toLowerCase()}`}
               >
-                <Icon className="w-6 h-6" />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <Icon className={cn("w-6 h-6", isActive && "stroke-[2.5px]")} />
+                <span className={cn(
+                  "text-[11px]",
+                  isActive ? "font-semibold" : "font-medium"
+                )}>
+                  {item.label}
+                </span>
               </div>
             </Link>
           );
@@ -151,7 +172,7 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
-export function AppShell({ children }: AppShellProps) {
+function AppShellContent({ children }: AppShellProps) {
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "4rem",
@@ -164,14 +185,22 @@ export function AppShell({ children }: AppShellProps) {
           <AppSidebar />
         </div>
         <div className="flex-1 flex flex-col min-h-screen w-full">
-          <MobileHeader />
-        
-          <main className="flex-1 pb-20 md:pb-0">
+          <TopBar />
+          <GlobalBanner />
+          <main className="flex-1 pb-20 md:pb-0 overflow-auto">
             {children}
           </main>
           <MobileBottomNav />
         </div>
       </div>
     </SidebarProvider>
+  );
+}
+
+export function AppShell({ children }: AppShellProps) {
+  return (
+    <PageProvider>
+      <AppShellContent>{children}</AppShellContent>
+    </PageProvider>
   );
 }

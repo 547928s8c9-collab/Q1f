@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { BalanceCard } from "@/components/wallet/balance-card";
 import { BalanceCardSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 import { Vault, TrendingUp } from "lucide-react";
 
 export default function Wallet() {
+  useSetPageTitle("Wallet");
   const { data: bootstrap, isLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });

@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/loading-skeleton";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { type BootstrapResponse } from "@shared/schema";
 import {
   Shield,
@@ -43,6 +44,7 @@ function SettingsLink({ icon, label, description, href, badge }: SettingsLinkPro
 }
 
 export default function Settings() {
+  useSetPageTitle("Settings");
   const { data: bootstrap, isLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });

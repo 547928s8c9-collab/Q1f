@@ -6,9 +6,11 @@ import { PeriodToggle } from "@/components/charts/period-toggle";
 import { QuoteCard } from "@/components/ui/quote-card";
 import { BalanceDisplay } from "@/components/ui/balance-display";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { type BootstrapResponse } from "@shared/schema";
 
 export default function Home() {
+  useSetPageTitle("Home");
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
 
   const { data: bootstrap, isLoading } = useQuery<BootstrapResponse>({

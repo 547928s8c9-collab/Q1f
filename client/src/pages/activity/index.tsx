@@ -8,11 +8,13 @@ import { OperationRow } from "@/components/operations/operation-row";
 import { OperationFilters } from "@/components/operations/operation-filters";
 import { OperationRowSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { Search, Activity, Download } from "lucide-react";
 import { type Operation } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ActivityPage() {
+  useSetPageTitle("Activity");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [isExporting, setIsExporting] = useState(false);
