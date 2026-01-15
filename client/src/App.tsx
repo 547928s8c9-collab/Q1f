@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/hooks/use-auth";
+import { GateGuard } from "@/components/onboarding/gate-guard";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -22,29 +23,48 @@ import Activity from "@/pages/activity/index";
 import Receipt from "@/pages/activity/receipt";
 import Settings from "@/pages/settings/index";
 import SecuritySettings from "@/pages/settings/security";
+import OnboardingWelcome from "@/pages/onboarding/index";
+import OnboardingVerify from "@/pages/onboarding/verify";
+import OnboardingConsent from "@/pages/onboarding/consent";
+import OnboardingKyc from "@/pages/onboarding/kyc";
+import OnboardingDone from "@/pages/onboarding/done";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRouter() {
   return (
-    <AppShell>
-      <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/analytics" component={Analytics} />
-        <Route path="/invest" component={Invest} />
-        <Route path="/invest/:id" component={StrategyDetail} />
-        <Route path="/invest/:id/confirm" component={InvestConfirm} />
-        <Route path="/wallet" component={Wallet} />
-        <Route path="/wallet/vaults" component={Vaults} />
-        <Route path="/deposit/usdt" component={DepositUSDT} />
-        <Route path="/deposit/card" component={DepositCard} />
-        <Route path="/withdraw" component={Withdraw} />
-        <Route path="/activity" component={Activity} />
-        <Route path="/activity/:operationId" component={Receipt} />
-        <Route path="/settings" component={Settings} />
-        <Route path="/settings/security" component={SecuritySettings} />
-        <Route component={NotFound} />
-      </Switch>
-    </AppShell>
+    <GateGuard>
+      <AppShell>
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/analytics" component={Analytics} />
+          <Route path="/invest" component={Invest} />
+          <Route path="/invest/:id" component={StrategyDetail} />
+          <Route path="/invest/:id/confirm" component={InvestConfirm} />
+          <Route path="/wallet" component={Wallet} />
+          <Route path="/wallet/vaults" component={Vaults} />
+          <Route path="/deposit/usdt" component={DepositUSDT} />
+          <Route path="/deposit/card" component={DepositCard} />
+          <Route path="/withdraw" component={Withdraw} />
+          <Route path="/activity" component={Activity} />
+          <Route path="/activity/:operationId" component={Receipt} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/settings/security" component={SecuritySettings} />
+          <Route component={NotFound} />
+        </Switch>
+      </AppShell>
+    </GateGuard>
+  );
+}
+
+function OnboardingRouter() {
+  return (
+    <Switch>
+      <Route path="/onboarding" component={OnboardingWelcome} />
+      <Route path="/onboarding/verify" component={OnboardingVerify} />
+      <Route path="/onboarding/consent" component={OnboardingConsent} />
+      <Route path="/onboarding/kyc" component={OnboardingKyc} />
+      <Route path="/onboarding/done" component={OnboardingDone} />
+    </Switch>
   );
 }
 
@@ -63,7 +83,12 @@ function AuthenticatedApp() {
     return <Landing />;
   }
 
-  return <ProtectedRouter />;
+  return (
+    <Switch>
+      <Route path="/onboarding/:rest*" component={OnboardingRouter} />
+      <Route component={ProtectedRouter} />
+    </Switch>
+  );
 }
 
 function App() {

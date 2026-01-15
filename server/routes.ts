@@ -81,9 +81,26 @@ export async function registerRoutes(
       const latestEth = ethQuotes[ethQuotes.length - 1];
       const latestRub = rubQuotes[rubQuotes.length - 1];
 
+      // Build onboarding stage
+      const contactVerified = security?.contactVerified ?? false;
+      const consentAccepted = security?.consentAccepted ?? false;
+      const kycStatus = security?.kycStatus ?? "pending";
+      
+      type OnboardingStage = "welcome" | "verify" | "consent" | "kyc" | "done";
+      let onboardingStage: OnboardingStage = "welcome";
+      if (!contactVerified) {
+        onboardingStage = "verify";
+      } else if (!consentAccepted) {
+        onboardingStage = "consent";
+      } else if (kycStatus !== "approved") {
+        onboardingStage = "kyc";
+      } else {
+        onboardingStage = "done";
+      }
+
       // Build gate flags (consent and kyc are now on security settings)
-      const consentRequired = !security?.consentAccepted;
-      const kycRequired = security?.kycStatus !== "approved";
+      const consentRequired = !consentAccepted;
+      const kycRequired = kycStatus !== "approved";
       const twoFactorRequired = !security?.twoFactorEnabled;
       
       // Check whitelist requirement
@@ -92,6 +109,7 @@ export async function registerRoutes(
       const whitelistRequired = security?.whitelistEnabled && !hasActiveWhitelistAddress;
 
       const reasons: string[] = [];
+      if (!contactVerified) reasons.push("Verify your contact information");
       if (consentRequired) reasons.push("Please accept the terms and conditions");
       if (kycRequired) reasons.push("Complete identity verification");
       if (twoFactorRequired) reasons.push("Enable two-factor authentication");
@@ -113,12 +131,18 @@ export async function registerRoutes(
           lastName: user.lastName,
           profileImageUrl: user.profileImageUrl,
         },
+        onboarding: {
+          stage: onboardingStage,
+          contactVerified,
+          consentAccepted,
+          kycStatus,
+        },
         gate: {
           consentRequired,
           kycRequired,
-          canDeposit: true,
-          canInvest: !consentRequired && !kycRequired,
-          canWithdraw: !consentRequired && !kycRequired && !twoFactorRequired && !whitelistRequired,
+          canDeposit: onboardingStage === "done",
+          canInvest: onboardingStage === "done",
+          canWithdraw: onboardingStage === "done" && !twoFactorRequired && !whitelistRequired,
           reasons,
         },
         balances: {
@@ -762,6 +786,75 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error("Auto-sweep toggle error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ==================== ONBOARDING ROUTES ====================
+
+  // POST /api/onboarding/send-code (protected) - Demo: just returns success
+  app.post("/api/onboarding/send-code", isAuthenticated, async (req, res) => {
+    try {
+      // Demo: In production, would send actual OTP via email/SMS
+      res.json({ success: true, message: "Code sent" });
+    } catch (error) {
+      console.error("Send code error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/onboarding/verify-code (protected) - Demo: accepts any 6-digit code
+  app.post("/api/onboarding/verify-code", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const schema = z.object({ code: z.string().length(6) });
+      const { code } = schema.parse(req.body);
+
+      // Demo: Accept any 6-digit code
+      if (!/^\d{6}$/.test(code)) {
+        return res.status(400).json({ error: "Invalid code format" });
+      }
+
+      await storage.updateSecuritySettings(userId, { contactVerified: true });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Verify code error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/onboarding/accept-consent (protected)
+  app.post("/api/onboarding/accept-consent", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.updateSecuritySettings(userId, { consentAccepted: true });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Accept consent error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/onboarding/start-kyc (protected) - Demo: marks KYC as processing
+  app.post("/api/onboarding/start-kyc", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.updateSecuritySettings(userId, { kycStatus: "processing" });
+      res.json({ success: true, status: "processing" });
+    } catch (error) {
+      console.error("Start KYC error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/onboarding/complete-kyc (protected) - Demo: approves KYC
+  app.post("/api/onboarding/complete-kyc", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+      res.json({ success: true, status: "approved" });
+    } catch (error) {
+      console.error("Complete KYC error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

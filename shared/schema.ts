@@ -136,6 +136,7 @@ export type Quote = typeof quotes.$inferSelect;
 export const securitySettings = pgTable("security_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
+  contactVerified: boolean("contact_verified").default(false),
   consentAccepted: boolean("consent_accepted").default(false),
   kycStatus: text("kyc_status").default("pending"), // pending, approved, rejected
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
@@ -187,6 +188,9 @@ export const OperationStatus = {
   CANCELLED: "cancelled",
 } as const;
 
+// Onboarding stages
+export type OnboardingStage = "welcome" | "verify" | "consent" | "kyc" | "done";
+
 // Bootstrap response type
 export interface BootstrapResponse {
   user: {
@@ -195,6 +199,12 @@ export interface BootstrapResponse {
     firstName: string | null;
     lastName: string | null;
     profileImageUrl: string | null;
+  };
+  onboarding: {
+    stage: OnboardingStage;
+    contactVerified: boolean;
+    consentAccepted: boolean;
+    kycStatus: string;
   };
   gate: {
     consentRequired: boolean;
