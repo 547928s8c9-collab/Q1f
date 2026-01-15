@@ -51,6 +51,26 @@ export default {
           foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
           border: "var(--destructive-border)",
         },
+        surface: {
+          DEFAULT: "hsl(var(--surface) / <alpha-value>)",
+          foreground: "hsl(var(--surface-foreground) / <alpha-value>)",
+        },
+        surface2: {
+          DEFAULT: "hsl(var(--surface2) / <alpha-value>)",
+          foreground: "hsl(var(--surface2-foreground) / <alpha-value>)",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          foreground: "hsl(var(--success-foreground) / <alpha-value>)",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning) / <alpha-value>)",
+          foreground: "hsl(var(--warning-foreground) / <alpha-value>)",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger) / <alpha-value>)",
+          foreground: "hsl(var(--danger-foreground) / <alpha-value>)",
+        },
         ring: "hsl(var(--ring) / <alpha-value>)",
         chart: {
           "1": "hsl(var(--chart-1) / <alpha-value>)",
@@ -76,21 +96,13 @@ export default {
           border: "var(--sidebar-accent-border)"
         },
         status: {
-          online: "rgb(34 197 94)",
-          away: "rgb(245 158 11)",
-          busy: "rgb(239 68 68)",
+          online: "hsl(var(--success) / <alpha-value>)",
+          away: "hsl(var(--warning) / <alpha-value>)",
+          busy: "hsl(var(--danger) / <alpha-value>)",
           offline: "rgb(156 163 175)",
         },
-        success: {
-          DEFAULT: "rgb(34 197 94)",
-          foreground: "rgb(255 255 255)",
-        },
-        warning: {
-          DEFAULT: "rgb(245 158 11)",
-          foreground: "rgb(255 255 255)",
-        },
-        positive: "rgb(34 197 94)",
-        negative: "rgb(239 68 68)",
+        positive: "hsl(var(--success) / <alpha-value>)",
+        negative: "hsl(var(--danger) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
