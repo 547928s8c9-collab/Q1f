@@ -69,6 +69,53 @@ New users must complete a 3-step onboarding process before accessing main app fe
 - `client/src/components/onboarding/` - Onboarding components (GateGuard, OnboardingLayout)
 - `client/src/pages/onboarding/` - Onboarding page components (verify, consent, kyc, done)
 
+### KYC State Machine
+The KYC verification uses a 6-state machine with Sumsub integration (demo mode available):
+- **NOT_STARTED**: Initial state, user hasn't begun verification
+- **IN_REVIEW**: Documents submitted, pending provider review
+- **APPROVED**: Verification complete, full access granted
+- **NEEDS_ACTION**: Additional documents or info required
+- **REJECTED**: Verification failed, user blocked from features
+- **ON_HOLD**: Temporary hold for manual review
+
+**Valid Transitions**:
+- NOT_STARTED → IN_REVIEW (start verification)
+- IN_REVIEW → APPROVED | NEEDS_ACTION | REJECTED | ON_HOLD
+- NEEDS_ACTION → IN_REVIEW (resubmit)
+- ON_HOLD → APPROVED | REJECTED
+
+**KYC API Endpoints**:
+- `GET /api/kyc/status` - Get current KYC state
+- `POST /api/kyc/start` - Initiate verification (demo: auto-approves after 2s)
+- `POST /api/sumsub/access-token` - Get Sumsub SDK token
+- `POST /api/sumsub/webhook` - Handle Sumsub callbacks (uses providerRef lookup)
+- `POST /api/sumsub/demo-callback` - Simulate status updates in demo mode
+
+### Notifications System
+Real-time notification system with bell icon in app shell:
+- **NotificationBell Component**: Shows unread count badge, polls every 30s
+- **Mark as Read**: Individual or bulk mark-all-read functionality
+- **Notification Types**: transaction, security, kyc, system
+
+**Notification API Endpoints**:
+- `GET /api/notifications` - List notifications (supports ?unreadOnly=true)
+- `GET /api/notifications/unread-count` - Get unread count for badge
+- `POST /api/notifications/:id/read` - Mark single notification read
+- `POST /api/notifications/read-all` - Mark all notifications read
+
+### Activity Export
+CSV export functionality for transaction history:
+- Supports all filters from Activity UI (type, status, q)
+- Endpoint: `GET /api/activity/export?filter=...&q=...`
+- Returns CSV with headers: Date, Type, Status, Asset, Amount, Fee, etc.
+
+### Observability
+Production-ready observability features:
+- **Request ID Middleware**: UUID added to every request for tracing
+- **Structured Logging**: All logs include requestId and metadata
+- **Metrics Counters**: In-memory counters for requests, operations, errors
+- **Metrics Endpoint**: `GET /api/metrics` (requires METRICS_SECRET header in production)
+
 ### Key Design Decisions
 
 **Multi-User Architecture**: All data is scoped to authenticated users. User ID is obtained from `req.user.claims.sub` in authenticated routes. New users are automatically initialized with default balances, vaults, and security settings on first login.
