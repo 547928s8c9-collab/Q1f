@@ -43,6 +43,32 @@ Preferred communication style: Simple, everyday language.
   - `GET /api/logout` - Logs out user and redirects to landing page
   - `GET /api/auth/user` - Returns current user or 401 if not authenticated
 
+### Onboarding Flow
+New users must complete a 3-step onboarding process before accessing main app features:
+
+1. **Verify Contact** (`/onboarding/verify`) - OTP verification via email (demo: any 6-digit code)
+2. **Accept Consent** (`/onboarding/consent`) - Accept Terms of Service and Privacy Policy
+3. **Complete KYC** (`/onboarding/kyc`) - Identity verification (demo: auto-approves after 2s)
+
+**Stage Calculation**: The onboarding stage is computed from `securitySettings`:
+- `contactVerified=false` → stage "verify"
+- `consentAccepted=false` → stage "consent"  
+- `kycStatus !== "approved"` → stage "kyc"
+- All completed → stage "done"
+
+**GateGuard Component**: Wraps `ProtectedRouter` and redirects users to appropriate onboarding step based on their current stage. Only users with stage "done" can access main app features.
+
+**Onboarding API Endpoints** (all protected):
+- `POST /api/onboarding/send-code` - Sends OTP (demo: always succeeds)
+- `POST /api/onboarding/verify-code` - Verifies OTP (demo: accepts any 6-digit code)
+- `POST /api/onboarding/accept-consent` - Records consent acceptance
+- `POST /api/onboarding/start-kyc` - Starts KYC process
+- `POST /api/onboarding/complete-kyc` - Completes KYC verification
+
+**Component Organization**:
+- `client/src/components/onboarding/` - Onboarding components (GateGuard, OnboardingLayout)
+- `client/src/pages/onboarding/` - Onboarding page components (verify, consent, kyc, done)
+
 ### Key Design Decisions
 
 **Multi-User Architecture**: All data is scoped to authenticated users. User ID is obtained from `req.user.claims.sub` in authenticated routes. New users are automatically initialized with default balances, vaults, and security settings on first login.
