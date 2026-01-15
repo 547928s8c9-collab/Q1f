@@ -27,6 +27,7 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
   const todaySeries = bootstrap?.portfolioSeries || [];
   const yesterdayValue = todaySeries.length >= 2 ? todaySeries[todaySeries.length - 2]?.value : null;
   const todayValue = todaySeries.length >= 1 ? todaySeries[todaySeries.length - 1]?.value : null;
+  const latestDate = todaySeries.length >= 1 ? todaySeries[todaySeries.length - 1]?.date : null;
 
   let dailyChange = "0";
   let dailyChangePercent = "0.00";
@@ -40,7 +41,9 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
     dailyChangePercent = Math.abs(percentChange).toFixed(2);
   }
 
-  const lastUpdated = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const lastUpdated = latestDate 
+    ? new Date(latestDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : "—";
 
   return (
     <Card className="p-5 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
@@ -72,9 +75,9 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
 
 function QuickActions() {
   const actions = [
-    { icon: ArrowDownLeft, label: "Top up", href: "/wallet/deposit", color: "text-positive" },
-    { icon: Send, label: "Transfer", href: "/wallet/transfer", color: "text-primary" },
-    { icon: ArrowUpRight, label: "Withdraw", href: "/wallet/withdraw", color: "text-warning" },
+    { icon: ArrowDownLeft, label: "Top up", href: "/wallet", color: "text-positive" },
+    { icon: Send, label: "Transfer", href: "/wallet", color: "text-primary" },
+    { icon: ArrowUpRight, label: "Withdraw", href: "/wallet", color: "text-warning" },
     { icon: TrendingUp, label: "Invest", href: "/invest", color: "text-accent-foreground" },
   ];
 
