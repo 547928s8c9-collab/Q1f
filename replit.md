@@ -116,6 +116,49 @@ Production-ready observability features:
 - **Metrics Counters**: In-memory counters for requests, operations, errors
 - **Metrics Endpoint**: `GET /api/metrics` (requires METRICS_SECRET header in production)
 
+### Investment & Payout System
+
+**Strategy Catalog**:
+- 8 investment strategies with risk tiers (LOW/CORE/HIGH)
+- 90-day demo performance data with benchmark comparisons (BTC/ETH/INDEX)
+- Strategy detail pages with compare charts and demo calculator
+
+**Position Tracking** (positions table):
+- `principalMinor`: Original investment amount
+- `investedCurrentMinor`: Current value including accrued gains
+- `accruedProfitPayableMinor`: Accumulated profit available for payout
+- `lastAccrualDate`: Date of last daily return accrual
+
+**Payout Instructions** (payout_instructions table):
+- Per-strategy payout configuration
+- Frequency: DAILY or MONTHLY
+- Requires active whitelisted address to activate
+- `minPayoutMinor`: Minimum amount before payout executes
+
+**Redemption Requests** (redemption_requests table):
+- Status: PENDING → EXECUTED or CANCELLED
+- Weekly execution window (Sundays 00:00 UTC)
+- Supports partial or full principal redemption
+
+**Operation Types**:
+- PROFIT_ACCRUAL: Daily return applied to position
+- PROFIT_PAYOUT: Profit withdrawn to whitelisted address
+- PRINCIPAL_REDEEM_EXECUTED: Principal returned to wallet
+
+**Job Routes** (dev triggers, protect in production):
+- `POST /api/jobs/accrue-daily`: Apply daily strategy returns based on expectedMonthlyRange
+- `POST /api/jobs/payout-run?frequency=DAILY|MONTHLY`: Execute payouts (deducts 1 USDT network fee)
+- `POST /api/jobs/redemption-weekly-run`: Execute due redemption requests
+
+**Payout API Endpoints**:
+- `GET /api/payout-instructions` - List user's payout instructions
+- `GET /api/payout-instructions/:strategyId` - Get specific instruction
+- `POST /api/payout-instructions` - Create/update payout configuration
+
+**Redemption API Endpoints**:
+- `GET /api/redemptions` - List user's redemption requests (includes next window)
+- `POST /api/redemptions` - Request principal redemption
+
 ### Key Design Decisions
 
 **Multi-User Architecture**: All data is scoped to authenticated users. User ID is obtained from `req.user.claims.sub` in authenticated routes. New users are automatically initialized with default balances, vaults, and security settings on first login.

@@ -40,22 +40,26 @@ export const getQueryFn: <T>(options: {
     // Build URL - first element is base URL
     let url = queryKey[0] as string;
     
-    // If there's a second element in queryKey and it's an object, append as query params
-    if (queryKey.length > 1 && typeof queryKey[1] === "object" && queryKey[1] !== null) {
-      const params = queryKey[1] as Record<string, string | undefined>;
-      const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== "") {
-          searchParams.append(key, value);
+    // Process remaining queryKey elements
+    for (let i = 1; i < queryKey.length; i++) {
+      const element = queryKey[i];
+      if (typeof element === "object" && element !== null) {
+        // Object is treated as query params (should be last element)
+        const params = element as Record<string, string | undefined>;
+        const searchParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== "") {
+            searchParams.append(key, value);
+          }
+        });
+        const paramString = searchParams.toString();
+        if (paramString) {
+          url += `?${paramString}`;
         }
-      });
-      const paramString = searchParams.toString();
-      if (paramString) {
-        url += `?${paramString}`;
+      } else if (typeof element === "string") {
+        // String is appended as path segment
+        url += `/${element}`;
       }
-    } else if (queryKey.length > 1 && typeof queryKey[1] === "string") {
-      // If it's a string, append as path segment (for /api/strategies/:id)
-      url += `/${queryKey[1]}`;
     }
 
     const res = await fetch(url, {
