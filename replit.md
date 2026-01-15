@@ -174,10 +174,18 @@ Production-ready observability features:
 **Bootstrap Endpoint**: `/api/bootstrap` is the single source of truth for balances, vaults, invested amounts, portfolio series, quotes, and gate flags. Frontend pages use this endpoint rather than hardcoded values.
 
 **Component Organization**: 
-- `client/src/components/ui/` - Reusable shadcn/ui components
+- `client/src/components/ui/` - Reusable shadcn/ui components and custom primitives
 - `client/src/components/charts/` - Chart components (portfolio, sparkline, compare)
 - `client/src/components/operations/` - Transaction-related components
 - `client/src/pages/` - Route-level page components
+
+**Custom UI Primitives** (Revolut-inspired design):
+- `Money` - Formatted currency display with size variants (xs/sm/md/lg/xl/2xl), tabular nums, semantic colors
+- `SectionHeader` - Page section titles with optional subtitle and action slot
+- `Chip` - Status/category badges with variants (default/success/warning/danger/primary/outline)
+- `IconButton` - Standardized icon-only buttons with size variants
+- `Skeleton` / `SkeletonCard` / `SkeletonTable` - Loading state components
+- `EmptyState` - Empty list/error states with icon, title, description, and action
 
 **Path Aliases**: 
 - `@/` maps to `client/src/`
