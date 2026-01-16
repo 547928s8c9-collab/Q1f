@@ -1884,8 +1884,15 @@ export async function registerRoutes(
   // POST /api/security/whitelist/remove (protected)
   app.post("/api/security/whitelist/remove", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const schema = z.object({ addressId: z.string() });
       const { addressId } = schema.parse(req.body);
+
+      // IDOR protection: verify ownership before delete
+      const address = await storage.getWhitelistAddress(addressId);
+      if (!address || address.userId !== userId) {
+        return res.status(404).json({ error: "Address not found" });
+      }
 
       await storage.deleteWhitelistAddress(addressId);
       res.json({ success: true });
@@ -2474,10 +2481,16 @@ export async function registerRoutes(
   // POST /api/notifications/:id/read (protected)
   app.post("/api/notifications/:id/read", isAuthenticated, async (req, res) => {
     try {
-      const notification = await storage.markNotificationRead(req.params.id);
-      if (!notification) {
+      const userId = getUserId(req);
+      const notificationId = req.params.id;
+
+      // IDOR protection: verify ownership before update
+      const notification = await storage.getNotification(notificationId);
+      if (!notification || notification.userId !== userId) {
         return res.status(404).json({ error: "Notification not found" });
       }
+
+      await storage.markNotificationRead(notificationId);
       res.json({ success: true });
     } catch (error) {
       console.error("Mark notification read error:", error);

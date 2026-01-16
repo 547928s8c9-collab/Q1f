@@ -146,6 +146,7 @@ export interface IStorage {
 
   // Notifications
   getNotifications(userId: string, unreadOnly?: boolean, limit?: number): Promise<Notification[]>;
+  getNotification(id: string): Promise<Notification | undefined>;
   getUnreadNotificationCount(userId: string): Promise<number>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification | undefined>;
@@ -799,6 +800,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(notifications.userId, userId))
       .orderBy(desc(notifications.createdAt))
       .limit(limit);
+  }
+
+  async getNotification(id: string): Promise<Notification | undefined> {
+    const [notification] = await db.select().from(notifications).where(eq(notifications.id, id));
+    return notification;
   }
 
   async getUnreadNotificationCount(userId: string): Promise<number> {
