@@ -1,0 +1,79 @@
+Сделай S4: Withdrawals Queue в Admin Console с maker-checker (4-eyes) поверх канонического operations ledger.
+
+Контекст:
+- Operations — канон; любые изменения денег только через новые operations.
+- Есть money endpoints: withdraw/usdt с идемпотентностью; assertNonNegative + withTransaction().
+- Есть 4-eyes таблица pending_admin_actions и audit/idempotency/wrapMutation.
+- Цель: админ не “правит баланс”, а управляет жизненным циклом вывода и связанными operations.
+
+1) Уточни существующую модель withdraw
+- Найди, где создаётся вывод: endpoint withdraw/usdt и какие сущности/статусы используются (operations.type/status, отдельная таблица withdrawals или только operations metadata).
+- Если есть отдельная таблица withdrawals — используй её.
+- Если нет — добавь NEW таблицу withdrawals (миграция через schema.ts + db:push):
+  fields: id, createdAt, updatedAt, userId, amountMinor, currency, address, status,
+          operationId (FK на operations), riskScore?, lastError?, approvedBy?, processedAt?
+  statuses: PENDING, APPROVED, PROCESSING, COMPLETED, FAILED, REJECTED, CANCELLED
+  indexes: status+createdAt, userId+createdAt, operationId unique
+
+2) Admin DTO (shared/admin/dto.ts)
+Добавь схемы:
+- AdminWithdrawalsListQuery: cursor?, limit?, q?, status?, from?, to?
+- AdminWithdrawalListItem: id, createdAt, userId/email, amountMinor, currency, status, addressShort, operationId
+- AdminWithdrawalDetail: + полные поля + linked operation + timeline (если есть)
+- AdminWithdrawalDecisionBody: { action: "APPROVE"|"REJECT", reason: string }
+- AdminWithdrawalProcessBody: { action: "MARK_PROCESSING"|"MARK_COMPLETED"|"MARK_FAILED", reason: string, txHash?: string, error?: string }
+
+3) Admin API endpoints (server/admin/router.ts)
+Read-only:
+- GET /api/admin/withdrawals (perm: withdrawals.read)
+- GET /api/admin/withdrawals/:id (perm: withdrawals.read)
+
+Mutations (все: Idempotency-Key + audit + state validation):
+A) POST /api/admin/withdrawals/:id/approve-request  (perm: withdrawals.approve)
+   - Maker step: создает pending_admin_action(actionType="WITHDRAWAL_APPROVE", targetType="withdrawal", targetId)
+   - Возвращает pending action id + статус “PENDING_APPROVAL”
+B) POST /api/admin/pending-actions/:id/approve      (perm: withdrawals.approve, role checker required)
+   - Checker step: проверяет что maker != checker, action не expired, валидирует
+   - Делает state transition withdrawal: PENDING -> APPROVED
+   - (Важно) Никаких внешних транзакций. Только изменение статуса/связанных metadata.
+C) POST /api/admin/withdrawals/:id/reject           (perm: withdrawals.approve)
+   - Можно делать тоже через 4-eyes или разрешить single-step reject (реши по policy; по умолчанию: 4-eyes для approve, single-step для reject)
+   - Transition: PENDING/ON_HOLD -> REJECTED + reason
+D) POST /api/admin/withdrawals/:id/mark-processing  (perm: withdrawals.manage)
+E) POST /api/admin/withdrawals/:id/mark-completed   (perm: withdrawals.manage)
+F) POST /api/admin/withdrawals/:id/mark-failed      (perm: withdrawals.manage)
+
+4) State machine enforcement
+- Вынеси allowed transitions в server/lib/stateMachine/withdrawal.ts (или рядом по вашему стилю).
+- Любая попытка “перескочить” -> STATE_TRANSITION_INVALID.
+
+5) Ledger invariants
+- При создании withdrawal (user flow) должна быть operation WITHDRAW_USDT (или аналог) и удержание/резерв (если есть).
+- Админские действия НЕ должны менять баланс напрямую.
+- Если нужно “refund on reject/failed” — делай это отдельной operation типа WITHDRAW_REVERSAL или CORRECTION (если уже есть паттерн), но только когда реально требуется. Если сейчас система не делает резервирование — не изобретай, просто управляй статусом заявки.
+
+6) Admin Inbox integration
+- При появлении PENDING withdrawal создавай admin_inbox_item type=WITHDRAWAL_PENDING priority=high
+- При APPROVED/REJECTED/DONE — помечай item resolvedAt/resolvedByAdminUserId
+
+7) Admin UI
+- Добавь модуль /admin/withdrawals в modules registry (perm: withdrawals.read).
+- Страница: таблица withdrawals + фильтр status + search.
+- Drawer detail: данные + linked operation + кнопки:
+   - “Request approval” (maker) -> creates pending action
+   - “Approve” (checker) -> approve pending action
+   - “Reject” -> требует reason
+   - “Mark processing/completed/failed” -> reason + optional txHash/error
+- В UI показывай “Needs second approval” когда pending_admin_action PENDING.
+
+8) Manual tests (curl)
+- list + detail работают
+- approve-request создает pending_admin_action, audit logged
+- approve pending-action требует другого admin user (maker != checker)
+- idempotency replay работает на мутациях
+- state transition validation работает
+- inbox item создается и резолвится
+
+9) Docs update
+- docs/admin/manual-test.md: withdrawals сценарии + 4-eyes
+- replit.md: что добавлено

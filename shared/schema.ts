@@ -163,6 +163,52 @@ export const insertOperationSchema = createInsertSchema(operations).omit({ id: t
 export type InsertOperation = z.infer<typeof insertOperationSchema>;
 export type Operation = typeof operations.$inferSelect;
 
+// ==================== WITHDRAWALS ====================
+// Withdrawal requests with admin approval workflow
+export const WithdrawalStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  PROCESSING: "PROCESSING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type WithdrawalStatusType = typeof WithdrawalStatus[keyof typeof WithdrawalStatus];
+
+export const withdrawals = pgTable("withdrawals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  userId: varchar("user_id").notNull(),
+  amountMinor: text("amount_minor").notNull(),
+  feeMinor: text("fee_minor").notNull().default("0"),
+  currency: text("currency").notNull().default("USDT"),
+  address: text("address").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  operationId: varchar("operation_id"), // FK to operations.id (created when user submits)
+  riskScore: integer("risk_score"),
+  riskFlags: jsonb("risk_flags"), // e.g., ["high_amount", "new_address"]
+  lastError: text("last_error"),
+  approvedBy: varchar("approved_by"), // admin user id who approved
+  approvedAt: timestamp("approved_at"),
+  rejectedBy: varchar("rejected_by"),
+  rejectedAt: timestamp("rejected_at"),
+  rejectionReason: text("rejection_reason"),
+  processedAt: timestamp("processed_at"),
+  completedAt: timestamp("completed_at"),
+  txHash: text("tx_hash"), // blockchain transaction hash when completed
+}, (table) => [
+  index("withdrawals_status_created_idx").on(table.status, table.createdAt),
+  index("withdrawals_user_created_idx").on(table.userId, table.createdAt),
+  index("withdrawals_operation_idx").on(table.operationId),
+]);
+
+export const insertWithdrawalSchema = createInsertSchema(withdrawals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWithdrawal = z.infer<typeof insertWithdrawalSchema>;
+export type Withdrawal = typeof withdrawals.$inferSelect;
+
 // ==================== PORTFOLIO SERIES ====================
 export const portfolioSeries = pgTable("portfolio_series", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

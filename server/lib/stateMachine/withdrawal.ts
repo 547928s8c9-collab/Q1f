@@ -1,0 +1,37 @@
+import { WithdrawalStatus, type WithdrawalStatusType } from "@shared/schema";
+
+export const WithdrawalTransitions: Record<WithdrawalStatusType, WithdrawalStatusType[]> = {
+  [WithdrawalStatus.PENDING]: [
+    WithdrawalStatus.APPROVED,
+    WithdrawalStatus.REJECTED,
+    WithdrawalStatus.CANCELLED,
+  ],
+  [WithdrawalStatus.APPROVED]: [
+    WithdrawalStatus.PROCESSING,
+    WithdrawalStatus.CANCELLED,
+  ],
+  [WithdrawalStatus.PROCESSING]: [
+    WithdrawalStatus.COMPLETED,
+    WithdrawalStatus.FAILED,
+  ],
+  [WithdrawalStatus.COMPLETED]: [],
+  [WithdrawalStatus.FAILED]: [
+    WithdrawalStatus.PROCESSING,
+  ],
+  [WithdrawalStatus.REJECTED]: [],
+  [WithdrawalStatus.CANCELLED]: [],
+};
+
+export function isValidWithdrawalTransition(
+  from: WithdrawalStatusType,
+  to: WithdrawalStatusType
+): boolean {
+  const allowed = WithdrawalTransitions[from] || [];
+  return allowed.includes(to);
+}
+
+export function getAllowedWithdrawalTransitions(
+  status: WithdrawalStatusType
+): WithdrawalStatusType[] {
+  return WithdrawalTransitions[status] || [];
+}

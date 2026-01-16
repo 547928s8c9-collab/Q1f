@@ -194,3 +194,86 @@ export const KYC_ADMIN_TRANSITIONS: Record<string, string[]> = {
   REJECTED: [],
   ON_HOLD: ["APPROVED", "REJECTED"],
 };
+
+// ==================== WITHDRAWALS ====================
+
+export const AdminWithdrawalListItem = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  userId: z.string(),
+  email: z.string().nullable(),
+  amountMinor: z.string(),
+  feeMinor: z.string(),
+  currency: z.string(),
+  status: z.string(),
+  addressShort: z.string(),
+  operationId: z.string().nullable(),
+  riskScore: z.number().nullable(),
+});
+export type AdminWithdrawalListItem = z.infer<typeof AdminWithdrawalListItem>;
+
+export const AdminWithdrawalDetail = AdminWithdrawalListItem.extend({
+  address: z.string(),
+  riskFlags: z.array(z.string()).nullable(),
+  lastError: z.string().nullable(),
+  approvedBy: z.string().nullable(),
+  approvedAt: z.string().nullable(),
+  rejectedBy: z.string().nullable(),
+  rejectedAt: z.string().nullable(),
+  rejectionReason: z.string().nullable(),
+  processedAt: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  txHash: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+  user: z.object({
+    id: z.string(),
+    email: z.string().nullable(),
+    firstName: z.string().nullable(),
+    lastName: z.string().nullable(),
+  }).nullable(),
+  linkedOperation: z.object({
+    id: z.string(),
+    type: z.string(),
+    status: z.string(),
+    amount: z.string().nullable(),
+    fee: z.string().nullable(),
+    createdAt: z.string(),
+  }).nullable(),
+  pendingAction: z.object({
+    id: z.string(),
+    actionType: z.string(),
+    status: z.string(),
+    makerAdminUserId: z.string(),
+    createdAt: z.string(),
+  }).nullable(),
+  allowedTransitions: z.array(z.string()),
+});
+export type AdminWithdrawalDetail = z.infer<typeof AdminWithdrawalDetail>;
+
+export const WithdrawalDecisionType = ["APPROVE", "REJECT"] as const;
+
+export const AdminWithdrawalDecisionBody = z.object({
+  action: z.enum(WithdrawalDecisionType),
+  reason: z.string().min(1).max(1000),
+});
+export type AdminWithdrawalDecisionBody = z.infer<typeof AdminWithdrawalDecisionBody>;
+
+export const WithdrawalProcessAction = ["MARK_PROCESSING", "MARK_COMPLETED", "MARK_FAILED"] as const;
+
+export const AdminWithdrawalProcessBody = z.object({
+  action: z.enum(WithdrawalProcessAction),
+  reason: z.string().min(1).max(1000),
+  txHash: z.string().optional(),
+  error: z.string().optional(),
+});
+export type AdminWithdrawalProcessBody = z.infer<typeof AdminWithdrawalProcessBody>;
+
+export const WITHDRAWAL_ADMIN_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ["APPROVED", "REJECTED", "CANCELLED"],
+  APPROVED: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["COMPLETED", "FAILED"],
+  COMPLETED: [],
+  FAILED: ["PROCESSING"],
+  REJECTED: [],
+  CANCELLED: [],
+};
