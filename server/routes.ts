@@ -3813,15 +3813,15 @@ export async function registerRoutes(
       }
       
       if (action === "pause") {
-        if (!sessionRunner.isRunning(sessionId)) {
+        if (session.status !== SimSessionStatus.RUNNING) {
           return res.status(400).json({ error: { code: "NOT_RUNNING", message: "Session is not running" } });
         }
         sessionRunner.pause(sessionId);
         res.json({ sessionId, status: SimSessionStatus.PAUSED });
         
       } else if (action === "resume") {
-        if (!sessionRunner.isRunning(sessionId)) {
-          return res.status(400).json({ error: { code: "NOT_RUNNING", message: "Session is not running" } });
+        if (session.status !== SimSessionStatus.PAUSED) {
+          return res.status(400).json({ error: { code: "NOT_PAUSED", message: "Session is not paused" } });
         }
         sessionRunner.resume(sessionId);
         res.json({ sessionId, status: SimSessionStatus.RUNNING });
