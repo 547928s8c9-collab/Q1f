@@ -17,13 +17,29 @@ declare global {
   }
 }
 
+const isDev = process.env.NODE_ENV !== "production";
+
+function extractUserId(req: Request): string | undefined {
+  const userClaims = (req.user as any)?.claims;
+  if (userClaims?.sub) {
+    return userClaims.sub;
+  }
+  if (isDev) {
+    const devHeader = req.headers["x-replit-user-id"] as string | undefined;
+    if (devHeader) {
+      return devHeader;
+    }
+  }
+  return undefined;
+}
+
 export async function adminAuth(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const oidcUserId = req.headers["x-replit-user-id"] as string | undefined;
+    const oidcUserId = extractUserId(req);
 
     if (!oidcUserId) {
       fail(res, ErrorCodes.ADMIN_REQUIRED, "Authentication required", 401);

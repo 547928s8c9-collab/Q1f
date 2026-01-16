@@ -101,3 +101,48 @@ export function decodeCursor(cursor: string): { createdAt: Date; id: number | st
 export function encodeCursor(createdAt: Date, id: number | string): string {
   return Buffer.from(`${createdAt.toISOString()}|${id}`).toString("base64");
 }
+
+export const IncidentSeverity = ["info", "warning", "critical", "maintenance"] as const;
+export const IncidentStatus = ["DRAFT", "SCHEDULED", "ACTIVE", "RESOLVED", "CANCELLED"] as const;
+
+export const INCIDENT_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ["SCHEDULED", "ACTIVE", "CANCELLED"],
+  SCHEDULED: ["ACTIVE", "CANCELLED"],
+  ACTIVE: ["RESOLVED"],
+  RESOLVED: [],
+  CANCELLED: [],
+};
+
+export const CreateIncidentInput = z.object({
+  title: z.string().min(1).max(200),
+  message: z.string().min(1).max(2000),
+  severity: z.enum(IncidentSeverity).default("info"),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.string().datetime().optional(),
+});
+export type CreateIncidentInput = z.infer<typeof CreateIncidentInput>;
+
+export const UpdateIncidentInput = z.object({
+  title: z.string().min(1).max(200).optional(),
+  message: z.string().min(1).max(2000).optional(),
+  severity: z.enum(IncidentSeverity).optional(),
+  status: z.enum(IncidentStatus).optional(),
+  startsAt: z.string().datetime().optional().nullable(),
+  endsAt: z.string().datetime().optional().nullable(),
+});
+export type UpdateIncidentInput = z.infer<typeof UpdateIncidentInput>;
+
+export const IncidentListItem = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().nullable(),
+  status: z.string(),
+  title: z.string(),
+  message: z.string(),
+  severity: z.string(),
+  startsAt: z.string().nullable(),
+  endsAt: z.string().nullable(),
+  createdByAdminUserId: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type IncidentListItem = z.infer<typeof IncidentListItem>;

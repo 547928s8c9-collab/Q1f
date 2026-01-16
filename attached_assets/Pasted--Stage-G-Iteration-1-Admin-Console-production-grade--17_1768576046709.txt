@@ -1,0 +1,65 @@
+Сделай Stage G: доведи Iteration 1 (Admin Console) до production-grade для одиночного пользователя, без изменения продукта и без переписывания server/routes.ts.
+
+Цели Stage G:
+- Автоматический seed SuperAdmin из env (один человек) + безопасное обновление
+- Стабильный adminAuth mapping (не зависит от тестового header)
+- Базовый audit на admin mutations (каркас готов) + пример 1-2 мутаций (не деньги)
+- Закрыть “jobs без auth”: минимум — запретить любые admin/job endpoints без adminAuth
+
+1) ENV + Seed SuperAdmin
+   - Добавь env переменные:
+     ADMIN_SUPER_EMAIL (или ADMIN_SUPER_USER_ID / ADMIN_SUPER_SUBJECT — выбери то, что реально доступно из OIDC в вашей системе)
+     ADMIN_SUPER_ENABLED=true/false
+   - В server/seed.ts или в storage.seedAdminRbac() расширь логику:
+     a) найти user в users по email/subject
+     b) создать/обновить admin_users (isActive=true)
+     c) назначить роль super_admin в admin_user_roles
+     d) сделать идемпотентно: повторный seed не плодит записи
+   - Добавь лог в консоль “SuperAdmin ensured” с adminUserId.
+
+2) adminAuth hardening
+   - В server/admin/middleware/adminAuth.ts:
+     a) используй тот же механизм идентификации пользователя, что и остальное приложение (cookie/session/headers из реального OIDC),
+        и только в dev оставь fallback x-replit-user-id если уже принято у вас.
+     b) если admin_users не найден или isActive=false → 403 ADMIN_REQUIRED (не 401).
+     c) добавь в res.locals: adminUser, permissionsSet, roles.
+
+3) RBAC cache/efficiency
+   - В server/admin/middleware/rbac.ts:
+     a) добавь небольшой in-memory cache (TTL 60s) по adminUserId -> permissionsSet,
+        чтобы не дергать БД на каждый запрос.
+     b) сброс кеша при изменениях ролей (пока можно просто TTL).
+
+4) Audit baseline (без денег!)
+   - Создай server/admin/audit.ts:
+     - logAdminAction({actorAdminUserId, requestId, actionType, targetType, targetId, beforeJson, afterJson, reason, outcome, errorCode, ip, userAgent})
+   - Встрой audit в adminRouter для будущих mutation:
+     - подготовь helper wrapMutation(handler) который:
+       i) требует Idempotency-Key,
+       ii) пишет audit success/failure.
+   - Реализуй 2 безопасные мутации (не money):
+     A) POST /api/admin/incidents (создать DRAFT incident) permission incidents.manage
+     B) PATCH /api/admin/incidents/:id (update title/message/status) permission incidents.manage
+     - используй Zod DTO (добавь в shared/admin/dto.ts)
+     - соблюдай idempotency + envelope + requestId
+     - при изменении статуса используй допустимые переходы (если нет stateMachine — минимально проверь руками)
+
+5) Protect “jobs without auth”
+   - Найди любые job/worker endpoints или internal routes (поиск “/job”, “/tasks”, “cron”, “seed”, “admin”)
+   - Убедись, что:
+     - admin router уже под adminAuth
+     - любые internal/job endpoints не доступны без adminAuth (как минимум 403)
+   - Если jobs запускаются не через HTTP — документируй это в replit.md.
+
+6) Update Admin UI (малый штрих)
+   - В /admin Dashboard добавь секцию “Incidents”:
+     - список последних 5 инцидентов (нужен GET /api/admin/incidents?limit=5)
+     - кнопка “New incident” → drawer/form (title/message/severity), отправляет POST /api/admin/incidents
+     - обработай loading/error
+
+7) Финал
+   - Обнови docs/admin/manual-test.md: добавь проверку seed SuperAdmin + incidents CRUD.
+   - В ответе выведи Files changed и команды:
+     - npm run db:push (если надо)
+     - npx tsx server/seed.ts
+     - curl проверки для incidents (создание/обновление)

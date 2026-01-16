@@ -20,6 +20,45 @@ declare global {
   }
 }
 
+interface CachedPermissions {
+  permissionKeys: Set<string>;
+  roleKeys: string[];
+  expiresAt: number;
+}
+
+const permissionsCache = new Map<string, CachedPermissions>();
+const CACHE_TTL_MS = 60_000;
+
+function getCachedPermissions(adminUserId: string): CachedPermissions | null {
+  const cached = permissionsCache.get(adminUserId);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    permissionsCache.delete(adminUserId);
+    return null;
+  }
+  return cached;
+}
+
+function setCachedPermissions(
+  adminUserId: string,
+  permissionKeys: Set<string>,
+  roleKeys: string[]
+): void {
+  permissionsCache.set(adminUserId, {
+    permissionKeys,
+    roleKeys,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+}
+
+export function invalidatePermissionsCache(adminUserId?: string): void {
+  if (adminUserId) {
+    permissionsCache.delete(adminUserId);
+  } else {
+    permissionsCache.clear();
+  }
+}
+
 export async function loadPermissions(
   req: Request,
   res: Response,
@@ -29,6 +68,14 @@ export async function loadPermissions(
     const adminUserId = res.locals.adminUserId as string | undefined;
     if (!adminUserId) {
       fail(res, ErrorCodes.ADMIN_REQUIRED, "Admin context missing", 401);
+      return;
+    }
+
+    const cached = getCachedPermissions(adminUserId);
+    if (cached) {
+      res.locals.permissionKeys = cached.permissionKeys;
+      res.locals.roleKeys = cached.roleKeys;
+      next();
       return;
     }
 
@@ -42,6 +89,7 @@ export async function loadPermissions(
     if (roleIds.length === 0) {
       res.locals.permissionKeys = new Set();
       res.locals.roleKeys = [];
+      setCachedPermissions(adminUserId, new Set(), []);
       next();
       return;
     }
@@ -59,8 +107,10 @@ export async function loadPermissions(
     const permIds = rolePerms.map((rp) => rp.permissionId);
 
     if (permIds.length === 0) {
+      const roleKeysList = rolesData.map((r) => r.key);
       res.locals.permissionKeys = new Set();
-      res.locals.roleKeys = rolesData.map((r) => r.key);
+      res.locals.roleKeys = roleKeysList;
+      setCachedPermissions(adminUserId, new Set(), roleKeysList);
       next();
       return;
     }
@@ -70,8 +120,12 @@ export async function loadPermissions(
       .from(permissions)
       .where(inArray(permissions.id, permIds));
 
-    res.locals.permissionKeys = new Set(permsData.map((p) => p.key));
-    res.locals.roleKeys = rolesData.map((r) => r.key);
+    const permissionKeys = new Set(permsData.map((p) => p.key));
+    const roleKeysList = rolesData.map((r) => r.key);
+
+    res.locals.permissionKeys = permissionKeys;
+    res.locals.roleKeys = roleKeysList;
+    setCachedPermissions(adminUserId, permissionKeys, roleKeysList);
 
     next();
   } catch (error) {
