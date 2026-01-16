@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { OperationRow } from "@/components/operations/operation-row";
 import { OperationFilters } from "@/components/operations/operation-filters";
+import { OperationDetailsSheet } from "@/components/operations/operation-details-sheet";
 import { OperationRowSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useSetPageTitle } from "@/hooks/use-page-title";
@@ -13,11 +14,56 @@ import { Search, Activity, Download } from "lucide-react";
 import { type Operation } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
+function formatDateHeader(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const isToday = date.toDateString() === today.toDateString();
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  if (isToday) return "Today";
+  if (isYesterday) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function getLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function groupOperationsByDay(operations: Operation[]): Map<string, Operation[]> {
+  const groups = new Map<string, Operation[]>();
+  
+  for (const op of operations) {
+    const dateKey = op.createdAt 
+      ? getLocalDateKey(new Date(op.createdAt))
+      : "unknown";
+    
+    if (!groups.has(dateKey)) {
+      groups.set(dateKey, []);
+    }
+    groups.get(dateKey)!.push(op);
+  }
+  
+  return groups;
+}
+
 export default function ActivityPage() {
   useSetPageTitle("Activity");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedOperation, setSelectedOperation] = useState<Operation | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: operations, isLoading } = useQuery<{ operations: Operation[]; nextCursor?: string }>({
@@ -26,10 +72,13 @@ export default function ActivityPage() {
 
   const filteredOperations = operations?.operations || [];
 
+  const groupedOperations = useMemo(() => {
+    return groupOperationsByDay(filteredOperations);
+  }, [filteredOperations]);
+
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      // Build query string with current filters
       const params = new URLSearchParams();
       if (filter !== "all") params.set("filter", filter);
       if (search) params.set("q", search);
@@ -60,9 +109,21 @@ export default function ActivityPage() {
     }
   };
 
+  const handleOperationClick = (operation: Operation) => {
+    setSelectedOperation(operation);
+    setSheetOpen(true);
+  };
+
+  const handleSheetOpenChange = (open: boolean) => {
+    setSheetOpen(open);
+    if (!open) {
+      setTimeout(() => setSelectedOperation(null), 300);
+    }
+  };
+
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <PageHeader title="Activity" subtitle="View your transaction history" />
         <Button
           variant="outline"
@@ -91,27 +152,51 @@ export default function ActivityPage() {
         <OperationFilters value={filter} onChange={setFilter} />
       </div>
 
-      <Card className="divide-y divide-border">
-        {isLoading ? (
-          <>
-            <OperationRowSkeleton />
-            <OperationRowSkeleton />
-            <OperationRowSkeleton />
-            <OperationRowSkeleton />
-            <OperationRowSkeleton />
-          </>
-        ) : filteredOperations.length > 0 ? (
-          filteredOperations.map((operation) => (
-            <OperationRow key={operation.id} operation={operation} />
-          ))
-        ) : (
+      {isLoading ? (
+        <Card className="divide-y divide-border">
+          <OperationRowSkeleton />
+          <OperationRowSkeleton />
+          <OperationRowSkeleton />
+          <OperationRowSkeleton />
+          <OperationRowSkeleton />
+        </Card>
+      ) : filteredOperations.length > 0 ? (
+        <div className="space-y-4">
+          {Array.from(groupedOperations.entries()).map(([dateKey, ops]) => (
+            <div key={dateKey}>
+              <h3 
+                className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 px-1"
+                data-testid={`date-header-${dateKey}`}
+              >
+                {formatDateHeader(dateKey)}
+              </h3>
+              <Card className="divide-y divide-border overflow-hidden">
+                {ops.map((operation) => (
+                  <OperationRow 
+                    key={operation.id} 
+                    operation={operation} 
+                    onClick={() => handleOperationClick(operation)}
+                  />
+                ))}
+              </Card>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Card>
           <EmptyState
             icon={Activity}
             title="No transactions"
             description={search || filter !== "all" ? "No matching transactions found" : "Your transaction history will appear here"}
           />
-        )}
-      </Card>
+        </Card>
+      )}
+
+      <OperationDetailsSheet
+        operation={selectedOperation}
+        open={sheetOpen}
+        onOpenChange={handleSheetOpenChange}
+      />
     </div>
   );
 }
