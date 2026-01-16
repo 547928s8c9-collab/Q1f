@@ -526,21 +526,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/operations/:id (protected)
-  app.get("/api/operations/:id", isAuthenticated, async (req, res) => {
-    try {
-      const operation = await storage.getOperation(req.params.id);
-      if (!operation) {
-        return res.status(404).json({ error: "Operation not found" });
-      }
-      res.json(operation);
-    } catch (error) {
-      console.error("Get operation error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
   // GET /api/operations/export - Export operations as CSV (protected)
+  // IMPORTANT: Must come BEFORE /api/operations/:id to prevent "export" matching as :id
   app.get("/api/operations/export", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -579,6 +566,20 @@ export async function registerRoutes(
       res.send(csvContent);
     } catch (error) {
       console.error("Export operations error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/operations/:id (protected)
+  app.get("/api/operations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const operation = await storage.getOperation(req.params.id);
+      if (!operation) {
+        return res.status(404).json({ error: "Operation not found" });
+      }
+      res.json(operation);
+    } catch (error) {
+      console.error("Get operation error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

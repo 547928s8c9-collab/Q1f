@@ -1,0 +1,125 @@
+Сделай “Prompt Compliance + Working Correctness Audit” по всему проекту.
+Работай в режиме: VERIFY-FIRST (минимум изменений).
+НЕ делай рефакторинг. Исправления делай ТОЛЬКО если найдёшь критический баг (P0), и обязательно маленьким патчем.
+Если можешь — сначала сделай audit без изменений, затем предложи итерации фиксов.
+
+=== ВАЖНОЕ ТРЕБОВАНИЕ К ФОРМАТУ ОТВЕТА ===
+В конце верни ОДИН ЕДИНЫЙ ТЕКСТОВЫЙ БЛОК “COPY-PASTE REPORT” (внутри одного code block), который включает ВСЁ: таблицы, walkthrough, команды, issues, рекомендации.
+Никаких разрозненных частей и “ссылок на выше” — всё должно быть внутри этого одного блока, чтобы я мог целиком скопировать и отправить в ChatGPT.
+Перед этим блоком можешь дать 2–3 строки краткого резюме, но ВСЯ основная информация должна быть только внутри “COPY-PASTE REPORT”.
+
+=== Что нужно проверить (все наши промпты / обещанные фичи) ===
+A) Process / Iteration discipline:
+- агент работает итерациями: Iteration Goal, Plan, Verify, DIFF, Screenshot Walkthrough
+- наличие файла ROADMAP.md и актуальность статусов
+
+B) WOW Pack (6 фич):
+1) Inbox/Notifications 2.0 (Revolut-like): /inbox, карточки, next-step CTA, bell preview, mark read/read-all
+2) Statements: monthly PDF statement + CSV export операций + summary fee/P&L (если заявлено)
+3) Vault Goals: цель, прогресс, milestones (25/50/75/100), auto-sweep настройка и (если заявлено) исполнение
+4) Risk Controls: Pause, DD limit, auto-pause on breach, audit_logs + notification
+5) Status Page: /status + глобальный баннер при degraded/maintenance
+6) Smart Start: 3 вопроса -> рекомендации стратегий/лимит суммы, интеграция в onboarding
+
+C) Core money flows (чтобы wow не “косметика”):
+- onboarding (OTP/Consent/KYC)
+- deposit (usdt/card simulate)
+- invest
+- withdraw (обязательно E2E, не только “endpoint exists”)
+- vault transfer (обязательно E2E)
+- receipts: /activity/:operationId
+- экспорт операций (CSV)
+
+D) Strategies: проверка работы ВСЕХ стратегий (обязательно)
+Требование: пройти по каждой стратегии из каталога и убедиться, что она реально “живая”:
+1) Каталог:
+- /invest показывает все стратегии (количество = GET /api/strategies)
+- фильтры/сортировка (если есть) не ломают выдачу
+2) Strategy detail (для каждой стратегии):
+- /invest/:id открывается без ошибок
+- отображаются: name, description, risk/return, min amount, performance (график/серия)
+- API: GET /api/strategies/:id, GET /api/strategies/:id/series (или performance endpoints) возвращают данные и не 500
+3) Invest flow (для каждой стратегии):
+- пройти /invest/:id/confirm и выполнить invest минимальной суммой (или “simulate invest”, если есть режим), убедиться:
+  - создана position
+  - создана operation (status корректен)
+  - UI показывает успех и ведёт на receipt или позицию
+4) Payout/Accrual integration (если есть jobs/начисления):
+- запустить безопасную job (например /api/jobs/accrue-daily) в dev режиме и проверить, что позиции обновились/профит начисляется
+5) Risk controls per strategy/position:
+- если risk controls реализованы, то на созданной позиции проверить pause/DD limit (минимально на 1–2 стратегиях, а лучше на каждой)
+
+Важно по скоупу:
+- Если “инвестировать в каждую стратегию” слишком долго, разрешено:
+  - сделать полный invest E2E для 3–4 стратегий (разных типов/рисков)
+  - для остальных: минимум открыть detail + проверить API endpoints + пройти confirm screen до шага “Submit” (без фактического создания позиции)
+  - но обязательно явно пометить, какие стратегии прошли полный E2E, а какие только smoke-check.
+
+E) Safety & correctness (минимальные гарантии финтеха):
+- понятные UI states: loading skeleton / empty / error+retry на ключевых страницах
+- API ошибки имеют единый формат (желательно {code, message, requestId}), статусы HTTP корректные
+- нет дублей операций при повторной отправке (проверить ретраи/двойной клик):
+  - если идемпотентность реализована → тестировать Idempotency-Key
+  - если не реализована → явно пометить как RISK/FAIL и предложить итерацию
+- audit_logs пишется для важных действий (kyc/security/risk/payout/money ops)
+
+=== Формат результата (обязателен) ===
+1) “Feature Compliance Table” (markdown) колонки:
+- Item (из A/B/C/D/E)
+- Claimed Status (DONE/PARTIAL/NOT STARTED) — как по коду выглядит
+- Working Status: PASS / PARTIAL / FAIL / NOT FOUND / RISK
+- Evidence: routes + endpoints + key files + db tables/fields
+- Test Performed: какие команды/шаги
+- Observed: что реально произошло
+- Fix Proposal: 1–3 пункта (если нужно)
+
+2) “Strategy Matrix” (обязательная таблица):
+Сделай таблицу по каждой стратегии:
+- StrategyId / Name
+- Detail page: PASS/FAIL
+- Series/performance API: PASS/FAIL
+- Confirm screen: PASS/FAIL
+- Invest E2E: PASS/FAIL/SKIPPED
+- Notes (ошибка/что не так)
+
+3) “UI Walkthrough Evidence”:
+Для каждого WOW пункта (1–6) сделай пошаговый walkthrough (как “скриншоты”):
+- Screen: URL/route
+- Preconditions: данные/роль/состояние
+- Actions (1–5 шагов)
+- Expected UI (что именно видно: бейджи, тексты, кнопки)
+- Expected API/DB side-effects (какие запросы/записи)
+Если реальные скриншоты возможны — сгенерируй и сохрани в /artifacts/verify/* и перечисли пути.
+Если нет — сделай pseudo-screenshots, но максимально конкретно (тексты/бейджи/кнопки).
+
+4) “Command Log”:
+Список команд которые ты реально запускал (dev, curl, tsc, tests, jobs), и краткий результат.
+
+5) “Critical Issues (P0/P1) + Risks”:
+- P0: ломает деньги/данные/невозможность пройти флоу
+- P1: UX/часть wow не работает
+- RISK: потенциальная проблема (например отсутствие идемпотентности), даже если “вроде работает”
+
+6) “Recommended Next Iterations”:
+- 3 итерации фикса в формате Iteration Goal + почему
+- соблюдай правило маленьких диффов
+
+=== Как тестировать (обязательные проверки) ===
+- Запусти dev server
+- Пройди UI маршруты по списку
+- Для API: сделай curl запросы к ключевым endpoints (health/bootstrap/notifications/statements/vault goals/risk/status/strategies)
+- Для стратегий:
+  - собрать список стратегий (GET /api/strategies)
+  - пройти по каждой стратегии и заполнить “Strategy Matrix”
+- Для негативных кейсов:
+  - /inbox пустой → должен быть “All caught up” (или аналог)
+  - statement за месяц без операций → понятный empty state или PDF с нулевыми значениями (опиши что выбрано)
+  - pause strategy → попытка invest должна дать корректный отказ + понятный UI
+  - status=maintenance → баннер появляется
+  - smart start: пропуск/повтор → поведение определено
+  - withdraw/transfer выше баланса → корректная ошибка, баланс не меняется, operation статус корректен
+- Для дублей:
+  - повторить один и тот же запрос 2 раза (и/или двойной клик в UI) → проверить operations count и balances
+
+=== Правило строгой валидации ===
+PASS можно поставить только если выполнены реальный тест + есть evidence (route+file+API/DB). Иначе PARTIAL/FAIL/NOT FOUND/RISK.
