@@ -487,7 +487,7 @@ export interface GapInfo {
 export interface LoadCandlesResult {
   candles: Candle[];
   gaps: GapInfo[];
-  source: "cache" | "cache+binance";
+  source: string; // "cache" | "cache+<exchange>"
 }
 
 // Helper: convert DB row to Candle DTO

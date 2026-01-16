@@ -3,7 +3,10 @@ import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
 import { cryptoCompare, CryptoCompareDataSource } from "../data/cryptoCompare";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
-import { log } from "../index";
+
+function log(msg: string, category?: string, meta?: object) {
+  console.log(`[${category || 'marketData'}] ${msg}`, meta ? JSON.stringify(meta) : '');
+}
 
 export interface MarketDataSource {
   fetchCandles(symbol: string, timeframe: Timeframe, startMs: number, endMs: number): Promise<Candle[]>;

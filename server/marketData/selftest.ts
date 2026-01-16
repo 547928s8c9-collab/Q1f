@@ -3,10 +3,9 @@ import { storage } from "../storage";
 import { normalizeSymbol, normalizeTimeframe, isValidTimeframe, timeframeToMs } from "./utils";
 
 async function selftest() {
-  console.log("=== Market Data Selftest ===\n");
+  console.log("=== Market Data Selftest (CryptoCompare) ===\n");
   
   let passed = true;
-  let binanceBlocked = false;
   
   console.log("--- Testing normalization utils ---");
   
@@ -38,19 +37,19 @@ async function selftest() {
   console.log();
   
   const symbol = "BTCUSDT";
-  const timeframe = "15m";
+  const timeframe = "1h";
   const now = Date.now();
-  const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000;
+  const oneDayAgo = now - 24 * 60 * 60 * 1000;
   
   console.log(`--- Testing loadCandles for ${symbol} ${timeframe} ---`);
-  console.log(`Range: ${new Date(twoDaysAgo).toISOString()} to ${new Date(now).toISOString()}\n`);
+  console.log(`Range: ${new Date(oneDayAgo).toISOString()} to ${new Date(now).toISOString()}\n`);
   
-  console.log("First call (may fetch from Binance)...");
+  console.log("First call (fetching from CryptoCompare)...");
   const start1 = Date.now();
   const result1 = await loadCandles({
     symbol,
     timeframe,
-    startMs: twoDaysAgo,
+    startMs: oneDayAgo,
     endMs: now,
   });
   const elapsed1 = Date.now() - start1;
@@ -60,19 +59,13 @@ async function selftest() {
   console.log(`Gaps: ${result1.gaps.length}`);
   console.log(`Time: ${elapsed1}ms\n`);
   
-  if (result1.candles.length === 0 && result1.gaps.length > 0) {
-    console.log("INFO: Binance API appears to be geo-blocked (451) from this region");
-    console.log("INFO: This is expected in some cloud environments (US, etc.)");
-    console.log("INFO: Tests will continue with empty data to verify structure\n");
-    binanceBlocked = true;
-  }
-  
-  if (!binanceBlocked && result1.candles.length === 0) {
-    console.error("FAIL: No candles returned (unexpected - Binance should be reachable)");
+  if (result1.candles.length === 0) {
+    console.error("FAIL: No candles returned on first call");
+    console.log("  This might indicate API rate limiting or network issues");
     passed = false;
-  }
-  
-  if (result1.candles.length > 0) {
+  } else {
+    console.log("PASS: Candles received from CryptoCompare");
+    
     const sorted1 = [...result1.candles].sort((a, b) => a.ts - b.ts);
     const isSorted1 = result1.candles.every((c, i) => c.ts === sorted1[i].ts);
     if (isSorted1) {
@@ -89,17 +82,23 @@ async function selftest() {
       console.error(`FAIL: Duplicate timestamps in response (${result1.candles.length} candles, ${tsSet1.size} unique)`);
       passed = false;
     }
-  } else {
-    console.log("SKIP: Candle sorting/dedup tests (no data due to geo-block)");
+    
+    const firstCandle = result1.candles[0];
+    if (firstCandle.open > 0 && firstCandle.close > 0 && firstCandle.volume >= 0) {
+      console.log("PASS: Candle data looks valid (open/close/volume present)");
+    } else {
+      console.error("FAIL: Candle data appears invalid");
+      passed = false;
+    }
   }
   console.log();
   
-  console.log("Second call (should be cached if data was fetched)...");
+  console.log("Second call (should be cached)...");
   const start2 = Date.now();
   const result2 = await loadCandles({
     symbol,
     timeframe,
-    startMs: twoDaysAgo,
+    startMs: oneDayAgo,
     endMs: now,
   });
   const elapsed2 = Date.now() - start2;
@@ -107,6 +106,12 @@ async function selftest() {
   console.log(`Source: ${result2.source}`);
   console.log(`Candles: ${result2.candles.length}`);
   console.log(`Time: ${elapsed2}ms\n`);
+  
+  if (result2.source === "cache") {
+    console.log("PASS: Second call served from cache");
+  } else {
+    console.warn("WARN: Second call used network (expected cache)");
+  }
   
   if (result2.candles.length === result1.candles.length) {
     console.log("PASS: Candle count matches between calls");
@@ -116,7 +121,7 @@ async function selftest() {
   }
   
   console.log("\n--- Checking DB for duplicates ---");
-  const dbCandles = await storage.getCandlesFromCache("binance_spot", symbol, timeframe, twoDaysAgo, now);
+  const dbCandles = await storage.getCandlesFromCache("cryptocompare", symbol, timeframe, oneDayAgo, now);
   const dbTsSet = new Set(dbCandles.map(c => c.ts));
   if (dbTsSet.size === dbCandles.length) {
     console.log(`PASS: No duplicates in DB (${dbCandles.length} unique candles)`);
@@ -126,10 +131,6 @@ async function selftest() {
   }
   
   console.log("\n=== Selftest Complete ===");
-  if (binanceBlocked) {
-    console.log("NOTE: Binance was geo-blocked; structural tests passed.");
-    console.log("NOTE: To fully test, run from a non-blocked region or use mock data.");
-  }
   console.log(passed ? "RESULT: ALL TESTS PASSED" : "RESULT: SOME TESTS FAILED");
   
   process.exit(passed ? 0 : 1);
