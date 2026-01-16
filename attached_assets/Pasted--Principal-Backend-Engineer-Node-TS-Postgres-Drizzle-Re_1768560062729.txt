@@ -1,0 +1,77 @@
+Ты — Principal Backend Engineer (Node/TS + Postgres + Drizzle) в существующем репозитории Replit.
+
+ФИЧА: “8 Live Session strategies pack” (каталог профилей + параметры). Это НЕ live-торговля. Никаких внешних сделок.
+
+ОБЩИЕ ПРАВИЛА (не обсуждаются):
+1) Не переписывай проект целиком. Меняй только то, что нужно для этого шага.
+2) Никаких TODO/placeholder/“left as exercise”.
+3) В конце шага: (a) unified diff (git patch), (b) walkthrough (команды и ожидаемый результат), (c) список изменённых файлов.
+4) Следуй паттернам репо: server/db.ts, server/storage.ts, миграции/seed, /api/bootstrap (bootstrap НЕ менять).
+5) Детерминизм: seed без рандома; стабильные slug; сортировка в выдаче.
+
+СДЕЛАЙ:
+1) Добавь таблицу strategy_profiles (Drizzle schema + миграция) ИЛИ расширь существующую таблицу стратегий, если она уже есть.
+Требования к полям (минимум):
+- id (как принято: uuid/serial)
+- slug TEXT NOT NULL UNIQUE (это profile id)
+- displayName TEXT NOT NULL
+- symbol TEXT NOT NULL
+- timeframe TEXT NOT NULL (строгая валидация в коде: "15m"|"1h")
+- description TEXT NOT NULL
+- profileKey TEXT NOT NULL (ключ реализации; можно = slug)
+- tags TEXT[] (или jsonb) (опционально)
+- riskLevel ("low"|"medium"|"high") (или TEXT + валидация)
+- defaultConfig JSONB NOT NULL
+- configSchema JSONB NOT NULL (для UI формы; простой JSON-schema-like)
+- isEnabled BOOLEAN NOT NULL default true
+- createdAt / updatedAt (как принято в репо)
+
+2) Seed: добавь ровно эти 8 профилей (стабильные slug и фиксированные пары/TF):
+- slug: btc_squeeze_breakout
+  displayName: "Satoshi MicroPulse Live Session"
+  symbol/timeframe: BTCUSDT / 15m
+  description: "Bollinger squeeze breakout + volume confirm; oracle-assisted exit (penalized) + walk-forward EV/win-prob filters."
+- slug: eth_ema_revert
+  displayName: "Ether QuantumTick Scalper Live Session"
+  symbol/timeframe: ETHUSDT / 15m
+  description: "Mean-reversion to EMA(50) fair value + RSI oversold; filters by net EV; walk-forward thresholds."
+- slug: bnb_trend_pullback
+  displayName: "BNB LatencyEdge MarketRunner Live Session"
+  symbol/timeframe: BNBUSDT / 1h
+  description: "Uptrend pullback to EMA(20) with positive trend slope; fewer trades, smoother curve."
+- slug: sol_vol_burst
+  displayName: "Solana WarpSpeed VolBurst Live Session"
+  symbol/timeframe: SOLUSDT / 15m
+  description: "Volatility impulse (return percentile + volume burst); strict filters; higher fee/slippage; fast exits."
+- slug: xrp_keltner_revert
+  displayName: "Ripple LiquidityWave SpreadCatcher Live Session"
+  symbol/timeframe: XRPUSDT / 1h
+  description: "Keltner Channel range revert; entry at lower band if no breakout signs (volume control)."
+- slug: doge_fast_momo
+  displayName: "Doge TickRunner Momentum Live Session"
+  symbol/timeframe: DOGEUSDT / 15m
+  description: "Fast momentum EMA 9/21 cross + volume confirm; stricter EV filter; higher fee/slippage."
+- slug: ada_deep_revert
+  displayName: "Cardano MicroGrid MeanRevert Live Session"
+  symbol/timeframe: ADAUSDT / 1h
+  description: "Deep mean-reversion: strong deviation from EMA(200) + RSI oversold; rare but higher-quality entries."
+- slug: trx_lowvol_band
+  displayName: "Tron StableFlow NanoArb Live Session"
+  symbol/timeframe: TRXUSDT / 1h
+  description: "Low-vol band capture: trade only under low ATR; Bollinger band touches; calm flow."
+
+3) defaultConfig/configSchema — сделай разумные дефолты (без TODO), чтобы UI мог запустить с нулевым вводом.
+Требования к defaultConfig (общие поля для всех профилей):
+- feesBps (например 10..25)
+- slippageBps (например 5..40; выше для SOL/DOGE)
+- maxPositionPct (например 0.9)
+- minBarsWarmup (например 200)
+- walkForward: { enabled:boolean, lookbackBars:number, recalibEveryBars:number, minWinProb:number, minEVBps:number }
+- oracleExit: { enabled:boolean, horizonBars:number, penaltyBps:number, maxHoldBars:number } (enabled=true только у btc_squeeze_breakout; у остальных false)
+
+4) Валидация timeframe/profile config должна быть в коде (не в БД): значения в пределах, без рандома.
+
+ВЫВОД В КОНЦЕ:
+--- PATCH ---
+--- WALKTHROUGH --- (как применить миграции и seed; как увидеть 8 профилей в БД)
+--- CHANGED FILES ---

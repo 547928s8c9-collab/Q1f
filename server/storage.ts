@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, gte, or, ilike, lte, sql } from "drizzle-orm";
+import { eq, and, desc, gte, or, ilike, lte, lt, sql } from "drizzle-orm";
 import {
   balances,
   vaults,
@@ -19,7 +19,9 @@ import {
   kycApplicants,
   notifications,
   idempotencyKeys,
+  marketCandles,
   AddressStatus,
+  dbRowToCandle,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -56,6 +58,7 @@ import {
   type InsertNotification,
   type IdempotencyKey,
   type InsertIdempotencyKey,
+  type Candle,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -155,6 +158,10 @@ export interface IStorage {
   getIdempotencyKey(userId: string, key: string, endpoint: string): Promise<IdempotencyKey | undefined>;
   createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey>;
   updateIdempotencyKey(id: string, updates: { operationId?: string | null; responseStatus?: number | null; responseBody?: any }): Promise<void>;
+
+  // Market Candles
+  getCandlesFromCache(exchange: string, symbol: string, timeframe: string, startMs: number, endMs: number): Promise<Candle[]>;
+  upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -867,6 +874,72 @@ export class DatabaseStorage implements IStorage {
 
   async updateIdempotencyKey(id: string, updates: { operationId?: string | null; responseStatus?: number | null; responseBody?: any }): Promise<void> {
     await db.update(idempotencyKeys).set(updates).where(eq(idempotencyKeys.id, id));
+  }
+
+  // Market Candles
+  async getCandlesFromCache(
+    exchange: string,
+    symbol: string,
+    timeframe: string,
+    startMs: number,
+    endMs: number
+  ): Promise<Candle[]> {
+    const rows = await db.select().from(marketCandles).where(
+      and(
+        eq(marketCandles.exchange, exchange),
+        eq(marketCandles.symbol, symbol),
+        eq(marketCandles.timeframe, timeframe),
+        gte(marketCandles.ts, startMs),
+        lt(marketCandles.ts, endMs)
+      )
+    );
+    return rows.map(dbRowToCandle).sort((a, b) => a.ts - b.ts);
+  }
+
+  async upsertCandles(
+    exchange: string,
+    symbol: string,
+    timeframe: string,
+    candles: Candle[]
+  ): Promise<void> {
+    if (candles.length === 0) return;
+
+    const deduped = this.dedupeCandles(candles);
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+      const batch = deduped.slice(i, i + BATCH_SIZE);
+      const values = batch.map((c) => ({
+        exchange,
+        symbol,
+        timeframe,
+        ts: c.ts,
+        open: c.open.toString(),
+        high: c.high.toString(),
+        low: c.low.toString(),
+        close: c.close.toString(),
+        volume: c.volume.toString(),
+      }));
+
+      await db.insert(marketCandles).values(values).onConflictDoUpdate({
+        target: [marketCandles.exchange, marketCandles.symbol, marketCandles.timeframe, marketCandles.ts],
+        set: {
+          open: sql`excluded.open`,
+          high: sql`excluded.high`,
+          low: sql`excluded.low`,
+          close: sql`excluded.close`,
+          volume: sql`excluded.volume`,
+        },
+      });
+    }
+  }
+
+  private dedupeCandles(candles: Candle[]): Candle[] {
+    const seen = new Map<number, Candle>();
+    for (const c of candles) {
+      seen.set(c.ts, c);
+    }
+    return Array.from(seen.values()).sort((a, b) => a.ts - b.ts);
   }
 }
 
