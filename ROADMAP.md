@@ -166,6 +166,28 @@
   - 100%: "Congratulations! You've reached your savings goal!"
 - **Files:** `client/src/components/vault/vault-card.tsx`
 
+### ITER-4: Idempotency Verification (DONE - Jan 2026)
+- **Goal:** Verify all 5 money endpoints properly implement idempotency
+- **Pattern:** All endpoints use `acquireIdempotencyLock()` and `completeIdempotency()` helpers
+- **Idempotency Matrix:**
+
+| Endpoint | Lock Location | Complete Location | E2E Verified |
+|----------|---------------|-------------------|--------------|
+| `/api/deposit/usdt/simulate` | Line 1026 | Line 1076 | ✓ |
+| `/api/deposit/card/simulate` | Line 1092 | Line 1151 | ✓ |
+| `/api/invest` | Line 1167 | Line 1283 | ✓ |
+| `/api/withdraw/usdt` | Line 1413 | Line 1527 | ✓ |
+| `/api/vault/transfer` | Line 1543 | Line 1640 | ✓ |
+
+- **Behavior:**
+  - First request: Inserts pending row, processes operation, caches response with operation.id
+  - Duplicate request: Returns cached response with same operation.id (no balance duplication)
+  - Missing key: Continues without idempotency (backward compatible)
+- **E2E Test Results:**
+  - DEPOSIT_USDT: Duplicate calls returned same operation.id, DB count = 1
+  - VAULT_TRANSFER: Duplicate calls returned same operation.id, DB count = 1
+- **Files:** `server/routes.ts` (lines 22-90 for helpers)
+
 ---
 
 ## Next Iteration Recommendations
