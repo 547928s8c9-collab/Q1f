@@ -381,11 +381,11 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
   idempotencyKey: varchar("idempotency_key", { length: 64 }).notNull(),
   endpoint: text("endpoint").notNull(),
   operationId: varchar("operation_id"),
-  responseStatus: integer("response_status"),
+  responseStatus: integer("response_status"), // null = pending/in-progress
   responseBody: jsonb("response_body"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("idempotency_user_key_idx").on(table.userId, table.idempotencyKey),
+  uniqueIndex("idempotency_user_key_endpoint_idx").on(table.userId, table.idempotencyKey, table.endpoint),
 ]);
 
 export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });

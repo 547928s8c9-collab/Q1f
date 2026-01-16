@@ -152,8 +152,9 @@ export interface IStorage {
   getAllPositions(): Promise<Position[]>;
 
   // Idempotency Keys
-  getIdempotencyKey(userId: string, key: string): Promise<IdempotencyKey | undefined>;
+  getIdempotencyKey(userId: string, key: string, endpoint: string): Promise<IdempotencyKey | undefined>;
   createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey>;
+  updateIdempotencyKey(id: string, updates: { operationId?: string | null; responseStatus?: number | null; responseBody?: any }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -849,15 +850,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Idempotency Keys
-  async getIdempotencyKey(userId: string, key: string): Promise<IdempotencyKey | undefined> {
+  async getIdempotencyKey(userId: string, key: string, endpoint: string): Promise<IdempotencyKey | undefined> {
     const [result] = await db.select().from(idempotencyKeys)
-      .where(and(eq(idempotencyKeys.userId, userId), eq(idempotencyKeys.idempotencyKey, key)));
+      .where(and(
+        eq(idempotencyKeys.userId, userId), 
+        eq(idempotencyKeys.idempotencyKey, key),
+        eq(idempotencyKeys.endpoint, endpoint)
+      ));
     return result;
   }
 
   async createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey> {
     const [created] = await db.insert(idempotencyKeys).values(data).returning();
     return created;
+  }
+
+  async updateIdempotencyKey(id: string, updates: { operationId?: string | null; responseStatus?: number | null; responseBody?: any }): Promise<void> {
+    await db.update(idempotencyKeys).set(updates).where(eq(idempotencyKeys.id, id));
   }
 }
 

@@ -14,6 +14,74 @@ function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub;
 }
 
+// Idempotency helper for money endpoints (atomic approach)
+// Inserts a "pending" row first to claim the key, preventing race conditions
+// Returns { acquired: true, keyId } if we claimed the key, or { acquired: false, response } if duplicate
+async function acquireIdempotencyLock(
+  req: Request,
+  userId: string,
+  endpoint: string
+): Promise<
+  | { acquired: true; keyId: string }
+  | { acquired: false; cached: true; status: number; body: any }
+  | { acquired: false; cached: false }
+> {
+  const idempotencyKey = req.headers["idempotency-key"];
+  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+    return { acquired: false, cached: false };
+  }
+
+  try {
+    // Try to insert a pending row (responseStatus = null means in-progress)
+    const created = await storage.createIdempotencyKey({
+      userId,
+      idempotencyKey,
+      endpoint,
+      operationId: null,
+      responseStatus: null,
+      responseBody: null,
+    });
+    return { acquired: true, keyId: created.id };
+  } catch (err: any) {
+    // Unique constraint violation = key already exists
+    if (err.code === "23505") {
+      // Check if the existing key has a completed response
+      const existing = await storage.getIdempotencyKey(userId, idempotencyKey, endpoint);
+      if (existing && existing.responseStatus !== null) {
+        return {
+          acquired: false,
+          cached: true,
+          status: existing.responseStatus,
+          body: existing.responseBody,
+        };
+      }
+      // Key exists but no response yet (concurrent request in progress)
+      // Return 409 Conflict to indicate retry later
+      return {
+        acquired: false,
+        cached: true,
+        status: 409,
+        body: { error: "Request in progress", code: "IDEMPOTENCY_CONFLICT" },
+      };
+    }
+    throw err;
+  }
+}
+
+// Complete idempotency after successful operation
+async function completeIdempotency(
+  keyId: string,
+  operationId: string | null,
+  status: number,
+  body: any
+): Promise<void> {
+  await storage.updateIdempotencyKey(keyId, {
+    operationId,
+    responseStatus: status,
+    responseBody: body,
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -825,10 +893,21 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/deposit/usdt/simulate (protected)
+  // POST /api/deposit/usdt/simulate (protected, idempotent)
   app.post("/api/deposit/usdt/simulate", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const endpoint = "/api/deposit/usdt/simulate";
+
+      // Acquire idempotency lock (atomic)
+      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+        // No idempotency key provided, continue normally
+      }
+
       const schema = z.object({ amount: z.string() });
       const { amount } = schema.parse(req.body);
 
@@ -853,17 +932,31 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, operation: { id: operation.id } });
+      const responseBody = { success: true, operation: { id: operation.id } };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Deposit USDT simulate error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // POST /api/deposit/card/simulate (protected)
+  // POST /api/deposit/card/simulate (protected, idempotent)
   app.post("/api/deposit/card/simulate", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const endpoint = "/api/deposit/card/simulate";
+
+      // Acquire idempotency lock (atomic)
+      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+      }
+
       const schema = z.object({ amount: z.string() }); // RUB in kopeks
       const { amount } = schema.parse(req.body);
 
@@ -896,17 +989,31 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, usdtAmount, operation: { id: operation.id } });
+      const responseBody = { success: true, usdtAmount, operation: { id: operation.id } };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Deposit card simulate error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // POST /api/invest (protected)
+  // POST /api/invest (protected, idempotent)
   app.post("/api/invest", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const endpoint = "/api/invest";
+
+      // Acquire idempotency lock (atomic)
+      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+      }
+
       const schema = z.object({
         strategyId: z.string(),
         amount: z.string(),
@@ -997,7 +1104,11 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, operation: { id: operation.id } });
+      const responseBody = { success: true, operation: { id: operation.id } };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Invest error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -1084,10 +1195,20 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/withdraw/usdt (protected)
+  // POST /api/withdraw/usdt (protected, idempotent)
   app.post("/api/withdraw/usdt", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const endpoint = "/api/withdraw/usdt";
+
+      // Acquire idempotency lock (atomic)
+      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+      }
+
       const schema = z.object({
         amount: z.string(),
         address: z.string().min(30),
@@ -1176,17 +1297,31 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, operation: { id: operation.id } });
+      const responseBody = { success: true, operation: { id: operation.id } };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Withdraw error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // POST /api/vault/transfer (protected)
+  // POST /api/vault/transfer (protected, idempotent)
   app.post("/api/vault/transfer", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const endpoint = "/api/vault/transfer";
+
+      // Acquire idempotency lock (atomic)
+      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+      }
+
       const schema = z.object({
         fromVault: z.string(),
         toVault: z.string(),
@@ -1257,7 +1392,11 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, operation: { id: operation.id } });
+      const responseBody = { success: true, operation: { id: operation.id } };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Vault transfer error:", error);
       res.status(500).json({ error: "Internal server error" });
