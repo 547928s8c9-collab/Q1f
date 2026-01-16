@@ -1,9 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt, Target, Settings } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt, Target, Settings, Check } from "lucide-react";
 import { formatMoney } from "@shared/schema";
 import type { VaultData } from "@shared/schema";
+
+const MILESTONES = [25, 50, 75, 100] as const;
 
 interface VaultCardProps {
   type: "principal" | "profit" | "taxes";
@@ -71,21 +72,70 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
         </p>
       </div>
 
-      {hasGoal && (
-        <div className="mb-4 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Target className="w-3 h-3" />
-              <span>{data.goalName || "Goal"}</span>
+      {hasGoal && (() => {
+        const cappedProgress = Math.max(0, Math.min(data.progress, 100));
+        return (
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Target className="w-3 h-3" />
+                <span>{data.goalName || "Goal"}</span>
+              </div>
+              <span className="text-foreground font-medium">{cappedProgress}%</span>
             </div>
-            <span className="text-foreground font-medium">{data.progress}%</span>
+            
+            <div className="relative pr-1" data-testid={`vault-${type}-progress`}>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  style={{ width: `${cappedProgress}%` }}
+                />
+              </div>
+              
+              <div className="absolute top-0 left-0 right-1 h-2 flex">
+                {MILESTONES.map((milestone) => (
+                  <div
+                    key={milestone}
+                    className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 bg-background/80"
+                    style={{ left: `${milestone}%`, transform: 'translate(-50%, -50%)' }}
+                  />
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex justify-between" data-testid={`vault-${type}-milestones`}>
+              {MILESTONES.map((milestone) => {
+                const achieved = cappedProgress >= milestone;
+                return (
+                  <div 
+                    key={milestone} 
+                    className="flex flex-col items-center gap-0.5"
+                    data-testid={`vault-${type}-milestone-${milestone}`}
+                    data-achieved={achieved}
+                  >
+                    <div 
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-medium transition-all ${
+                        achieved 
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {achieved ? <Check className="w-3 h-3" /> : milestone}
+                    </div>
+                    <span className={`text-[10px] ${achieved ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                      {milestone}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <p className="text-xs text-muted-foreground">
+              {formatMoney(data.balance, asset)} / {formatMoney(data.goalAmount!, asset)} {asset}
+            </p>
           </div>
-          <Progress value={data.progress} className="h-2" data-testid={`vault-${type}-progress`} />
-          <p className="text-xs text-muted-foreground">
-            {formatMoney(data.balance, asset)} / {formatMoney(data.goalAmount!, asset)} {asset}
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {data.autoSweepEnabled && data.autoSweepPct > 0 && (
         <div className="mb-4 p-2 rounded-md bg-muted/50 text-xs text-muted-foreground">
