@@ -10,42 +10,14 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Chip } from "@/components/ui/chip";
 import { cn } from "@/lib/utils";
+import { getInboxConfig } from "@/lib/inbox-map";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
-import type { InboxCard, NotificationTypeValue } from "@shared/schema";
+import type { InboxCard } from "@shared/schema";
 
 interface NotificationsResponse {
   notifications: InboxCard[];
   unreadCount: number;
-}
-
-function getTypeVariant(type: NotificationTypeValue): "default" | "success" | "warning" | "danger" | "primary" {
-  switch (type) {
-    case "transaction":
-      return "primary";
-    case "kyc":
-      return "warning";
-    case "security":
-      return "danger";
-    case "system":
-    default:
-      return "default";
-  }
-}
-
-function getTypeLabel(type: NotificationTypeValue): string {
-  switch (type) {
-    case "transaction":
-      return "Transaction";
-    case "kyc":
-      return "Verification";
-    case "security":
-      return "Security";
-    case "system":
-      return "System";
-    default:
-      return type;
-  }
 }
 
 export function NotificationBell() {
@@ -120,50 +92,67 @@ export function NotificationBell() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="max-h-80">
           {notifications.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-              No notifications
+            <div className="flex flex-col items-center justify-center h-32 text-sm text-muted-foreground">
+              <Bell className="h-8 w-8 mb-2 opacity-50" />
+              <p>No notifications</p>
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((card) => (
-                <div
-                  key={card.id}
-                  className={cn(
-                    "px-4 py-3 hover-elevate cursor-pointer",
-                    !card.isRead && "bg-primary/5"
-                  )}
-                  onClick={() => handleCardClick(card)}
-                  data-testid={`notification-${card.id}`}
-                >
-                  <div className="flex items-start gap-2">
-                    {!card.isRead && (
-                      <span className="h-2 w-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+              {notifications.map((card) => {
+                const config = getInboxConfig(card.type);
+                const Icon = config.icon;
+                
+                return (
+                  <div
+                    key={card.id}
+                    className={cn(
+                      "px-4 py-3 hover-elevate cursor-pointer",
+                      !card.isRead && "bg-primary/5"
                     )}
-                    <div className={cn("flex-1 min-w-0", card.isRead && "ml-4")}>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <Chip size="sm" variant={getTypeVariant(card.type)}>
-                          {getTypeLabel(card.type)}
-                        </Chip>
+                    onClick={() => handleCardClick(card)}
+                    data-testid={`notification-${card.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0",
+                        config.bgColor
+                      )}>
+                        <Icon className={cn("h-4 w-4", config.iconColor)} />
                       </div>
-                      <p className="text-sm font-medium truncate">{card.title}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">{card.message}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <p className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true })}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Chip size="sm" variant={config.variant}>
+                            {config.label}
+                          </Chip>
+                          {!card.isRead && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />
+                          )}
+                        </div>
+                        <p className={cn(
+                          "text-sm truncate",
+                          !card.isRead ? "font-medium" : "font-normal"
+                        )}>
+                          {card.title}
                         </p>
-                        {card.ctaLabel && (
-                          <span className="text-xs text-primary flex items-center gap-0.5">
-                            {card.ctaLabel}
-                            <ChevronRight className="h-3 w-3" />
-                          </span>
-                        )}
+                        <p className="text-xs text-muted-foreground line-clamp-1">{card.message}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true })}
+                          </p>
+                          {card.ctaLabel && (
+                            <span className="text-xs text-primary flex items-center gap-0.5 font-medium">
+                              {card.ctaLabel}
+                              <ChevronRight className="h-3 w-3" />
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
