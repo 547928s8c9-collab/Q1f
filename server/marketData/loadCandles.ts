@@ -1,9 +1,13 @@
 import type { Candle, GapInfo, LoadCandlesResult, Timeframe } from "@shared/schema";
 import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
-import { binanceSpot, BinanceSpotDataSource } from "../data/binanceSpot";
+import { cryptoCompare, CryptoCompareDataSource } from "../data/cryptoCompare";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
 import { log } from "../index";
+
+export interface MarketDataSource {
+  fetchCandles(symbol: string, timeframe: Timeframe, startMs: number, endMs: number): Promise<Candle[]>;
+}
 
 const TIMEFRAME_MS: Record<Timeframe, number> = {
   "15m": 900000,
@@ -19,19 +23,19 @@ export interface LoadCandlesParams {
   timeframe: Timeframe | string;
   startMs: number;
   endMs: number;
-  dataSource?: BinanceSpotDataSource;
+  dataSource?: MarketDataSource;
   maxBars?: number;
   allowLargeRange?: boolean;
 }
 
 export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandlesResult> {
   const {
-    exchange = "binance_spot",
+    exchange = "cryptocompare",
     symbol: rawSymbol,
     timeframe: rawTimeframe,
     startMs,
     endMs,
-    dataSource = binanceSpot,
+    dataSource = cryptoCompare,
     maxBars = DEFAULT_MAX_BARS,
     allowLargeRange = false,
   } = params;
@@ -79,7 +83,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
   return {
     candles: allCandles,
     gaps,
-    source: usedNetwork ? "cache+binance" : "cache",
+    source: usedNetwork ? `cache+${exchange}` : "cache",
   };
 }
 
@@ -123,7 +127,7 @@ async function fetchAndStoreRanges(
   symbol: string,
   timeframe: Timeframe,
   ranges: Array<{ startMs: number; endMs: number }>,
-  dataSource: BinanceSpotDataSource
+  dataSource: MarketDataSource
 ): Promise<void> {
   for (const range of ranges) {
     try {
