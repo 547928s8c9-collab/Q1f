@@ -9,7 +9,7 @@
 | 3 | Vault Goals | PARTIAL | `/api/vault/goal` | `shared/schema.ts` (vaults table), `client/src/pages/wallet/vaults.tsx` |
 | 4 | Risk Controls | DONE | `/api/positions/:id/risk-controls`, `/api/positions/:id/pause` | `server/routes.ts`, `client/src/pages/invest/strategy-detail.tsx` |
 | 5 | Status Page | DONE | `/status`, `/api/status` | `server/routes.ts`, `client/src/pages/status.tsx`, `client/src/components/global-banner.tsx` |
-| 6 | Smart Start | NOT STARTED | - | - |
+| 6 | Smart Start | DONE | `/onboarding/smart-start`, `/onboarding/smart-start/results` | `client/src/lib/smart-start.ts`, `client/src/pages/onboarding/smart-start.tsx`, `client/src/pages/onboarding/smart-start-results.tsx` |
 
 ---
 
@@ -104,13 +104,21 @@
 
 ---
 
-### 6. Smart Start (NOT STARTED)
+### 6. Smart Start (DONE)
 
-**Planned:**
-- 3-question onboarding quiz (risk tolerance, time horizon, amount)
-- Strategy recommendation engine
-- Suggested investment amount/split
-- "Quick plan" summary with one-click invest
+**Completed (WOW-06):**
+- 3-question onboarding quiz: Risk Tolerance, Time Horizon, Investment Goal
+- Rule-based recommendation engine with risk scoring (1-7)
+- Profile labels: Safety-First Saver, Conservative Investor, Balanced Builder, Growth Investor, Aggressive Investor
+- Suggested deposit amount based on profile (USDT)
+- Strategy recommendations with allocation percentages
+- Risk tier badges (LOW/CORE/HIGH) on recommendations
+- localStorage persistence for answers
+- Post-KYC integration: redirects to Smart Start after KYC approval
+- "View Strategies" links to /invest catalog
+- "Go to Dashboard" shortcut to home
+
+**Files:** `client/src/lib/smart-start.ts`, `client/src/pages/onboarding/smart-start.tsx`, `client/src/pages/onboarding/smart-start-results.tsx`
 
 ---
 
@@ -119,5 +127,5 @@
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
 | 1 | Vault Goals: Milestones visualization (25/50/75/100%) | Small | High |
-| 2 | Smart Start: Quiz + recommendations | Large | High |
-| 3 | Inbox 2.0: Grouping + polish | Small | Medium |
+| 2 | Inbox 2.0: Grouping + polish | Small | Medium |
+| 3 | Smart Start: One-click invest from results | Medium | Medium |
