@@ -20,6 +20,15 @@ function assertNonNegative(value: bigint, label: string): void {
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 import { adminRouter } from "./admin/router";
 
+// Production guard for dev/test endpoints
+const isProduction = process.env.NODE_ENV === "production";
+function devOnly(_req: Request, res: Response, next: NextFunction) {
+  if (isProduction) {
+    return res.status(403).json({ error: "Not allowed" });
+  }
+  next();
+}
+
 // Helper to get userId from authenticated request
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub;
@@ -389,7 +398,7 @@ export async function registerRoutes(
   });
 
   // POST /api/strategies/seed - Seed strategies (dev only)
-  app.post("/api/strategies/seed", async (req, res) => {
+  app.post("/api/strategies/seed", isAuthenticated, devOnly, async (req, res) => {
     try {
       await storage.seedStrategies();
       res.json({ success: true, message: "Strategies seeded" });
@@ -1028,8 +1037,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/deposit/usdt/simulate (protected, idempotent)
-  app.post("/api/deposit/usdt/simulate", isAuthenticated, async (req, res) => {
+  // POST /api/deposit/usdt/simulate (protected, idempotent, dev only)
+  app.post("/api/deposit/usdt/simulate", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       const endpoint = "/api/deposit/usdt/simulate";
@@ -1094,8 +1103,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/deposit/card/simulate (protected, idempotent)
-  app.post("/api/deposit/card/simulate", isAuthenticated, async (req, res) => {
+  // POST /api/deposit/card/simulate (protected, idempotent, dev only)
+  app.post("/api/deposit/card/simulate", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       const endpoint = "/api/deposit/card/simulate";
@@ -1324,8 +1333,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/payout/daily - Demo daily payout simulation (protected)
-  app.post("/api/payout/daily", isAuthenticated, async (req, res) => {
+  // POST /api/payout/daily - Demo daily payout simulation (protected, dev only)
+  app.post("/api/payout/daily", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       const positions = await storage.getPositions(userId);
@@ -2489,7 +2498,7 @@ export async function registerRoutes(
   });
 
   // POST /api/notifications/seed - Seed demo notifications (protected, dev only)
-  app.post("/api/notifications/seed", isAuthenticated, async (req, res) => {
+  app.post("/api/notifications/seed", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       const operations = await storage.getOperations(userId, undefined, undefined, undefined, 5);
@@ -2916,8 +2925,8 @@ export async function registerRoutes(
 
   // ==================== JOB ROUTES (DEV TRIGGERS) ====================
 
-  // POST /api/jobs/accrue-daily - Apply daily strategy returns to positions
-  app.post("/api/jobs/accrue-daily", async (req, res) => {
+  // POST /api/jobs/accrue-daily - Apply daily strategy returns to positions (dev only)
+  app.post("/api/jobs/accrue-daily", isAuthenticated, devOnly, async (req, res) => {
     try {
       const today = new Date().toISOString().split("T")[0];
       const positions = await storage.getAllPositions();
@@ -3057,8 +3066,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/jobs/payout-run - Execute profit payouts
-  app.post("/api/jobs/payout-run", async (req, res) => {
+  // POST /api/jobs/payout-run - Execute profit payouts (dev only)
+  app.post("/api/jobs/payout-run", isAuthenticated, devOnly, async (req, res) => {
     try {
       const frequency = (req.query.frequency as string) || "DAILY";
       const NETWORK_FEE_MINOR = "1000000"; // 1 USDT demo network fee
@@ -3210,8 +3219,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/jobs/redemption-weekly-run - Execute due redemption requests
-  app.post("/api/jobs/redemption-weekly-run", async (req, res) => {
+  // POST /api/jobs/redemption-weekly-run - Execute due redemption requests (dev only)
+  app.post("/api/jobs/redemption-weekly-run", isAuthenticated, devOnly, async (req, res) => {
     try {
       const dueRequests = await storage.getPendingRedemptionsDue();
       const results: Array<{ requestId: string; status: string; amount?: string }> = [];
