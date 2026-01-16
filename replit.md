@@ -159,6 +159,28 @@ Production-ready observability features:
 - `GET /api/redemptions` - List user's redemption requests (includes next window)
 - `POST /api/redemptions` - Request principal redemption
 
+### Vault Goals System
+
+**Schema Fields** (vaults table):
+- `goalName`: Optional display name for the savings goal (max 50 chars)
+- `goalAmount`: Target amount in minor units (string)
+- `autoSweepPct`: Percentage of profit to auto-sweep (0-100)
+- `autoSweepEnabled`: Whether auto-sweep is active for this vault
+
+**VaultData DTO** (in BootstrapResponse):
+- `balance`: Current vault balance
+- `goalName`, `goalAmount`, `autoSweepPct`, `autoSweepEnabled`: Goal settings
+- `progress`: Calculated progress percentage (0-100), using BigInt math for precision
+
+**Vault Goal API Endpoints**:
+- `POST /api/vault/goal` - Update vault goal settings
+  - Body: `{ type: "principal"|"profit"|"taxes", goalName?, goalAmount?, autoSweepPct?, autoSweepEnabled? }`
+  - goalAmount must be a numeric string (minor units) or null
+
+**UI Components**:
+- VaultCard: Shows progress bar when goal is set, displays goal name and auto-sweep info
+- Goal dialog: Edit goal name, target amount, and per-vault auto-sweep percentage (0-100% slider)
+
 ### Key Design Decisions
 
 **Multi-User Architecture**: All data is scoped to authenticated users. User ID is obtained from `req.user.claims.sub` in authenticated routes. New users are automatically initialized with default balances, vaults, and security settings on first login.
