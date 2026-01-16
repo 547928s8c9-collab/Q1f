@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import {
   PiggyBank,
   Plus
 } from "lucide-react";
+import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
 
 function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
   const totalPortfolio = bootstrap
@@ -73,12 +75,18 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
   );
 }
 
-function QuickActions() {
-  const actions = [
-    { icon: ArrowDownLeft, label: "Top up", href: "/wallet", color: "text-positive" },
-    { icon: Send, label: "Transfer", href: "/wallet", color: "text-primary" },
-    { icon: ArrowUpRight, label: "Withdraw", href: "/wallet", color: "text-warning" },
-    { icon: TrendingUp, label: "Invest", href: "/invest", color: "text-accent-foreground" },
+type SheetType = "deposit" | "withdraw" | "transfer" | "invest" | null;
+
+function QuickActions({ 
+  onOpenSheet, 
+}: { 
+  onOpenSheet: (type: SheetType) => void;
+}) {
+  const actions: Array<{ icon: typeof ArrowDownLeft; label: string; sheet: SheetType; color: string }> = [
+    { icon: ArrowDownLeft, label: "Top up", sheet: "deposit", color: "text-positive" },
+    { icon: Send, label: "Transfer", sheet: "transfer", color: "text-primary" },
+    { icon: ArrowUpRight, label: "Withdraw", sheet: "withdraw", color: "text-warning" },
+    { icon: TrendingUp, label: "Invest", sheet: "invest", color: "text-accent-foreground" },
   ];
 
   return (
@@ -86,18 +94,18 @@ function QuickActions() {
       {actions.map((action) => {
         const Icon = action.icon;
         return (
-          <Link key={action.href} href={action.href}>
-            <Button
-              variant="outline"
-              className="flex flex-col items-center justify-center w-full h-20 gap-1.5"
-              data-testid={`button-quick-${action.label.toLowerCase().replace(" ", "-")}`}
-            >
-              <div className={`p-2 rounded-full bg-muted ${action.color}`}>
-                <Icon className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-medium">{action.label}</span>
-            </Button>
-          </Link>
+          <Button
+            key={action.label}
+            variant="outline"
+            className="flex flex-col items-center justify-center w-full h-20 gap-1.5"
+            onClick={() => onOpenSheet(action.sheet)}
+            data-testid={`button-quick-${action.label.toLowerCase().replace(" ", "-")}`}
+          >
+            <div className={`p-2 rounded-full bg-muted ${action.color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-medium">{action.label}</span>
+          </Button>
         );
       })}
     </div>
@@ -411,6 +419,7 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
 
 export default function Home() {
   useSetPageTitle("Home");
+  const [activeSheet, setActiveSheet] = useState<SheetType>(null);
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -424,7 +433,7 @@ export default function Home() {
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
       <HeroCard bootstrap={bootstrap} isLoading={bootstrapLoading} />
       
-      <QuickActions />
+      <QuickActions onOpenSheet={setActiveSheet} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BalancesPreview bootstrap={bootstrap} isLoading={bootstrapLoading} />
@@ -434,6 +443,27 @@ export default function Home() {
       <InvestedPreview bootstrap={bootstrap} isLoading={bootstrapLoading} />
 
       <StrategiesPreview strategies={strategies} isLoading={strategiesLoading} />
+
+      <DepositSheet
+        open={activeSheet === "deposit"}
+        onOpenChange={(open) => !open && setActiveSheet(null)}
+        bootstrap={bootstrap}
+      />
+      <WithdrawSheet
+        open={activeSheet === "withdraw"}
+        onOpenChange={(open) => !open && setActiveSheet(null)}
+        bootstrap={bootstrap}
+      />
+      <TransferSheet
+        open={activeSheet === "transfer"}
+        onOpenChange={(open) => !open && setActiveSheet(null)}
+        bootstrap={bootstrap}
+      />
+      <InvestSheet
+        open={activeSheet === "invest"}
+        onOpenChange={(open) => !open && setActiveSheet(null)}
+        bootstrap={bootstrap}
+      />
     </div>
   );
 }
