@@ -3616,6 +3616,58 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== MARKET DATA ====================
+
+  // GET /api/market/candles - Get candles for a symbol (with backfill if needed)
+  app.get("/api/market/candles", isAuthenticated, async (req, res) => {
+    try {
+      const { symbol, timeframe, startMs, endMs, exchange = "binance_spot" } = req.query;
+      
+      if (!symbol || typeof symbol !== "string") {
+        return res.status(400).json({ error: "symbol is required" });
+      }
+      if (!timeframe || typeof timeframe !== "string") {
+        return res.status(400).json({ error: "timeframe is required (15m, 1h, 1d)" });
+      }
+      if (!startMs || isNaN(Number(startMs))) {
+        return res.status(400).json({ error: "startMs is required (unix ms)" });
+      }
+      if (!endMs || isNaN(Number(endMs))) {
+        return res.status(400).json({ error: "endMs is required (unix ms)" });
+      }
+      
+      const start = Number(startMs);
+      const end = Number(endMs);
+      
+      if (start >= end) {
+        return res.status(400).json({ error: "startMs must be less than endMs" });
+      }
+      
+      const result = await loadCandles({
+        exchange: exchange as string,
+        symbol,
+        timeframe,
+        startMs: start,
+        endMs: end,
+        maxBars: 5000,
+      });
+      
+      res.json({
+        success: true,
+        data: {
+          candles: result.candles,
+          gaps: result.gaps,
+          source: result.source,
+          count: result.candles.length,
+        },
+      });
+    } catch (error) {
+      console.error("Get candles error:", error);
+      const message = error instanceof Error ? error.message : "Internal server error";
+      res.status(400).json({ error: message });
+    }
+  });
+
   // ==================== SIMULATION SESSIONS ====================
   
   // Configure session runner callbacks for event persistence

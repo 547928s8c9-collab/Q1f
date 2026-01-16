@@ -2,6 +2,8 @@ import type { Candle, GapInfo, LoadCandlesResult, Timeframe } from "@shared/sche
 import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
 import { binanceSpot, BinanceSpotDataSource } from "../data/binanceSpot";
+import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
+import { log } from "../index";
 
 const TIMEFRAME_MS: Record<Timeframe, number> = {
   "15m": 900000,
@@ -9,35 +11,46 @@ const TIMEFRAME_MS: Record<Timeframe, number> = {
   "1d": 86400000,
 };
 
+const DEFAULT_MAX_BARS = 20000;
+
 export interface LoadCandlesParams {
   exchange?: string;
   symbol: string;
-  timeframe: Timeframe;
+  timeframe: Timeframe | string;
   startMs: number;
   endMs: number;
   dataSource?: BinanceSpotDataSource;
+  maxBars?: number;
+  allowLargeRange?: boolean;
 }
 
 export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandlesResult> {
   const {
     exchange = "binance_spot",
-    symbol,
-    timeframe,
+    symbol: rawSymbol,
+    timeframe: rawTimeframe,
     startMs,
     endMs,
     dataSource = binanceSpot,
+    maxBars = DEFAULT_MAX_BARS,
+    allowLargeRange = false,
   } = params;
 
-  if (!VALID_TIMEFRAMES.includes(timeframe)) {
-    throw new Error(`Invalid timeframe: ${timeframe}`);
-  }
+  const symbol = normalizeSymbol(rawSymbol);
+  const timeframe = normalizeTimeframe(rawTimeframe as string);
 
   const stepMs = TIMEFRAME_MS[timeframe];
   const alignedStart = alignToGrid(startMs, stepMs);
-  const alignedEnd = alignToGrid(endMs, stepMs);
+  let alignedEnd = alignToGrid(endMs, stepMs);
 
   if (alignedStart >= alignedEnd) {
     return { candles: [], gaps: [], source: "cache" };
+  }
+
+  const requestedBars = Math.ceil((alignedEnd - alignedStart) / stepMs);
+  if (requestedBars > maxBars && !allowLargeRange) {
+    alignedEnd = alignedStart + maxBars * stepMs;
+    log(`loadCandles: Range truncated to ${maxBars} bars`, "marketData", { symbol, timeframe, requestedBars, maxBars });
   }
 
   let usedNetwork = false;
