@@ -838,3 +838,57 @@ export function parseMoney(value: string, asset: string): string {
   const fraction = (parts[1] || "").padEnd(decimals, "0").slice(0, decimals);
   return (BigInt(whole) * BigInt(10 ** decimals) + BigInt(fraction)).toString();
 }
+
+// ==================== SIM SESSIONS (Live Session Simulation) ====================
+export const SimSessionStatus = {
+  CREATED: "created",
+  RUNNING: "running",
+  PAUSED: "paused",
+  STOPPED: "stopped",
+  FINISHED: "finished",
+  FAILED: "failed",
+} as const;
+
+export type SimSessionStatusType = typeof SimSessionStatus[keyof typeof SimSessionStatus];
+
+export const simSessions = pgTable("sim_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  profileSlug: text("profile_slug").notNull(),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  startMs: bigint("start_ms", { mode: "number" }).notNull(),
+  endMs: bigint("end_ms", { mode: "number" }).notNull(),
+  speed: integer("speed").notNull().default(1),
+  status: text("status").notNull().default("created"),
+  configOverrides: jsonb("config_overrides").$type<Partial<StrategyProfileConfig>>(),
+  errorMessage: text("error_message"),
+  lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0),
+  idempotencyKey: varchar("idempotency_key"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("sim_sessions_user_idempotency_idx").on(table.userId, table.idempotencyKey),
+  index("sim_sessions_user_status_idx").on(table.userId, table.status),
+]);
+
+export const insertSimSessionSchema = createInsertSchema(simSessions).omit({ id: true, lastSeq: true, createdAt: true, updatedAt: true });
+export type InsertSimSession = z.infer<typeof insertSimSessionSchema>;
+export type SimSession = typeof simSessions.$inferSelect;
+
+// ==================== SIM EVENTS ====================
+export const simEvents = pgTable("sim_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  seq: bigint("seq", { mode: "number" }).notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  type: text("type").notNull(),
+  payload: jsonb("payload").notNull(),
+}, (table) => [
+  uniqueIndex("sim_events_session_seq_idx").on(table.sessionId, table.seq),
+  index("sim_events_session_ts_idx").on(table.sessionId, table.ts),
+]);
+
+export const insertSimEventSchema = createInsertSchema(simEvents).omit({ id: true });
+export type InsertSimEvent = z.infer<typeof insertSimEventSchema>;
+export type SimEvent = typeof simEvents.$inferSelect;

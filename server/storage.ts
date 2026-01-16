@@ -21,6 +21,8 @@ import {
   idempotencyKeys,
   marketCandles,
   strategyProfiles,
+  simSessions,
+  simEvents,
   AddressStatus,
   dbRowToCandle,
   type Balance,
@@ -63,6 +65,10 @@ import {
   type StrategyProfile,
   type StrategyProfileConfig,
   type StrategyProfileConfigSchema,
+  type SimSession,
+  type InsertSimSession,
+  type SimEvent,
+  type InsertSimEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -172,6 +178,18 @@ export interface IStorage {
   getStrategyProfile(slug: string): Promise<StrategyProfile | undefined>;
   getStrategyProfileById(id: string): Promise<StrategyProfile | undefined>;
   seedStrategyProfiles(): Promise<void>;
+
+  // Sim Sessions
+  getSimSession(id: string): Promise<SimSession | undefined>;
+  getSimSessionsByUser(userId: string, status?: string): Promise<SimSession[]>;
+  createSimSession(session: InsertSimSession): Promise<SimSession>;
+  updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined>;
+  getSimSessionByIdempotencyKey(userId: string, idempotencyKey: string): Promise<SimSession | undefined>;
+
+  // Sim Events
+  getSimEvents(sessionId: string, fromSeq?: number, limit?: number): Promise<SimEvent[]>;
+  insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent>;
+  updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1169,6 +1187,74 @@ export class DatabaseStorage implements IStorage {
     }
 
     console.log(`Seeded ${profiles.length} strategy profiles`);
+  }
+
+  // Sim Sessions
+  async getSimSession(id: string): Promise<SimSession | undefined> {
+    const [session] = await db.select().from(simSessions).where(eq(simSessions.id, id));
+    return session;
+  }
+
+  async getSimSessionsByUser(userId: string, status?: string): Promise<SimSession[]> {
+    if (status) {
+      return await db.select().from(simSessions)
+        .where(and(eq(simSessions.userId, userId), eq(simSessions.status, status)))
+        .orderBy(desc(simSessions.createdAt));
+    }
+    return await db.select().from(simSessions)
+      .where(eq(simSessions.userId, userId))
+      .orderBy(desc(simSessions.createdAt));
+  }
+
+  async createSimSession(session: InsertSimSession): Promise<SimSession> {
+    const [created] = await db.insert(simSessions).values(session).returning();
+    return created;
+  }
+
+  async updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined> {
+    const [updated] = await db.update(simSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(simSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getSimSessionByIdempotencyKey(userId: string, idempotencyKey: string): Promise<SimSession | undefined> {
+    const [session] = await db.select().from(simSessions)
+      .where(and(eq(simSessions.userId, userId), eq(simSessions.idempotencyKey, idempotencyKey)));
+    return session;
+  }
+
+  // Sim Events
+  async getSimEvents(sessionId: string, fromSeq?: number, limit?: number): Promise<SimEvent[]> {
+    let query = db.select().from(simEvents)
+      .where(fromSeq !== undefined
+        ? and(eq(simEvents.sessionId, sessionId), gte(simEvents.seq, fromSeq))
+        : eq(simEvents.sessionId, sessionId))
+      .orderBy(simEvents.seq);
+
+    if (limit) {
+      query = query.limit(limit) as typeof query;
+    }
+
+    return await query;
+  }
+
+  async insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent> {
+    const [event] = await db.insert(simEvents).values({
+      sessionId,
+      seq,
+      ts,
+      type,
+      payload,
+    }).onConflictDoNothing().returning();
+    return event;
+  }
+
+  async updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void> {
+    await db.update(simSessions)
+      .set({ lastSeq, updatedAt: new Date() })
+      .where(eq(simSessions.id, sessionId));
   }
 }
 
