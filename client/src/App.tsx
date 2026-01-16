@@ -23,6 +23,7 @@ import Activity from "@/pages/activity/index";
 import Receipt from "@/pages/activity/receipt";
 import Settings from "@/pages/settings/index";
 import SecuritySettings from "@/pages/settings/security";
+import Statements from "@/pages/statements";
 import OnboardingWelcome from "@/pages/onboarding/index";
 import OnboardingVerify from "@/pages/onboarding/verify";
 import OnboardingConsent from "@/pages/onboarding/consent";
@@ -50,6 +51,7 @@ function ProtectedRouter() {
           <Route path="/activity/:operationId" component={Receipt} />
           <Route path="/settings" component={Settings} />
           <Route path="/settings/security" component={SecuritySettings} />
+          <Route path="/statements" component={Statements} />
           <Route path="/inbox" component={Inbox} />
           <Route component={NotFound} />
         </Switch>
