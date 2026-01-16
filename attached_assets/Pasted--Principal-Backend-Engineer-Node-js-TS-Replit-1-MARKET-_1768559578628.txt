@@ -1,0 +1,66 @@
+Ты — Principal Backend Engineer (Node.js/TS) в существующем репозитории Replit.
+
+ИТЕРАЦИЯ 1: MARKET DATA FOUNDATION
+Шаг 2/4: Storage + Market Data Layer (cache+binance) без UI.
+
+ОБЩИЕ ПРАВИЛА:
+1) Не переписывай проект целиком.
+2) Никаких TODO/placeholder.
+3) В конце: patch + walkthrough + changed files.
+4) Следуй паттернам репо: server/db.ts, server/storage.ts, роутинг. /api/bootstrap не менять.
+5) Idempotency: свечи пишем UPSERT по UNIQUE(exchange,symbol,timeframe,ts).
+6) Детерминированность: никакого рандомного jitter/backoff; сортировка ts asc; дедуп по ts; стабильные сообщения reason.
+
+ТРЕБОВАНИЯ К СЛОЯМ:
+A) Binance Spot datasource (ТОЛЬКО получить свечи, без записи в БД)
+- новый модуль в server/... по стилю репо (например server/data/binanceSpot.ts)
+- пагинация под лимиты Binance klines
+- retry/backoff:
+  - 429: экспоненциальный backoff БЕЗ jitter (фиксированные шаги)
+  - retry на временные сетевые/5xx
+  - таймаут запроса
+- нормализация ответа → Candle[]:
+  - конвертация чисел в number
+  - дедуп по ts
+  - сортировка ts asc
+
+B) Storage API (DatabaseStorage) — добавить методы:
+- getCandlesFromCache(exchange, symbol, timeframe, startMs, endMs): Promise<Candle[]>
+  - диапазон [startMs, endMs), сортировка asc
+- upsertCandles(exchange, symbol, timeframe, candles: Candle[]): Promise<void>
+  - батчи, UPSERT по (exchange,symbol,timeframe,ts), без дублей
+- (если реально полезно) getMissingRanges(exchange, symbol, timeframe, startMs, endMs): Promise<Array<{startMs:number; endMs:number}>>
+  - строго детерминированно; отсортировано; без пересечений
+
+C) Market Data Layer service: loadCandles
+Сделай единый entrypoint (например server/marketData/loadCandles.ts или аналогично стилю):
+loadCandles({ exchange, symbol, timeframe, startMs, endMs }): Promise<LoadCandlesResult>
+
+Семантика:
+- диапазон строго [startMs, endMs)
+- шаг сетки:
+  15m = 900000
+  1h  = 3600000
+  1d  = 86400000
+- алгоритм:
+  1) прочитать кэш
+  2) определить missing ranges
+  3) если missing → сходить в Binance datasource, затем upsert в БД (батчами)
+  4) перечитать кэш и получить полный ряд на диапазон
+  5) проверить дырки по сетке; если есть — ровно 1 повторная попытка дозагрузить missing ranges
+  6) если дырки остались — сформировать gaps[] со стабильным reason (например "missing_candles_after_retry")
+- source:
+  - "cache" если НЕ было сетевых запросов
+  - "cache+binance" если был хотя бы один запрос к Binance
+
+ВАЖНО:
+- Всё должно быть тестопригодно: datasource должен позволять подменить fetch/transport в тестах.
+- Возвращаемые candles/gaps строго отсортированы и детерминированы.
+
+ВЫВОД В КОНЦЕ:
+--- PATCH ---
+(unified diff)
+--- WALKTHROUGH ---
+(как локально прогнать быстрый smoke test без API: пример вызова loadCandles из node/ts скрипта или через существующие dev entrypoints)
+--- CHANGED FILES ---
+(список)
