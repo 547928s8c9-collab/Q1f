@@ -234,6 +234,44 @@ const operation = await withTransaction(async (tx) => {
 
 - **Files:** `server/db.ts`, `server/routes.ts`
 
+### NEXT-05: Auto-Sweep in Daily Payout (DONE - Jan 2026)
+- **Goal:** When profit is accrued, automatically sweep a percentage to enabled vaults with full transparency
+- **Implementation:**
+  - Profit delta identified: `payoutAmount` from daily return calculation (0.1-0.3% of position currentValue)
+  - For each vault with `autoSweepEnabled=true` and `autoSweepPct > 0`:
+    - Calculate: `sweepAmount = profitDelta * autoSweepPct / 100`
+    - Execute atomic transaction (wallet deduct → vault credit → operation → audit)
+  - Create notification for user visibility in activity/inbox
+  
+- **Auto-Sweep Flow:**
+```
+1. Daily payout accrues profit → payoutAmount credited to wallet
+2. For each vault with auto-sweep enabled:
+   - sweepAmount = payoutAmount × vault.autoSweepPct / 100
+   - ATOMIC TRANSACTION:
+     - Re-fetch wallet balance (consistency)
+     - assertNonNegative(afterSweep) 
+     - wallet -= sweepAmount
+     - vault += sweepAmount
+     - INSERT operation (type: VAULT_TRANSFER, reason: AUTO_SWEEP)
+     - INSERT audit_log (event: VAULT_TRANSFER_AUTO_SWEEP)
+   - CREATE notification ("Auto-sweep executed")
+```
+
+- **Records Created:**
+
+| Record Type | Details |
+|-------------|---------|
+| Operation | type=VAULT_TRANSFER, reason=AUTO_SWEEP, metadata={autoSweep:true, sweepPct} |
+| Audit Log | event=VAULT_TRANSFER_AUTO_SWEEP, details={amountMinor, sweepPct, profitDelta} |
+| Notification | type=transaction, title="Auto-sweep executed", ctaUrl=/wallet/vaults |
+
+- **Per-Vault Configuration:**
+  - `autoSweepEnabled`: boolean toggle
+  - `autoSweepPct`: 0-100 integer (percentage of each profit delta to sweep)
+  
+- **Files:** `server/routes.ts` (daily payout endpoint lines 1382-1476)
+
 ---
 
 ## Next Iteration Recommendations

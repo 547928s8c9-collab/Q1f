@@ -1376,7 +1376,7 @@ export async function registerRoutes(
           userAgent: req.headers["user-agent"] || null,
         });
 
-        // Auto-sweep: check each vault for enabled auto-sweep
+        // Auto-sweep: check each vault for enabled auto-sweep (atomic transaction)
         const userVaults = await storage.getVaults(userId);
         for (const vault of userVaults) {
           if (vault.autoSweepEnabled && vault.autoSweepPct && vault.autoSweepPct > 0) {
@@ -1385,60 +1385,89 @@ export async function registerRoutes(
             if (sweepAmount <= 0n) continue;
 
             const sweepAmountStr = sweepAmount.toString();
+            const vaultType = vault.type;
+            const vaultPct = vault.autoSweepPct;
+            const vaultGoalName = vault.goalName;
 
-            // Deduct from wallet balance
-            const updatedBalance = await storage.getBalance(userId, "USDT");
-            const afterSweep = (BigInt(updatedBalance?.available || "0") - sweepAmount).toString();
-            await storage.updateBalance(userId, "USDT", afterSweep, updatedBalance?.locked || "0");
+            // ATOMIC TRANSACTION: wallet deduct + vault credit + operation + audit
+            const sweepOperation = await withTransaction(async (tx) => {
+              // Re-fetch wallet balance within transaction
+              const [currentBalance] = await tx.select().from(balances)
+                .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
+              
+              if (!currentBalance || BigInt(currentBalance.available) < sweepAmount) {
+                throw new Error("INSUFFICIENT_BALANCE_FOR_AUTO_SWEEP");
+              }
 
-            // Credit to vault
-            const newVaultBalance = (BigInt(vault.balance) + sweepAmount).toString();
-            await storage.updateVault(userId, vault.type, newVaultBalance);
+              // Calculate new balance with invariant check
+              const afterSweep = BigInt(currentBalance.available) - sweepAmount;
+              assertNonNegative(afterSweep, "wallet balance (auto-sweep)");
 
-            // Create sweep operation
-            const sweepOperation = await storage.createOperation({
-              userId,
-              type: "VAULT_TRANSFER",
-              status: "completed",
-              asset: "USDT",
-              amount: sweepAmountStr,
-              fee: "0",
-              txHash: null,
-              providerRef: null,
-              strategyId: null,
-              strategyName: null,
-              fromVault: "wallet",
-              toVault: vault.type,
-              metadata: { autoSweep: true, sweepPct: vault.autoSweepPct },
-              reason: null,
-            });
+              // Deduct from wallet
+              await tx.update(balances)
+                .set({ available: afterSweep.toString(), updatedAt: new Date() })
+                .where(eq(balances.id, currentBalance.id));
 
-            // Audit log for auto-sweep
-            await storage.createAuditLog({
-              userId,
-              event: "VAULT_TRANSFER_AUTO_SWEEP",
-              resourceType: "operation",
-              resourceId: sweepOperation.id,
-              details: {
-                amountMinor: sweepAmountStr,
+              // Credit to vault
+              const [currentVault] = await tx.select().from(vaults)
+                .where(and(eq(vaults.userId, userId), eq(vaults.type, vaultType)));
+              
+              const newVaultBalance = (BigInt(currentVault?.balance || "0") + sweepAmount).toString();
+              if (currentVault) {
+                await tx.update(vaults)
+                  .set({ balance: newVaultBalance, updatedAt: new Date() })
+                  .where(eq(vaults.id, currentVault.id));
+              } else {
+                await tx.insert(vaults).values({ userId, type: vaultType, asset: "USDT", balance: newVaultBalance });
+              }
+
+              // Create sweep operation
+              const [op] = await tx.insert(operations).values({
+                userId,
+                type: "VAULT_TRANSFER",
+                status: "completed",
                 asset: "USDT",
+                amount: sweepAmountStr,
+                fee: "0",
+                txHash: null,
+                providerRef: null,
+                strategyId: null,
+                strategyName: null,
                 fromVault: "wallet",
-                toVault: vault.type,
-                autoSweep: true,
-                sweepPct: vault.autoSweepPct,
-                profitDelta: payoutAmount,
-                requestId: req.requestId,
-              },
-              ip: req.ip || null,
-              userAgent: req.headers["user-agent"] || null,
+                toVault: vaultType,
+                metadata: { autoSweep: true, sweepPct: vaultPct },
+                reason: "AUTO_SWEEP",
+              }).returning();
+
+              // Audit log
+              await tx.insert(auditLogs).values({
+                userId,
+                event: "VAULT_TRANSFER_AUTO_SWEEP",
+                resourceType: "operation",
+                resourceId: op.id,
+                details: {
+                  amountMinor: sweepAmountStr,
+                  asset: "USDT",
+                  fromVault: "wallet",
+                  toVault: vaultType,
+                  autoSweep: true,
+                  sweepPct: vaultPct,
+                  profitDelta: payoutAmount,
+                  requestId: req.requestId,
+                },
+                ip: req.ip || null,
+                userAgent: req.headers["user-agent"] || null,
+              });
+
+              return op;
             });
 
-            // Create notification for auto-sweep
+            // Create notification for auto-sweep (outside transaction, non-critical)
             await storage.createNotification({
               userId,
               type: "transaction",
               title: "Auto-sweep executed",
-              message: `${formatMoney(sweepAmountStr, "USDT")} swept to ${vault.goalName || vault.type} vault (${vault.autoSweepPct}% of profit)`,
+              message: `${formatMoney(sweepAmountStr, "USDT")} swept to ${vaultGoalName || vaultType} vault (${vaultPct}% of profit)`,
               priority: "low",
               ctaLabel: "View Vaults",
               ctaUrl: "/wallet/vaults",
