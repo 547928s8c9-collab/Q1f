@@ -345,11 +345,6 @@ export default function LiveSessionDetail() {
         title={profile.displayName}
         subtitle={`${profile.symbol} · ${profile.timeframe}`}
         backHref="/live-sessions"
-        action={
-          <Chip variant="outline" size="md" icon={<Activity className="w-3.5 h-3.5" />}>
-            Simulation Only
-          </Chip>
-        }
       />
 
       <div className="space-y-6">

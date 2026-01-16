@@ -39,7 +39,7 @@ export default function StrategyDetail() {
   const { toast } = useToast();
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
   const [benchmark, setBenchmark] = useState<Benchmark>("BTC");
-  const [demoAmount, setDemoAmount] = useState("1000");
+  const [Amount, setAmount] = useState("1000");
   
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
@@ -215,9 +215,9 @@ export default function StrategyDetail() {
   const lastStrategyValue = strategyData[strategyData.length - 1]?.value || 100;
   const strategyReturn = ((lastStrategyValue - 100) / 100) * 100;
   
-  const demoAmountNum = parseFloat(demoAmount) || 1000;
-  const demoResult = demoAmountNum * (1 + strategyReturn / 100);
-  const demoPnL = demoResult - demoAmountNum;
+  const AmountNum = parseFloat(Amount) || 1000;
+  const Result = AmountNum * (1 + strategyReturn / 100);
+  const PnL = Result - AmountNum;
 
   const minReturn = strategy?.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0";
   const maxReturn = strategy?.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0";
@@ -265,7 +265,6 @@ export default function StrategyDetail() {
 
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
-            <span className="text-sm text-warning">DEMO DATA - Past performance is not indicative of future results. Your investment may lose value.</span>
           </div>
 
           <Card className="p-5 mb-6">
@@ -309,37 +308,36 @@ export default function StrategyDetail() {
           <Card className="p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Calculator className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold">Demo Calculator</h3>
-              <Badge variant="outline" className="text-xs">DEMO</Badge>
+              <h3 className="text-lg font-semibold">Calculator</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
               See what your investment would have returned over the selected {period}-day period.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="demo-amount">Initial Investment (USDT)</Label>
+                <Label htmlFor="amount">Initial Investment (USDT)</Label>
                 <Input
-                  id="demo-amount"
+                  id="amount"
                   type="number"
-                  value={demoAmount}
-                  onChange={(e) => setDemoAmount(e.target.value)}
+                  value={Amount}
+                  onChange={(e) => setAmount(e.target.value)}
                   className="mt-1"
-                  data-testid="input-demo-amount"
+                  data-testid="input-amount"
                 />
               </div>
               <div className="flex flex-col justify-end">
                 <Label className="text-muted-foreground">Final Value</Label>
-                <p className="text-2xl font-bold tabular-nums">{demoResult.toFixed(2)} USDT</p>
+                <p className="text-2xl font-bold tabular-nums">{Result.toFixed(2)} USDT</p>
               </div>
               <div className="flex flex-col justify-end">
                 <Label className="text-muted-foreground">Profit/Loss</Label>
-                <p className={cn("text-2xl font-bold tabular-nums", demoPnL >= 0 ? "text-positive" : "text-negative")}>
-                  {demoPnL >= 0 ? "+" : ""}{demoPnL.toFixed(2)} USDT
+                <p className={cn("text-2xl font-bold tabular-nums", PnL >= 0 ? "text-positive" : "text-negative")}>
+                  {PnL >= 0 ? "+" : ""}{PnL.toFixed(2)} USDT
                 </p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Result can be negative. This is a simulation based on historical demo data only.
+              Results may vary. Investment returns can be negative.
             </p>
           </Card>
 

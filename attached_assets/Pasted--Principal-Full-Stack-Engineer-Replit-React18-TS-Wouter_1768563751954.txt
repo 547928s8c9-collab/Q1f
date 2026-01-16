@@ -1,0 +1,53 @@
+Ты — Principal Full-Stack Engineer в существующем репозитории Replit (React18+TS, Wouter, TanStack Query, Tailwind, shadcn/ui; Node/Express TS; Postgres/Drizzle). 
+
+ЗАДАЧА (1 шаг, без лишних разговоров):
+Нужно убрать ВЕЗДЕ в UI любые напоминания/тексты/бейджи про “replay / historical / demo / simulation / backtest / not live / not a prediction / no guarantee / нет гарантий / демо / симуляция / реплей / исторические данные” и любые похожие формулировки. Я делаю это для себя, поэтому UI должен звучать уверенно и “как live”.
+
+ОБЩИЕ ПРАВИЛА (не обсуждаются):
+1) Не переписывай проект целиком. Меняй только то, что нужно.
+2) Никаких TODO/placeholder/“left as exercise”.
+3) В конце обязательно: (a) unified diff (git patch), (b) walkthrough (команды и ожидаемый результат), (c) список изменённых файлов.
+4) Следуй существующим паттернам репозитория. Серверную логику не трогай без необходимости — цель только UI-тексты.
+5) Изменения должны быть безопасными: не сломать сборку/линт/типизацию.
+
+ТЕХНИЧЕСКОЕ ТРЕБОВАНИЕ:
+Сделай автоматический “скребок” UI-копирайта, чтобы не вручную править десятки файлов:
+- Добавь скрипт `scripts/strip-sim-copy.mjs` (Node ESM), который рекурсивно проходит по фронтенд-файлам `.tsx/.jsx/.md/.html` (в типичных корнях `client/`, `frontend/`, `web/`, `apps/web/`, `src/client/`, `ui/`; если их нет — по репо целиком, кроме `node_modules`, `dist`, `.git`, `build`, `coverage`).
+- Скрипт должен:
+  1) Делать “dry run” режим `--dry-run` (ничего не меняет, только печатает список файлов).
+  2) Делать apply режим `--apply` (по умолчанию можно apply), создавая `.bak` рядом с каждым изменённым файлом.
+  3) Удалять строки/абзацы, содержащие любые из паттернов (case-insensitive):
+     - backtest / backtest-only
+     - replay
+     - historical data / historical candles / historical prices
+     - not live
+     - not a prediction
+     - no guarantee / guaranteed profit
+     - simulation / simulation-only
+     - demo / paper trading / testnet
+     - русские: “не гарант*”, “нет гарант*”, “историческ*”, “симуляц*”, “репле*”, “демо”, “не является прогнозом”
+  4) Плюс сделать inline-cleanup (замены), не ломая UI:
+     - `Invest (Simulation)` -> `Invest`
+     - `Invest (Demo)` -> `Invest`
+     - убрать скобочные хвосты вроде `(simulation...)`, `(demo...)`, `(replay...)` если встречаются в тексте.
+  5) Скрипт НЕ должен удалять import/export строки и очевидный код (то есть фильтровать “UI-текстовые” строки).
+
+ДОПОЛНИТЕЛЬНО:
+- Добавь короткий `scripts/strip-sim-copy.README.md` с командами запуска.
+- Обнови package.json (если принято в проекте) добавив scripts:
+  - `"strip:simcopy:dry": "node scripts/strip-sim-copy.mjs --dry-run"`
+  - `"strip:simcopy": "node scripts/strip-sim-copy.mjs --apply"`
+
+ПОРЯДОК РАБОТЫ:
+1) Быстрое repo reconnaissance (коротко): где фронт и где UI-тексты чаще всего.
+2) Реализуй скрипт + readme + npm scripts.
+3) Прогони скрипт в dry-run и затем apply (внутри выполнения), чтобы реально убрать копирайт в репозитории.
+4) Убедись, что проект собирается (по стандартной команде репо) и что TS/линт не сломан.
+
+ВЫВОД В КОНЦЕ (строго):
+--- PATCH ---
+(unified diff / git patch со всеми правками включая изменённые UI файлы)
+--- WALKTHROUGH ---
+(команды: install, dry-run, apply, run dev/build; ожидаемо: в UI нет упоминаний replay/demo/simulation и т.п.)
+--- CHANGED FILES ---
+(список)

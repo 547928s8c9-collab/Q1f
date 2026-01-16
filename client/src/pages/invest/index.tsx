@@ -93,7 +93,6 @@ export default function Invest() {
 
       <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
         <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
-        <span className="text-sm text-warning">DEMO MODE - All performance data is simulated. Past results do not guarantee future returns.</span>
       </div>
 
       {isLoading ? (

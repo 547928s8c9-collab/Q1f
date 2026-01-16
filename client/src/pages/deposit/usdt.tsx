@@ -39,7 +39,7 @@ export default function DepositUSDT() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Simulation failed",
+        title: "Deposit failed",
         description: error.message,
         variant: "destructive",
       });
@@ -86,7 +86,7 @@ export default function DepositUSDT() {
 
       <Card className="p-5">
         <div className="mb-4">
-          <h3 className="font-medium mb-2">Simulate Deposit (Demo)</h3>
+          <h3 className="font-medium mb-2">Simulate Deposit</h3>
           <p className="text-sm text-muted-foreground">
             For testing purposes, you can simulate a USDT deposit.
           </p>

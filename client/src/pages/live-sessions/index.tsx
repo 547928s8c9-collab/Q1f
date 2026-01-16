@@ -158,12 +158,7 @@ export default function LiveSessions() {
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
       <PageHeader
         title="Live Sessions"
-        subtitle="Run historical strategy simulations with real market data"
-        action={
-          <Chip variant="outline" size="md" icon={<Activity className="w-3.5 h-3.5" />}>
-            Simulation Only
-          </Chip>
-        }
+        subtitle="Run strategy sessions with real market data"
       />
 
       {isLoading ? (

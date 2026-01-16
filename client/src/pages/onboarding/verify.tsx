@@ -24,7 +24,7 @@ export default function OnboardingVerify() {
       setCodeSent(true);
       toast({
         title: "Code sent",
-        description: "Check your email for the verification code (demo: use any 6 digits)",
+        description: "Check your email for the verification code",
       });
     },
     onError: (error: Error) => {
@@ -121,7 +121,7 @@ export default function OnboardingVerify() {
                   data-testid="input-verification-code"
                 />
                 <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Demo: Enter any 6 digits to verify
+                  Enter the 6-digit code sent to your email
                 </p>
               </div>
               <Button

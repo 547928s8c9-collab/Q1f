@@ -191,7 +191,7 @@ export default function OnboardingKyc() {
 
             <div className="bg-muted/50 rounded-lg p-4 mb-6">
               <p className="text-xs text-muted-foreground text-center">
-                Demo mode: Click start to simulate the verification process
+                Click start to begin the verification process
               </p>
             </div>
 
