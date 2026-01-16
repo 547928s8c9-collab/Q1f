@@ -1,0 +1,59 @@
+ИТЕРАЦИЯ 2: MARKET SESSIONS + LIVE STREAM (REPLAY)
+
+1) DB: таблица market_sessions (Drizzle + миграция)
+Поля:
+- id (uuid/text как принято)
+- user_id (если в проекте есть юзеры; иначе nullable)
+- created_at
+- mode: "replay" (строка)
+- symbols_json (json array)
+- timeframe
+- start_ms, end_ms (bigint)
+- speed (int: 1|5|10|50|100)
+- status ("CREATED"|"RUNNING"|"STOPPED"|"DONE")
+- cursor_ms (bigint) — “текущее воспроизводимое время”
+Индексы:
+- (user_id, created_at)
+- (status)
+
+2) Сервис MarketSessionRunner
+Задача: по sessionId стримить свечи в порядке времени с учётом speed.
+Требования:
+- детерминизм: одинаковая сессия -> одинаковый порядок событий
+- backpressure: если клиент отваливается — корректно прекращать отправку
+- stop: останавливает эмиссию и фиксирует status/cursor
+- start: продолжает с cursor_ms, а не с начала
+
+3) SSE endpoint (единый контракт событий)
+- GET /api/market/sessions/:id/stream
+  SSE события ТОЛЬКО такого вида:
+  a) session_status: {type:"session_status", sessionId, status, cursorMs}
+  b) candle: {type:"candle", sessionId, symbol, timeframe, candle}
+  c) heartbeat: {type:"heartbeat", sessionId, ts}
+Строго: JSON в data:, event типы можно не использовать, но payload должен содержать поле type.
+Никаких слов “history/backtest” в API.
+
+4) Управление сессиями
+- POST /api/market/sessions  body:{symbols,timeframe,start,end,speed} -> {sessionId}
+- POST /api/market/sessions/:id/start -> {status}
+- POST /api/market/sessions/:id/stop  -> {status}
+
+5) Данные свечей для стрима
+Runner должен брать свечи через loadCandles() из итерации 1 (кэш+догрузка).
+Стримить только в пределах [start,end).
+
+6) Тесты (минимум 4 на эту итерацию)
+- события идут с монотонным cursorMs
+- stop фиксирует статус и прекращает эмиссию
+- resume продолжает с cursorMs
+- payload соответствует контракту (type поля, обязательные поля присутствуют)
+
+Вывод:
+- unified diff
+- walkthrough:
+  - создать session
+  - открыть stream (curl -N)
+  - start
+  - увидеть бегущие candle события
+  - stop/resume проверить
+- перечисли изменённые файлы

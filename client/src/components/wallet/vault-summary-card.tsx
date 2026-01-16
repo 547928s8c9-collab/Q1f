@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Money } from "@/components/ui/money";
 import { Lock, TrendingUp, Receipt, ArrowRightLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { VaultData } from "@shared/schema";
 
 function toMajorUnits(minorUnits: string, decimals: number = 6): number {
   const value = BigInt(minorUnits || "0");
@@ -13,9 +14,9 @@ function toMajorUnits(minorUnits: string, decimals: number = 6): number {
 }
 
 interface VaultSummaryCardProps {
-  principal: string;
-  profit: string;
-  taxes: string;
+  principal: VaultData;
+  profit: VaultData;
+  taxes: VaultData;
   asset?: string;
   onTransfer?: () => void;
   onViewDetails?: () => void;
@@ -57,9 +58,13 @@ export function VaultSummaryCard({
   onViewDetails,
 }: VaultSummaryCardProps) {
   const decimals = asset === "USDT" ? 6 : 2;
-  const vaultBalances = { principal, profit, taxes };
+  const vaultBalances = { 
+    principal: principal.balance, 
+    profit: profit.balance, 
+    taxes: taxes.balance 
+  };
   const totalMinor = (
-    BigInt(principal) + BigInt(profit) + BigInt(taxes)
+    BigInt(principal.balance) + BigInt(profit.balance) + BigInt(taxes.balance)
   ).toString();
   const totalMajor = toMajorUnits(totalMinor, decimals);
 

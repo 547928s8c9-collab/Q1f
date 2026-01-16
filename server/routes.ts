@@ -659,6 +659,18 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Strategy not found" });
       }
 
+      // Check if position is paused (risk control)
+      const existingPosition = await storage.getPosition(userId, strategyId);
+      if (existingPosition?.paused) {
+        return res.status(403).json({ 
+          error: "Strategy paused",
+          code: "STRATEGY_PAUSED",
+          message: existingPosition.pausedReason === "dd_breach" 
+            ? "This strategy is paused due to drawdown limit breach. Please review your risk settings."
+            : "This strategy is currently paused. Resume it to make new investments."
+        });
+      }
+
       const balance = await storage.getBalance(userId, "USDT");
       if (BigInt(balance?.available || "0") < BigInt(amount)) {
         return res.status(400).json({ error: "Insufficient balance" });
@@ -1847,6 +1859,135 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== RISK CONTROL ROUTES ====================
+
+  // GET /api/positions/:strategyId/risk-controls (protected)
+  app.get("/api/positions/:strategyId/risk-controls", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { strategyId } = req.params;
+
+      const position = await storage.getPosition(userId, strategyId);
+      if (!position) {
+        return res.json({
+          paused: false,
+          ddLimitPct: 0,
+          autoPauseEnabled: false,
+          pausedAt: null,
+          pausedReason: null,
+          hasPosition: false,
+        });
+      }
+
+      // Calculate current drawdown
+      const principal = BigInt(position.principalMinor || "0");
+      const current = BigInt(position.investedCurrentMinor || "0");
+      let currentDrawdownPct = 0;
+      if (principal > 0n && principal > current) {
+        currentDrawdownPct = Number(((principal - current) * 100n) / principal);
+      }
+
+      res.json({
+        paused: position.paused,
+        ddLimitPct: position.ddLimitPct,
+        autoPauseEnabled: position.autoPauseEnabled,
+        pausedAt: position.pausedAt?.toISOString() || null,
+        pausedReason: position.pausedReason,
+        hasPosition: true,
+        currentDrawdownPct,
+      });
+    } catch (error) {
+      console.error("Get risk controls error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/positions/:strategyId/risk-controls (protected)
+  app.post("/api/positions/:strategyId/risk-controls", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { strategyId } = req.params;
+
+      const schema = z.object({
+        ddLimitPct: z.number().int().min(0).max(100).optional(),
+        autoPauseEnabled: z.boolean().optional(),
+      });
+      const { ddLimitPct, autoPauseEnabled } = schema.parse(req.body);
+
+      const position = await storage.getPosition(userId, strategyId);
+      if (!position) {
+        return res.status(404).json({ error: "Position not found" });
+      }
+
+      const updates: Partial<typeof position> = {};
+      if (ddLimitPct !== undefined) updates.ddLimitPct = ddLimitPct;
+      if (autoPauseEnabled !== undefined) updates.autoPauseEnabled = autoPauseEnabled;
+
+      const updated = await storage.updatePosition(position.id, updates);
+
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        event: "RISK_CONTROLS_UPDATED",
+        resourceType: "position",
+        resourceId: position.id,
+        details: { strategyId, ddLimitPct, autoPauseEnabled },
+      });
+
+      res.json({ success: true, position: updated });
+    } catch (error) {
+      console.error("Update risk controls error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/positions/:strategyId/pause (protected)
+  app.post("/api/positions/:strategyId/pause", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { strategyId } = req.params;
+
+      const schema = z.object({
+        paused: z.boolean(),
+      });
+      const { paused } = schema.parse(req.body);
+
+      const position = await storage.getPosition(userId, strategyId);
+      if (!position) {
+        return res.status(404).json({ error: "Position not found" });
+      }
+
+      const updates: Partial<typeof position> = {
+        paused,
+        pausedAt: paused ? new Date() : null,
+        pausedReason: paused ? "manual" : null,
+      };
+
+      const updated = await storage.updatePosition(position.id, updates);
+
+      // Audit log
+      await storage.createAuditLog({
+        userId,
+        event: paused ? "STRATEGY_PAUSED" : "STRATEGY_RESUMED",
+        resourceType: "position",
+        resourceId: position.id,
+        details: { strategyId, reason: "manual" },
+      });
+
+      const strategy = await storage.getStrategy(strategyId);
+      res.json({ 
+        success: true, 
+        position: updated,
+        message: paused 
+          ? `${strategy?.name || "Strategy"} has been paused`
+          : `${strategy?.name || "Strategy"} has been resumed`
+      });
+    } catch (error) {
+      console.error("Pause position error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ==================== REDEMPTION ROUTES ====================
 
   // Helper function to calculate next weekly window (Sunday 00:00 UTC)
@@ -1955,9 +2096,15 @@ export async function registerRoutes(
     try {
       const today = new Date().toISOString().split("T")[0];
       const positions = await storage.getAllPositions();
-      const results: Array<{ positionId: string; accrued: string; status: string }> = [];
+      const results: Array<{ positionId: string; accrued: string; status: string; ddBreached?: boolean }> = [];
 
       for (const position of positions) {
+        // Skip paused positions from accrual
+        if (position.paused) {
+          results.push({ positionId: position.id, accrued: "0", status: "paused" });
+          continue;
+        }
+
         // Skip if already accrued today
         if (position.lastAccrualDate === today) {
           results.push({ positionId: position.id, accrued: "0", status: "already_processed" });
@@ -1992,6 +2139,69 @@ export async function registerRoutes(
         // Accrued profit payable only increases for positive returns
         const currentAccrued = BigInt(position.accruedProfitPayableMinor || "0");
         const newAccrued = profitMinor > 0n ? currentAccrued + profitMinor : currentAccrued;
+
+        // Check for drawdown breach (if auto-pause enabled with DD limit)
+        let ddBreached = false;
+        const principal = BigInt(position.principalMinor || "0");
+        if (position.autoPauseEnabled && position.ddLimitPct > 0 && principal > 0n) {
+          // Calculate drawdown: (principal - current) / principal * 100
+          const drawdownPct = principal > newInvested 
+            ? Number(((principal - newInvested) * 100n) / principal)
+            : 0;
+          
+          if (drawdownPct >= position.ddLimitPct) {
+            ddBreached = true;
+            
+            // Auto-pause the position
+            await storage.updatePosition(position.id, {
+              investedCurrentMinor: newInvested.toString(),
+              accruedProfitPayableMinor: newAccrued.toString(),
+              currentValue: newInvested.toString(),
+              lastAccrualDate: today,
+              paused: true,
+              pausedAt: new Date(),
+              pausedReason: "dd_breach",
+            });
+
+            // Create audit log
+            await storage.createAuditLog({
+              userId: position.userId,
+              event: "DD_BREACH_AUTO_PAUSE",
+              resourceType: "position",
+              resourceId: position.id,
+              details: { 
+                strategyId: position.strategyId,
+                strategyName: strategy.name,
+                ddLimitPct: position.ddLimitPct,
+                actualDrawdownPct: drawdownPct,
+                principal: principal.toString(),
+                currentValue: newInvested.toString(),
+              },
+            });
+
+            // Create notification
+            await storage.createNotification({
+              userId: position.userId,
+              type: "security",
+              title: "Strategy Auto-Paused",
+              message: `Your ${strategy.name} position was automatically paused due to a ${drawdownPct.toFixed(1)}% drawdown (limit: ${position.ddLimitPct}%).`,
+              metadata: { 
+                strategyId: position.strategyId,
+                positionId: position.id,
+                drawdownPct,
+                ddLimitPct: position.ddLimitPct,
+              },
+            });
+
+            results.push({ 
+              positionId: position.id, 
+              accrued: profitMinor.toString(), 
+              status: "dd_breach_paused",
+              ddBreached: true,
+            });
+            continue;
+          }
+        }
 
         await storage.updatePosition(position.id, {
           investedCurrentMinor: newInvested.toString(),

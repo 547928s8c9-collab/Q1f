@@ -98,6 +98,12 @@ export const positions = pgTable("positions", {
   investedCurrentMinor: text("invested_current_minor").notNull().default("0"), // current value including gains/losses
   accruedProfitPayableMinor: text("accrued_profit_payable_minor").notNull().default("0"), // profit available for payout
   lastAccrualDate: text("last_accrual_date"), // last date accrual was processed
+  // Risk controls
+  paused: boolean("paused").notNull().default(false),
+  ddLimitPct: integer("dd_limit_pct").notNull().default(0), // 0 = no limit, otherwise max drawdown % before auto-pause
+  autoPauseEnabled: boolean("auto_pause_enabled").notNull().default(false),
+  pausedAt: timestamp("paused_at"),
+  pausedReason: text("paused_reason"), // e.g., "manual", "dd_breach"
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

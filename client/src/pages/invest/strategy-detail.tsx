@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { PageHeader } from "@/components/ui/page-header";
 import { CompareChart } from "@/components/charts/compare-chart";
 import { PeriodToggle } from "@/components/charts/period-toggle";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, AlertTriangle, Shield, Zap, Calculator, Wallet, Info, ExternalLink } from "lucide-react";
+import { TrendingUp, AlertTriangle, Shield, Zap, Calculator, Wallet, Info, ExternalLink, ShieldAlert, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Strategy, type StrategyPerformance, type PayoutInstruction, type WhitelistAddress, formatMoney } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -46,6 +47,20 @@ export default function StrategyDetail() {
   const [payoutMinAmount, setPayoutMinAmount] = useState("10");
   const [payoutActive, setPayoutActive] = useState(false);
 
+  // Risk controls state
+  const [ddLimitPct, setDdLimitPct] = useState(0);
+  const [autoPauseEnabled, setAutoPauseEnabled] = useState(false);
+
+  interface RiskControlsResponse {
+    paused: boolean;
+    ddLimitPct: number;
+    autoPauseEnabled: boolean;
+    pausedAt: string | null;
+    pausedReason: string | null;
+    hasPosition: boolean;
+    currentDrawdownPct: number;
+  }
+
   const { data: strategy, isLoading: strategyLoading } = useQuery<Strategy>({
     queryKey: ["/api/strategies", params.id],
   });
@@ -63,6 +78,11 @@ export default function StrategyDetail() {
     queryKey: ["/api/security/whitelist"],
   });
 
+  const { data: riskControls } = useQuery<RiskControlsResponse>({
+    queryKey: ["/api/positions", params.id, "risk-controls"],
+    enabled: !!params.id,
+  });
+
   // Initialize payout settings from fetched instruction
   useEffect(() => {
     if (payoutInstruction) {
@@ -72,6 +92,14 @@ export default function StrategyDetail() {
       setPayoutActive(payoutInstruction.active || false);
     }
   }, [payoutInstruction]);
+
+  // Initialize risk controls from fetched data
+  useEffect(() => {
+    if (riskControls) {
+      setDdLimitPct(riskControls.ddLimitPct);
+      setAutoPauseEnabled(riskControls.autoPauseEnabled);
+    }
+  }, [riskControls]);
 
   const savePayoutMutation = useMutation({
     mutationFn: async (data: { 
@@ -106,6 +134,38 @@ export default function StrategyDetail() {
       minPayoutMinor,
       active: payoutActive,
     });
+  };
+
+  const pauseMutation = useMutation({
+    mutationFn: async (paused: boolean) => {
+      const res = await apiRequest("POST", `/api/positions/${params.id}/pause`, { paused });
+      return res.json() as Promise<{ message?: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/positions", params.id, "risk-controls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
+      toast({ title: data.message || "Strategy pause status updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const riskControlsMutation = useMutation({
+    mutationFn: async (data: { ddLimitPct: number; autoPauseEnabled: boolean }) => {
+      return apiRequest("POST", `/api/positions/${params.id}/risk-controls`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/positions", params.id, "risk-controls"] });
+      toast({ title: "Risk controls updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleSaveRiskControls = () => {
+    riskControlsMutation.mutate({ ddLimitPct, autoPauseEnabled });
   };
 
   const activeAddresses = whitelistAddresses?.filter(a => a.status === "ACTIVE") || [];
@@ -413,6 +473,136 @@ export default function StrategyDetail() {
               </Button>
             </div>
           </Card>
+
+          {/* Risk Controls Section */}
+          {riskControls?.hasPosition && (
+            <Card className="p-5 mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <ShieldAlert className="w-5 h-5 text-warning" />
+                <h3 className="text-lg font-semibold">Risk Controls</h3>
+              </div>
+
+              {/* Paused Banner */}
+              {riskControls.paused && (
+                <div className={cn(
+                  "p-3 rounded-lg mb-4 flex items-center justify-between",
+                  riskControls.pausedReason === "dd_breach" 
+                    ? "bg-negative/10 border border-negative/20" 
+                    : "bg-warning/10 border border-warning/20"
+                )}>
+                  <div className="flex items-center gap-2">
+                    <Pause className={cn("w-4 h-4", riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning")} />
+                    <span className={cn("text-sm font-medium", riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning")}>
+                      {riskControls.pausedReason === "dd_breach" 
+                        ? "Auto-paused due to drawdown limit breach" 
+                        : "Strategy is manually paused"}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pauseMutation.mutate(false)}
+                    disabled={pauseMutation.isPending}
+                    data-testid="button-resume-strategy"
+                  >
+                    <Play className="w-4 h-4 mr-1" />
+                    Resume
+                  </Button>
+                </div>
+              )}
+
+              {/* Current Drawdown */}
+              {riskControls.currentDrawdownPct > 0 && (
+                <div className="p-3 rounded-lg bg-muted/50 mb-4">
+                  <p className="text-sm text-muted-foreground">Current Drawdown</p>
+                  <p className={cn(
+                    "text-xl font-semibold tabular-nums",
+                    riskControls.currentDrawdownPct >= (riskControls.ddLimitPct || 100) ? "text-negative" : "text-warning"
+                  )}>
+                    -{riskControls.currentDrawdownPct.toFixed(1)}%
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                {/* Pause Toggle */}
+                {!riskControls.paused && (
+                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                    <div>
+                      <p className="font-medium">Pause Strategy</p>
+                      <p className="text-xs text-muted-foreground">
+                        Stop accrual and block new investments
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => pauseMutation.mutate(true)}
+                      disabled={pauseMutation.isPending}
+                      data-testid="button-pause-strategy"
+                    >
+                      <Pause className="w-4 h-4 mr-1" />
+                      Pause
+                    </Button>
+                  </div>
+                )}
+
+                {/* DD Limit Slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Drawdown Limit</Label>
+                    <span className="text-sm font-medium tabular-nums">
+                      {ddLimitPct === 0 ? "Off" : `${ddLimitPct}%`}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[ddLimitPct]}
+                    onValueChange={(v) => setDdLimitPct(v[0])}
+                    min={0}
+                    max={50}
+                    step={5}
+                    className="w-full"
+                    data-testid="slider-dd-limit"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum allowed loss from initial investment (0 = no limit)
+                  </p>
+                </div>
+
+                {/* Auto-Pause Toggle */}
+                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <p className="font-medium">Auto-Pause on Breach</p>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically pause if drawdown exceeds limit
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoPauseEnabled}
+                    onCheckedChange={setAutoPauseEnabled}
+                    disabled={ddLimitPct === 0}
+                    data-testid="switch-auto-pause"
+                  />
+                </div>
+
+                {/* Info Message */}
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>When a strategy is paused, no daily returns are accrued and new investments are blocked.</span>
+                </div>
+
+                {/* Save Button */}
+                <Button
+                  onClick={handleSaveRiskControls}
+                  disabled={riskControlsMutation.isPending}
+                  className="w-full"
+                  data-testid="button-save-risk-controls"
+                >
+                  {riskControlsMutation.isPending ? "Saving..." : "Save Risk Settings"}
+                </Button>
+              </div>
+            </Card>
+          )}
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card className="p-4">

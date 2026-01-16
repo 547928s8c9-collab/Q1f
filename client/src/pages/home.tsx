@@ -194,7 +194,7 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
 
 function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
   const hasVaults = bootstrap && 
-    (BigInt(bootstrap.vaults.principal) > 0n || BigInt(bootstrap.vaults.profit) > 0n);
+    (BigInt(bootstrap.vaults.principal.balance) > 0n || BigInt(bootstrap.vaults.profit.balance) > 0n);
 
   if (isLoading) {
     return (
@@ -253,7 +253,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <span className="text-sm font-medium">Principal</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-principal">
-            {formatMoney(bootstrap!.vaults.principal, "USDT")}
+            {formatMoney(bootstrap!.vaults.principal.balance, "USDT")}
           </span>
         </div>
         <div className="flex items-center justify-between py-2">
@@ -264,7 +264,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <span className="text-sm font-medium">Profit</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-profit">
-            {formatMoney(bootstrap!.vaults.profit, "USDT")}
+            {formatMoney(bootstrap!.vaults.profit.balance, "USDT")}
           </span>
         </div>
       </div>
