@@ -773,13 +773,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertKycApplicant(userId: string, data: Partial<InsertKycApplicant>): Promise<KycApplicant> {
-    const existing = await this.getKycApplicant(userId);
-    if (existing) {
-      const updated = await this.updateKycApplicant(userId, data);
-      return updated!;
-    } else {
-      return this.createKycApplicant({ userId, ...data } as InsertKycApplicant);
-    }
+    const [result] = await db.insert(kycApplicants)
+      .values({ userId, ...data } as InsertKycApplicant)
+      .onConflictDoUpdate({
+        target: kycApplicants.userId,
+        set: { ...data, updatedAt: new Date() }
+      })
+      .returning();
+    return result;
   }
 
   // Notifications
