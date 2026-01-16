@@ -29,6 +29,13 @@ function devOnly(_req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Configurable financial parameters (env-driven with sensible defaults)
+const DEPOSIT_ADDRESS = process.env.DEPOSIT_ADDRESS || "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
+const NETWORK_FEE_MINOR = process.env.NETWORK_FEE_MINOR || "1000000"; // 1 USDT
+const MIN_WITHDRAWAL_MINOR = process.env.MIN_WITHDRAWAL_MINOR || "10000000"; // 10 USDT
+const MIN_DEPOSIT_MINOR = process.env.MIN_DEPOSIT_MINOR || "10000000"; // 10 USDT
+const DEFAULT_RUB_RATE = parseFloat(process.env.DEFAULT_RUB_RATE || "92.5");
+
 // Helper to get userId from authenticated request
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub;
@@ -316,7 +323,7 @@ export async function registerRoutes(
             series: ethQuotes.map((q) => ({ date: q.date, price: q.price })),
           },
           "USDT/RUB": {
-            price: latestRub?.price || "92.5",
+            price: latestRub?.price || DEFAULT_RUB_RATE.toString(),
             change24h: latestRub?.change24h || "0",
             series: rubQuotes.map((q) => ({ date: q.date, price: q.price })),
           },
@@ -331,10 +338,10 @@ export async function registerRoutes(
           autoSweepEnabled: false,
         },
         config: {
-          depositAddress: "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL",
-          networkFee: "1000000", // 1 USDT in minor units
-          minWithdrawal: "10000000", // 10 USDT in minor units
-          minDeposit: "10000000", // 10 USDT in minor units
+          depositAddress: DEPOSIT_ADDRESS,
+          networkFee: NETWORK_FEE_MINOR,
+          minWithdrawal: MIN_WITHDRAWAL_MINOR,
+          minDeposit: MIN_DEPOSIT_MINOR,
         },
       });
     } catch (error) {
@@ -1147,7 +1154,7 @@ export async function registerRoutes(
 
       // Convert RUB to USDT using current quote rate
       const rubQuotes = await storage.getQuotes("USDT/RUB", 1);
-      const currentRate = rubQuotes.length > 0 ? parseFloat(rubQuotes[0].price) : 92.5;
+      const currentRate = rubQuotes.length > 0 ? parseFloat(rubQuotes[0].price) : DEFAULT_RUB_RATE;
       const rubAmount = BigInt(amount);
       // rubAmount is in kopeks (RUB * 100), convert to USDT minor units (6 decimals)
       // Formula: (rubAmount / 100) / rate * 1000000 = rubAmount * 10000 / rate
@@ -1607,7 +1614,7 @@ export async function registerRoutes(
       }
 
       const balance = await storage.getBalance(userId, "USDT");
-      const fee = "1000000"; // 1 USDT
+      const fee = NETWORK_FEE_MINOR;
       const totalDeduct = BigInt(amount) + BigInt(fee);
       
       // Check balance includes fee
@@ -2500,10 +2507,10 @@ export async function registerRoutes(
       }
       const { fromAsset, toAsset, amount } = parsed.data;
 
-      // Demo rates
+      // Demo rates (using configurable default)
       const rates: Record<string, Record<string, number>> = {
-        RUB: { USDT: 1 / 92.5 },
-        USDT: { RUB: 92.5 },
+        RUB: { USDT: 1 / DEFAULT_RUB_RATE },
+        USDT: { RUB: DEFAULT_RUB_RATE },
       };
 
       const rate = rates[fromAsset]?.[toAsset] || 1;
@@ -3178,7 +3185,6 @@ export async function registerRoutes(
   app.post("/api/jobs/payout-run", isAuthenticated, devOnly, async (req, res) => {
     try {
       const frequency = (req.query.frequency as string) || "DAILY";
-      const NETWORK_FEE_MINOR = "1000000"; // 1 USDT demo network fee
       
       const instructions = await storage.getActivePayoutInstructionsByFrequency(frequency);
       const results: Array<{ instructionId: string; status: string; netPayout?: string }> = [];
