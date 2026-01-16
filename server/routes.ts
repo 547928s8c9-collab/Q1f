@@ -7,8 +7,16 @@ import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe
 import { loadCandles } from "./marketData/loadCandles";
 import { sessionRunner } from "./sim/runner";
 
-import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { db, withTransaction, type DbTransaction } from "./db";
+import { sql, eq, and } from "drizzle-orm";
+import { balances, vaults, positions, operations, auditLogs } from "@shared/schema";
+
+// Invariant check: no negative balance
+function assertNonNegative(value: bigint, label: string): void {
+  if (value < 0n) {
+    throw new Error(`INVARIANT_VIOLATION: ${label} cannot be negative (got ${value})`);
+  }
+}
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 
 // Helper to get userId from authenticated request
@@ -1223,59 +1231,82 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Amount below minimum investment" });
       }
 
-      // Deduct from balance
-      const newAvailable = (BigInt(balance!.available) - BigInt(amount)).toString();
-      await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
+      // ATOMIC TRANSACTION: balance + position + operation + audit
+      const operation = await withTransaction(async (tx) => {
+        // Re-fetch balance within transaction for consistency
+        const [currentBalance] = await tx.select().from(balances)
+          .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
+        
+        if (!currentBalance || BigInt(currentBalance.available) < BigInt(amount)) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
 
-      // Create or update position
-      let position = await storage.getPosition(userId, strategyId);
-      if (position) {
-        await storage.updatePosition(position.id, {
-          principal: (BigInt(position.principal) + BigInt(amount)).toString(),
-          currentValue: (BigInt(position.currentValue) + BigInt(amount)).toString(),
-        });
-      } else {
-        await storage.createPosition({
+        // Calculate new balance with invariant check
+        const newAvailable = BigInt(currentBalance.available) - BigInt(amount);
+        assertNonNegative(newAvailable, "USDT balance");
+
+        // Update balance atomically
+        await tx.update(balances)
+          .set({ available: newAvailable.toString(), updatedAt: new Date() })
+          .where(eq(balances.id, currentBalance.id));
+
+        // Create or update position
+        const [existingPos] = await tx.select().from(positions)
+          .where(and(eq(positions.userId, userId), eq(positions.strategyId, strategyId)));
+        
+        if (existingPos) {
+          await tx.update(positions)
+            .set({
+              principal: (BigInt(existingPos.principal) + BigInt(amount)).toString(),
+              currentValue: (BigInt(existingPos.currentValue) + BigInt(amount)).toString(),
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, existingPos.id));
+        } else {
+          await tx.insert(positions).values({
+            userId,
+            strategyId,
+            principal: amount,
+            currentValue: amount,
+          });
+        }
+
+        // Create operation record
+        const [op] = await tx.insert(operations).values({
           userId,
-          strategyId,
-          principal: amount,
-          currentValue: amount,
-        });
-      }
-
-      // Create operation
-      const operation = await storage.createOperation({
-        userId,
-        type: "INVEST",
-        status: "completed",
-        asset: "USDT",
-        amount,
-        fee: "0",
-        txHash: null,
-        providerRef: null,
-        strategyId,
-        strategyName: strategy.name,
-        fromVault: null,
-        toVault: null,
-        metadata: null,
-        reason: null,
-      });
-
-      // Audit log for INVEST
-      await storage.createAuditLog({
-        userId,
-        event: "INVEST",
-        resourceType: "operation",
-        resourceId: operation.id,
-        details: {
-          amountMinor: amount,
+          type: "INVEST",
+          status: "completed",
           asset: "USDT",
+          amount,
+          fee: "0",
+          txHash: null,
+          providerRef: null,
           strategyId,
-          idempotencyKey: req.headers["idempotency-key"] || null,
-          requestId: req.requestId,
-        },
-        ip: req.ip || null,
-        userAgent: req.headers["user-agent"] || null,
+          strategyName: strategy.name,
+          fromVault: null,
+          toVault: null,
+          metadata: null,
+          reason: null,
+        }).returning();
+
+        // Audit log
+        await tx.insert(auditLogs).values({
+          userId,
+          event: "INVEST",
+          resourceType: "operation",
+          resourceId: op.id,
+          details: {
+            amountMinor: amount,
+            asset: "USDT",
+            strategyId,
+            idempotencyKey: req.headers["idempotency-key"] || null,
+            requestId: req.requestId,
+          },
+          ip: req.ip || null,
+          userAgent: req.headers["user-agent"] || null,
+        });
+
+        return op;
       });
 
       const responseBody = { success: true, operation: { id: operation.id } };
@@ -1483,43 +1514,61 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Insufficient balance (including network fee)" });
       }
 
-      // Deduct from balance (including fee)
-      const newAvailable = (BigInt(balance!.available) - totalDeduct).toString();
-      await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
+      // ATOMIC TRANSACTION: balance deduct + operation + audit
+      const operation = await withTransaction(async (tx) => {
+        // Re-fetch balance within transaction
+        const [currentBalance] = await tx.select().from(balances)
+          .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
+        
+        if (!currentBalance || BigInt(currentBalance.available) < totalDeduct) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
 
-      // Create withdrawal operation
-      const operation = await storage.createOperation({
-        userId,
-        type: "WITHDRAW_USDT",
-        status: "completed",
-        asset: "USDT",
-        amount,
-        fee,
-        txHash: `0x${randomUUID().replace(/-/g, "")}`,
-        providerRef: null,
-        strategyId: null,
-        strategyName: null,
-        fromVault: null,
-        toVault: null,
-        metadata: { address },
-        reason: null,
-      });
+        // Calculate new balance with invariant check
+        const newAvailable = BigInt(currentBalance.available) - totalDeduct;
+        assertNonNegative(newAvailable, "USDT balance");
 
-      // Audit log for WITHDRAW_USDT (no address in details for privacy)
-      await storage.createAuditLog({
-        userId,
-        event: "WITHDRAW_USDT",
-        resourceType: "operation",
-        resourceId: operation.id,
-        details: {
-          amountMinor: amount,
-          feeMinor: fee,
+        // Update balance atomically
+        await tx.update(balances)
+          .set({ available: newAvailable.toString(), updatedAt: new Date() })
+          .where(eq(balances.id, currentBalance.id));
+
+        // Create withdrawal operation
+        const [op] = await tx.insert(operations).values({
+          userId,
+          type: "WITHDRAW_USDT",
+          status: "completed",
           asset: "USDT",
-          idempotencyKey: req.headers["idempotency-key"] || null,
-          requestId: req.requestId,
-        },
-        ip: req.ip || null,
-        userAgent: req.headers["user-agent"] || null,
+          amount,
+          fee,
+          txHash: `0x${randomUUID().replace(/-/g, "")}`,
+          providerRef: null,
+          strategyId: null,
+          strategyName: null,
+          fromVault: null,
+          toVault: null,
+          metadata: { address },
+          reason: null,
+        }).returning();
+
+        // Audit log (no address for privacy)
+        await tx.insert(auditLogs).values({
+          userId,
+          event: "WITHDRAW_USDT",
+          resourceType: "operation",
+          resourceId: op.id,
+          details: {
+            amountMinor: amount,
+            feeMinor: fee,
+            asset: "USDT",
+            idempotencyKey: req.headers["idempotency-key"] || null,
+            requestId: req.requestId,
+          },
+          ip: req.ip || null,
+          userAgent: req.headers["user-agent"] || null,
+        });
+
+        return op;
       });
 
       const responseBody = { success: true, operation: { id: operation.id } };
@@ -1558,81 +1607,128 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Source and destination must be different" });
       }
 
-      if (fromVault === "wallet") {
-        // Transfer from wallet to vault
-        const balance = await storage.getBalance(userId, "USDT");
-        if (BigInt(balance?.available || "0") < BigInt(amount)) {
-          return res.status(400).json({ error: "Insufficient balance" });
+      // ATOMIC TRANSACTION: source deduct + dest credit + operation + audit
+      const operation = await withTransaction(async (tx) => {
+        if (fromVault === "wallet") {
+          // Transfer from wallet to vault
+          const [currentBalance] = await tx.select().from(balances)
+            .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
+          
+          if (!currentBalance || BigInt(currentBalance.available) < BigInt(amount)) {
+            throw new Error("INSUFFICIENT_BALANCE");
+          }
+
+          const newAvailable = BigInt(currentBalance.available) - BigInt(amount);
+          assertNonNegative(newAvailable, "USDT balance");
+
+          await tx.update(balances)
+            .set({ available: newAvailable.toString(), updatedAt: new Date() })
+            .where(eq(balances.id, currentBalance.id));
+
+          const [vault] = await tx.select().from(vaults)
+            .where(and(eq(vaults.userId, userId), eq(vaults.type, toVault)));
+          
+          const newVaultBalance = (BigInt(vault?.balance || "0") + BigInt(amount)).toString();
+          if (vault) {
+            await tx.update(vaults)
+              .set({ balance: newVaultBalance, updatedAt: new Date() })
+              .where(eq(vaults.id, vault.id));
+          } else {
+            await tx.insert(vaults).values({ userId, type: toVault, asset: "USDT", balance: newVaultBalance });
+          }
+        } else if (toVault === "wallet") {
+          // Transfer from vault to wallet
+          const [vault] = await tx.select().from(vaults)
+            .where(and(eq(vaults.userId, userId), eq(vaults.type, fromVault)));
+          
+          if (!vault || BigInt(vault.balance) < BigInt(amount)) {
+            throw new Error("INSUFFICIENT_VAULT_BALANCE");
+          }
+
+          const newVaultBalance = BigInt(vault.balance) - BigInt(amount);
+          assertNonNegative(newVaultBalance, `${fromVault} vault`);
+
+          await tx.update(vaults)
+            .set({ balance: newVaultBalance.toString(), updatedAt: new Date() })
+            .where(eq(vaults.id, vault.id));
+
+          const [currentBalance] = await tx.select().from(balances)
+            .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
+          
+          const newAvailable = (BigInt(currentBalance?.available || "0") + BigInt(amount)).toString();
+          if (currentBalance) {
+            await tx.update(balances)
+              .set({ available: newAvailable, updatedAt: new Date() })
+              .where(eq(balances.id, currentBalance.id));
+          } else {
+            await tx.insert(balances).values({ userId, asset: "USDT", available: newAvailable, locked: "0" });
+          }
+        } else {
+          // Vault to vault transfer
+          const [sourceVault] = await tx.select().from(vaults)
+            .where(and(eq(vaults.userId, userId), eq(vaults.type, fromVault)));
+          
+          if (!sourceVault || BigInt(sourceVault.balance) < BigInt(amount)) {
+            throw new Error("INSUFFICIENT_VAULT_BALANCE");
+          }
+
+          const newSourceBalance = BigInt(sourceVault.balance) - BigInt(amount);
+          assertNonNegative(newSourceBalance, `${fromVault} vault`);
+
+          await tx.update(vaults)
+            .set({ balance: newSourceBalance.toString(), updatedAt: new Date() })
+            .where(eq(vaults.id, sourceVault.id));
+
+          const [destVault] = await tx.select().from(vaults)
+            .where(and(eq(vaults.userId, userId), eq(vaults.type, toVault)));
+          
+          const newDestBalance = (BigInt(destVault?.balance || "0") + BigInt(amount)).toString();
+          if (destVault) {
+            await tx.update(vaults)
+              .set({ balance: newDestBalance, updatedAt: new Date() })
+              .where(eq(vaults.id, destVault.id));
+          } else {
+            await tx.insert(vaults).values({ userId, type: toVault, asset: "USDT", balance: newDestBalance });
+          }
         }
 
-        const newAvailable = (BigInt(balance!.available) - BigInt(amount)).toString();
-        await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
-
-        const vault = await storage.getVault(userId, toVault);
-        const newVaultBalance = (BigInt(vault?.balance || "0") + BigInt(amount)).toString();
-        await storage.updateVault(userId, toVault, newVaultBalance);
-      } else if (toVault === "wallet") {
-        // Transfer from vault to wallet
-        const vault = await storage.getVault(userId, fromVault);
-        if (BigInt(vault?.balance || "0") < BigInt(amount)) {
-          return res.status(400).json({ error: "Insufficient vault balance" });
-        }
-
-        const newVaultBalance = (BigInt(vault!.balance) - BigInt(amount)).toString();
-        await storage.updateVault(userId, fromVault, newVaultBalance);
-
-        const balance = await storage.getBalance(userId, "USDT");
-        const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
-        await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
-      } else {
-        // Vault to vault transfer
-        const sourceVault = await storage.getVault(userId, fromVault);
-        if (BigInt(sourceVault?.balance || "0") < BigInt(amount)) {
-          return res.status(400).json({ error: "Insufficient vault balance" });
-        }
-
-        const newSourceBalance = (BigInt(sourceVault!.balance) - BigInt(amount)).toString();
-        await storage.updateVault(userId, fromVault, newSourceBalance);
-
-        const destVault = await storage.getVault(userId, toVault);
-        const newDestBalance = (BigInt(destVault?.balance || "0") + BigInt(amount)).toString();
-        await storage.updateVault(userId, toVault, newDestBalance);
-      }
-
-      // Create operation
-      const operation = await storage.createOperation({
-        userId,
-        type: "VAULT_TRANSFER",
-        status: "completed",
-        asset: "USDT",
-        amount,
-        fee: "0",
-        txHash: null,
-        providerRef: null,
-        strategyId: null,
-        strategyName: null,
-        fromVault,
-        toVault,
-        metadata: null,
-        reason: null,
-      });
-
-      // Audit log for VAULT_TRANSFER
-      await storage.createAuditLog({
-        userId,
-        event: "VAULT_TRANSFER",
-        resourceType: "operation",
-        resourceId: operation.id,
-        details: {
-          amountMinor: amount,
+        // Create operation record
+        const [op] = await tx.insert(operations).values({
+          userId,
+          type: "VAULT_TRANSFER",
+          status: "completed",
           asset: "USDT",
+          amount,
+          fee: "0",
+          txHash: null,
+          providerRef: null,
+          strategyId: null,
+          strategyName: null,
           fromVault,
           toVault,
-          idempotencyKey: req.headers["idempotency-key"] || null,
-          requestId: req.requestId,
-        },
-        ip: req.ip || null,
-        userAgent: req.headers["user-agent"] || null,
+          metadata: null,
+          reason: null,
+        }).returning();
+
+        // Audit log
+        await tx.insert(auditLogs).values({
+          userId,
+          event: "VAULT_TRANSFER",
+          resourceType: "operation",
+          resourceId: op.id,
+          details: {
+            amountMinor: amount,
+            asset: "USDT",
+            fromVault,
+            toVault,
+            idempotencyKey: req.headers["idempotency-key"] || null,
+            requestId: req.requestId,
+          },
+          ip: req.ip || null,
+          userAgent: req.headers["user-agent"] || null,
+        });
+
+        return op;
       });
 
       const responseBody = { success: true, operation: { id: operation.id } };

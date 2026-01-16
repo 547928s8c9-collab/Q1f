@@ -26,3 +26,12 @@ pool.on('error', (err) => {
 });
 
 export const db = drizzle(pool, { schema });
+
+// Export transaction helper for atomic operations
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function withTransaction<T>(
+  fn: (tx: DbTransaction) => Promise<T>
+): Promise<T> {
+  return db.transaction(fn);
+}
