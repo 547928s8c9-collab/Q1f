@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionHeader } from "@/components/ui/section-header";
 import { SecuritySettingRow } from "@/components/security/security-setting-row";
+import { KycStatusCard } from "@/components/security/kyc-status-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -25,10 +27,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shield, KeyRound, ListChecks, Clock, Eye, Plus, Trash2 } from "lucide-react";
+import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function SecuritySettings() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [antiPhishingDialog, setAntiPhishingDialog] = useState(false);
   const [addAddressDialog, setAddAddressDialog] = useState(false);
   const [antiPhishingCode, setAntiPhishingCode] = useState("");
@@ -117,85 +121,97 @@ export default function SecuritySettings() {
 
       {isLoading ? (
         <div className="space-y-4">
+          <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-64 rounded-xl" />
         </div>
       ) : (
         <div className="space-y-6">
-          <Card className="divide-y divide-border">
-            <div className="p-4">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Authentication</h3>
-            </div>
-            <SecuritySettingRow
-              icon={<Shield className="w-5 h-5 text-muted-foreground" />}
-              label="Two-Factor Authentication"
-              description="Add an extra layer of security to your account"
-              type="toggle"
-              value={bootstrap?.security.twoFactorEnabled ?? false}
-              onChange={(enabled) => toggle2FAMutation.mutate(enabled)}
+          <section>
+            <SectionHeader title="Verification Status" />
+            <KycStatusCard
+              status={(bootstrap?.security.kycStatus as any) || "not_started"}
+              onStartVerification={() => navigate("/onboarding/kyc")}
             />
-            <SecuritySettingRow
-              icon={<Eye className="w-5 h-5 text-muted-foreground" />}
-              label="Anti-Phishing Code"
-              description={bootstrap?.security.antiPhishingCode ? `Code: ${bootstrap.security.antiPhishingCode}` : "Set a code to verify emails"}
-              type="action"
-              onClick={() => setAntiPhishingDialog(true)}
-            />
-          </Card>
+          </section>
 
-          <Card className="divide-y divide-border">
-            <div className="p-4">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Withdrawal Security</h3>
-            </div>
-            <SecuritySettingRow
-              icon={<ListChecks className="w-5 h-5 text-muted-foreground" />}
-              label="Address Whitelist"
-              description="Only allow withdrawals to approved addresses"
-              type="toggle"
-              value={bootstrap?.security.whitelistEnabled ?? false}
-              onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
-            />
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-5 h-5 text-muted-foreground" />
+          <section>
+            <SectionHeader title="Authentication" />
+            <Card className="divide-y divide-border">
+              <SecuritySettingRow
+                icon={<Shield className="w-5 h-5 text-muted-foreground" />}
+                label="Two-Factor Authentication"
+                description="Add an extra layer of security to your account"
+                type="toggle"
+                value={bootstrap?.security.twoFactorEnabled ?? false}
+                onChange={(enabled) => toggle2FAMutation.mutate(enabled)}
+              />
+              <SecuritySettingRow
+                icon={<Eye className="w-5 h-5 text-muted-foreground" />}
+                label="Anti-Phishing Code"
+                description={bootstrap?.security.antiPhishingCode ? `Code: ${bootstrap.security.antiPhishingCode}` : "Set a code to verify emails"}
+                type="action"
+                onClick={() => setAntiPhishingDialog(true)}
+              />
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader title="Withdrawal Security" />
+            <Card className="divide-y divide-border">
+              <SecuritySettingRow
+                icon={<ListChecks className="w-5 h-5 text-muted-foreground" />}
+                label="Address Whitelist"
+                description="Only allow withdrawals to approved addresses"
+                type="toggle"
+                value={bootstrap?.security.whitelistEnabled ?? false}
+                onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
+              />
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                      <Clock className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">New Address Delay</p>
+                      <p className="text-xs text-muted-foreground">Waiting period for new addresses</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">New Address Delay</p>
-                    <p className="text-xs text-muted-foreground">Waiting period for new addresses</p>
-                  </div>
+                  <Select
+                    value={String(bootstrap?.security.addressDelay || 0)}
+                    onValueChange={(value) => setAddressDelayMutation.mutate(parseInt(value))}
+                  >
+                    <SelectTrigger className="w-32" data-testid="select-address-delay">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">No delay</SelectItem>
+                      <SelectItem value="24">24 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select
-                  value={String(bootstrap?.security.addressDelay || 0)}
-                  onValueChange={(value) => setAddressDelayMutation.mutate(parseInt(value))}
-                >
-                  <SelectTrigger className="w-32" data-testid="select-address-delay">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">No delay</SelectItem>
-                    <SelectItem value="24">24 hours</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </section>
 
-          <Card>
-            <div className="p-4 flex items-center justify-between border-b border-border">
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Whitelist Addresses</h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAddAddressDialog(true)}
-                data-testid="button-add-address"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Add Address
-              </Button>
-            </div>
+          <section>
+            <SectionHeader 
+              title="Whitelisted Addresses"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddAddressDialog(true)}
+                  data-testid="button-add-address"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add
+                </Button>
+              }
+            />
+            <Card>
             {whitelist && whitelist.length > 0 ? (
               <div className="divide-y divide-border">
                 {whitelist.map((addr) => (
@@ -219,11 +235,14 @@ export default function SecuritySettings() {
                 ))}
               </div>
             ) : (
-              <div className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">No whitelisted addresses</p>
+              <div className="p-8 text-center" data-testid="empty-state-whitelist">
+                <Wallet className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground" data-testid="text-empty-whitelist">No whitelisted addresses yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Add addresses to enable secure withdrawals</p>
               </div>
             )}
-          </Card>
+            </Card>
+          </section>
         </div>
       )}
 
