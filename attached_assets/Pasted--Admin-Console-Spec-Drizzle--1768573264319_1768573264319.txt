@@ -1,0 +1,64 @@
+Сделай Admin Console Spec на базе текущего репо (без кода).
+
+Контекст (обязательно учти):
+- Drizzle schema в shared/schema.ts: есть users, sessions, balances, vaults, operations (канон), positions, strategies, kyc_applicants, sim_sessions, sim_events и др.
+- Operations — канонический журнал денег: любые мутации баланса -> Operation с типом (DEPOSIT_USDT, WITHDRAW_USDT, INVEST, VAULT_TRANSFER, ...)
+- Money endpoints с идемпотентностью: deposit/usdt, deposit/card, invest, withdraw/usdt, vault/transfer
+- Инварианты: withTransaction() + assertNonNegative()
+- Симуляция/“торговля” реализована через sim_sessions/sim_events + SSE (runner.ts, executor.ts), 8 профилей стратегий
+- KYC state machine: NOT_STARTED → IN_REVIEW → APPROVED / NEEDS_ACTION / REJECTED / ON_HOLD
+- Auto-sweep: процент от профита переводится в vault с audit trail
+- Сейчас всё API в server/routes.ts (~3800 строк), админ API нет, RBAC нет, 4-eyes нет
+
+Задача:
+1) Создай docs/admin/spec.md (новый файл) — “Admin Console Spec v1”.
+2) Внутри spec.md строго в такой структуре:
+
+A) Goals & Non-Goals
+- Goals: управление платформой, пользователями, KYC, деньгами через operations, стратегиями, сим-сессиями, инцидентами, экспортами
+- Non-Goals: не ломать существующую архитектуру, не переписывать server/routes.ts на этом этапе
+
+B) Information Architecture (Nav Map)
+- Секции админки (группы) + страницы (роуты /admin/*)
+- Обязательные: Dashboard, Users, KYC, Money/Operations, Vaults, Strategies, Trading Sessions (sim_sessions/sim_events), Inbox, Incidents/Status, Audit Log, Access (RBAC), Config/Feature Flags
+
+C) Roles & Permissions (RBAC)
+- Роли минимум: SuperAdmin, Ops, Compliance, Support, ReadOnly
+- Список granular permissions (пример: users.read/users.write, kyc.review, money.read, money.approve_withdrawal, strategies.pause, sim.read, incidents.publish, exports.generate, audit.read, access.manage, config.write)
+- Таблица “Role → permissions”
+
+D) Sensitive Actions Matrix
+- Список опасных действий по доменам:
+  - деньги: approve/decline withdraw, manual correction via correction operation, invest actions, vault transfers
+  - KYC decisions
+  - pause strategy / change risk limits
+  - enable/disable auto-sweep, change sweep percent
+  - publish incident/status banner
+- Для каждого: requiredPermissions + audit(required) + idempotency(required) + 4-eyes(required?) + step-up(required?)
+
+E) State Machines
+- KYC: перечисли статусы и допустимые переходы (как сейчас)
+- Withdraw: если в коде уже есть статусы — опиши; если нет — предложи минимальную модель статусов как NEW
+- Incident/Status banner: draft → scheduled → active → resolved (NEW)
+- Strategy control: active → paused → active + autopause policy (NEW)
+- Sim session lifecycle: created → running → completed/failed/cancelled (если уже есть — опиши; иначе NEW)
+
+F) Admin Inbox / Queues
+- Какие типы inbox items нужны: pending withdrawals, KYC backlog, failed sim sessions, failed auto-sweep, incidents to publish, negative balance assertion errors (если логируется)
+- Какие поля у item: type, priority, status, owner, nextAction, links
+
+G) Data Boundaries & Invariants
+- Operations = canon; любая правка только через новые операции
+- idempotency для денег обязательна (уже есть — как расширяем на admin actions)
+- сессии “торговли”/sim — отдельный контур, не влияет на balances напрямую
+
+H) Iteration Plan Preview (8 slices, только заголовки)
+- Перечисли 8 slices (названия + 1-2 строки цели)
+
+3) В ответе:
+- Дай короткий summary (5–8 bullet points) что в spec.md.
+- Укажи путь файла: docs/admin/spec.md.
+
+Важно:
+- Никаких UI-дисклеймеров или упоминаний “SIM/REAL бейджи”.
+- Не пиши код. Только спецификация в docs/admin/spec.md.
