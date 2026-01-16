@@ -18,6 +18,7 @@ import {
   auditLogs,
   kycApplicants,
   notifications,
+  idempotencyKeys,
   AddressStatus,
   type Balance,
   type InsertBalance,
@@ -53,6 +54,8 @@ import {
   type InsertKycApplicant,
   type Notification,
   type InsertNotification,
+  type IdempotencyKey,
+  type InsertIdempotencyKey,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -147,6 +150,10 @@ export interface IStorage {
 
   // All positions (for jobs)
   getAllPositions(): Promise<Position[]>;
+
+  // Idempotency Keys
+  getIdempotencyKey(userId: string, key: string): Promise<IdempotencyKey | undefined>;
+  createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -839,6 +846,18 @@ export class DatabaseStorage implements IStorage {
   // Get all positions (for job processing)
   async getAllPositions(): Promise<Position[]> {
     return db.select().from(positions);
+  }
+
+  // Idempotency Keys
+  async getIdempotencyKey(userId: string, key: string): Promise<IdempotencyKey | undefined> {
+    const [result] = await db.select().from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.userId, userId), eq(idempotencyKeys.idempotencyKey, key)));
+    return result;
+  }
+
+  async createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey> {
+    const [created] = await db.insert(idempotencyKeys).values(data).returning();
+    return created;
   }
 }
 

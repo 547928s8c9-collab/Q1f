@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -373,6 +373,24 @@ export const notifications = pgTable("notifications", {
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+// ==================== IDEMPOTENCY KEYS ====================
+export const idempotencyKeys = pgTable("idempotency_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 64 }).notNull(),
+  endpoint: text("endpoint").notNull(),
+  operationId: varchar("operation_id"),
+  responseStatus: integer("response_status"),
+  responseBody: jsonb("response_body"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idempotency_user_key_idx").on(table.userId, table.idempotencyKey),
+]);
+
+export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });
+export type InsertIdempotencyKey = z.infer<typeof insertIdempotencyKeySchema>;
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 
 // Notification types for inbox
 export const NotificationType = {
