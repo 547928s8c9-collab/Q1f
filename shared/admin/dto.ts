@@ -146,3 +146,51 @@ export const IncidentListItem = z.object({
   resolvedAt: z.string().nullable(),
 });
 export type IncidentListItem = z.infer<typeof IncidentListItem>;
+
+export const KycDecisionType = ["APPROVED", "REJECTED", "NEEDS_ACTION", "ON_HOLD"] as const;
+
+export const AdminKycDecisionBody = z.object({
+  decision: z.enum(KycDecisionType),
+  reason: z.string().min(1).max(1000),
+  details: z.record(z.unknown()).optional(),
+});
+export type AdminKycDecisionBody = z.infer<typeof AdminKycDecisionBody>;
+
+export const AdminKycApplicantListItem = z.object({
+  id: z.string(),
+  userId: z.string(),
+  email: z.string().nullable(),
+  status: z.string(),
+  level: z.string().nullable(),
+  riskLevel: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string().nullable(),
+  submittedAt: z.string().nullable(),
+  reviewedAt: z.string().nullable(),
+});
+export type AdminKycApplicantListItem = z.infer<typeof AdminKycApplicantListItem>;
+
+export const AdminKycApplicantDetail = AdminKycApplicantListItem.extend({
+  providerRef: z.string().nullable(),
+  pepFlag: z.boolean().nullable(),
+  rejectionReason: z.string().nullable(),
+  needsActionReason: z.string().nullable(),
+  user: z.object({
+    id: z.string(),
+    email: z.string().nullable(),
+    firstName: z.string().nullable(),
+    lastName: z.string().nullable(),
+    createdAt: z.string().nullable(),
+  }).nullable(),
+  allowedTransitions: z.array(z.string()),
+});
+export type AdminKycApplicantDetail = z.infer<typeof AdminKycApplicantDetail>;
+
+export const KYC_ADMIN_TRANSITIONS: Record<string, string[]> = {
+  NOT_STARTED: [],
+  IN_REVIEW: ["APPROVED", "NEEDS_ACTION", "REJECTED", "ON_HOLD"],
+  APPROVED: [],
+  NEEDS_ACTION: [],
+  REJECTED: [],
+  ON_HOLD: ["APPROVED", "REJECTED"],
+};

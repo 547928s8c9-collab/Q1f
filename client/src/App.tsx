@@ -36,6 +36,7 @@ import Inbox from "@/pages/inbox";
 import LiveSessions from "@/pages/live-sessions/index";
 import LiveSessionDetail from "@/pages/live-sessions/detail";
 import LiveSessionView from "@/pages/live-sessions/session";
+import AdminKyc from "@/pages/admin/kyc";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRouter() {
@@ -63,6 +64,7 @@ function ProtectedRouter() {
           <Route path="/live-sessions" component={LiveSessions} />
           <Route path="/live-sessions/session/:id" component={LiveSessionView} />
           <Route path="/live-sessions/:slug" component={LiveSessionDetail} />
+          <Route path="/admin/kyc" component={AdminKyc} />
           <Route component={NotFound} />
         </Switch>
       </AppShell>

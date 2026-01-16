@@ -27,6 +27,10 @@ import {
   UpdateIncidentInput,
   INCIDENT_TRANSITIONS,
   type IncidentListItem,
+  AdminKycDecisionBody,
+  KYC_ADMIN_TRANSITIONS,
+  type AdminKycApplicantListItem,
+  type AdminKycApplicantDetail,
 } from "@shared/admin/dto";
 import { requireIdempotencyKey, wrapMutation } from "./audit";
 
@@ -594,6 +598,257 @@ adminRouter.patch(
       targetId: updated.id,
       beforeJson,
       afterJson: result,
+    };
+  })
+);
+
+adminRouter.get("/kyc/applicants", requirePermission("kyc.read"), async (req, res) => {
+  try {
+    const query = AdminListQuery.safeParse(req.query);
+    if (!query.success) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, "Invalid query", 400, query.error.issues);
+    }
+
+    const { limit, cursor, status, q, sort } = query.data;
+
+    let whereConditions: any[] = [];
+
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      if (decoded) {
+        whereConditions.push(lt(kycApplicants.createdAt, decoded.createdAt));
+      }
+    }
+
+    if (status) {
+      whereConditions.push(eq(kycApplicants.status, status));
+    }
+
+    let baseQuery = db.select().from(kycApplicants);
+
+    if (whereConditions.length > 0) {
+      baseQuery = baseQuery.where(and(...whereConditions)) as typeof baseQuery;
+    }
+
+    const rows = await baseQuery
+      .orderBy(sort === "asc" ? kycApplicants.createdAt : desc(kycApplicants.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit);
+
+    const userEmails = await Promise.all(
+      items.map(async (k) => {
+        const [user] = await db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, k.userId))
+          .limit(1);
+        return user?.email || null;
+      })
+    );
+
+    const result: AdminKycApplicantListItem[] = items.map((k, i) => ({
+      id: k.id,
+      userId: k.userId,
+      email: userEmails[i],
+      status: k.status,
+      level: k.level,
+      riskLevel: k.riskLevel,
+      createdAt: k.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: k.updatedAt?.toISOString() || null,
+      submittedAt: k.submittedAt?.toISOString() || null,
+      reviewedAt: k.reviewedAt?.toISOString() || null,
+    }));
+
+    const nextCursor = hasMore && items.length > 0
+      ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
+      : null;
+
+    ok(res, result, { limit, nextCursor });
+  } catch (error) {
+    console.error("[GET /admin/kyc/applicants]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to fetch KYC applicants", 500);
+  }
+});
+
+adminRouter.get("/kyc/applicants/:id", requirePermission("kyc.read"), async (req, res) => {
+  try {
+    const applicantId = req.params.id;
+
+    const [applicant] = await db
+      .select()
+      .from(kycApplicants)
+      .where(eq(kycApplicants.id, applicantId))
+      .limit(1);
+
+    if (!applicant) {
+      return fail(res, ErrorCodes.NOT_FOUND, "KYC applicant not found", 404);
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, applicant.userId))
+      .limit(1);
+
+    const allowedTransitions = KYC_ADMIN_TRANSITIONS[applicant.status] || [];
+
+    const result: AdminKycApplicantDetail = {
+      id: applicant.id,
+      userId: applicant.userId,
+      email: user?.email || null,
+      status: applicant.status,
+      level: applicant.level,
+      riskLevel: applicant.riskLevel,
+      createdAt: applicant.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: applicant.updatedAt?.toISOString() || null,
+      submittedAt: applicant.submittedAt?.toISOString() || null,
+      reviewedAt: applicant.reviewedAt?.toISOString() || null,
+      providerRef: applicant.providerRef,
+      pepFlag: applicant.pepFlag,
+      rejectionReason: applicant.rejectionReason,
+      needsActionReason: applicant.needsActionReason,
+      user: user ? {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        createdAt: user.createdAt?.toISOString() || null,
+      } : null,
+      allowedTransitions,
+    };
+
+    ok(res, result);
+  } catch (error) {
+    console.error("[GET /admin/kyc/applicants/:id]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to fetch KYC applicant", 500);
+  }
+});
+
+adminRouter.post(
+  "/kyc/applicants/:id/decision",
+  requirePermission("kyc.review"),
+  requireIdempotencyKey,
+  wrapMutation("KYC_DECISION", async (req, _res, ctx) => {
+    const applicantId = req.params.id;
+
+    const parsed = AdminKycDecisionBody.safeParse(req.body);
+    if (!parsed.success) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Invalid input", details: parsed.error.issues },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const input = parsed.data;
+
+    const [existing] = await db
+      .select()
+      .from(kycApplicants)
+      .where(eq(kycApplicants.id, applicantId))
+      .limit(1);
+
+    if (!existing) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "KYC applicant not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    const beforeJson = {
+      id: existing.id,
+      userId: existing.userId,
+      status: existing.status,
+      rejectionReason: existing.rejectionReason,
+      needsActionReason: existing.needsActionReason,
+    };
+
+    const allowedTransitions = KYC_ADMIN_TRANSITIONS[existing.status] || [];
+    if (!allowedTransitions.includes(input.decision)) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: {
+            code: "INVALID_TRANSITION",
+            message: `Cannot transition from ${existing.status} to ${input.decision}`,
+            allowedTransitions,
+          },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const updates: any = {
+      status: input.decision,
+      updatedAt: new Date(),
+      reviewedAt: new Date(),
+    };
+
+    if (input.decision === "REJECTED") {
+      updates.rejectionReason = input.reason;
+    } else if (input.decision === "NEEDS_ACTION") {
+      updates.needsActionReason = input.reason;
+    }
+
+    const [updated] = await db
+      .update(kycApplicants)
+      .set(updates)
+      .where(eq(kycApplicants.id, applicantId))
+      .returning();
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, updated.userId))
+      .limit(1);
+
+    const result: AdminKycApplicantDetail = {
+      id: updated.id,
+      userId: updated.userId,
+      email: user?.email || null,
+      status: updated.status,
+      level: updated.level,
+      riskLevel: updated.riskLevel,
+      createdAt: updated.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: updated.updatedAt?.toISOString() || null,
+      submittedAt: updated.submittedAt?.toISOString() || null,
+      reviewedAt: updated.reviewedAt?.toISOString() || null,
+      providerRef: updated.providerRef,
+      pepFlag: updated.pepFlag,
+      rejectionReason: updated.rejectionReason,
+      needsActionReason: updated.needsActionReason,
+      user: user ? {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        createdAt: user.createdAt?.toISOString() || null,
+      } : null,
+      allowedTransitions: KYC_ADMIN_TRANSITIONS[updated.status] || [],
+    };
+
+    const afterJson = {
+      ...beforeJson,
+      status: updated.status,
+      rejectionReason: updated.rejectionReason,
+      needsActionReason: updated.needsActionReason,
+      decisionReason: input.reason,
+      decisionDetails: input.details,
+    };
+
+    return {
+      status: 200,
+      body: { ok: true, data: result, requestId: ctx.requestId },
+      targetType: "kyc_applicant",
+      targetId: updated.id,
+      beforeJson,
+      afterJson,
     };
   })
 );

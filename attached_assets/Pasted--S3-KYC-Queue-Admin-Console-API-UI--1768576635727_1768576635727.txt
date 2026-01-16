@@ -1,0 +1,73 @@
+Сделай S3: KYC Queue в Admin Console (API + UI) на базе существующих таблиц и канонической логики.
+
+Контекст:
+- В базе есть kyc_applicants и KYC state machine: NOT_STARTED → IN_REVIEW → APPROVED/NEEDS_ACTION/REJECTED/ON_HOLD
+- В routes.ts уже есть каноническая функция startKycCanonical()
+- Admin framework уже есть: /api/admin/*, adminAuth (OIDC sub), RBAC cache, audit+idempotency, envelope, requestId.
+
+Цель:
+- Админ может смотреть очередь KYC и принимать решения (approve/reject/needs_action/on_hold) с reason
+- Все мутации: RBAC + Idempotency-Key + audit before/after + state validation
+- UI: /admin/kyc очередь + drawer деталей + действия
+
+1) DTO (shared/admin/dto.ts)
+Добавь Zod схемы и типы:
+- AdminKycListQuery: cursor?, limit?, q?, status?, from?, to?
+- AdminKycApplicantListItem: id, userId?, email?, status, createdAt, updatedAt, lastActionAt?
+- AdminKycApplicantDetail: + applicant fields (документы/поля если есть), + user summary (email, createdAt), + history (если есть)
+- AdminKycDecisionBody: { decision: "APPROVE"|"REJECT"|"NEEDS_ACTION"|"ON_HOLD", reason: string, details?: object }
+
+2) Storage (server/storage.ts / DatabaseStorage)
+Добавь read-only методы (если их нет):
+- adminListKycApplicants({cursor, limit, q, status, from, to})
+- adminGetKycApplicant(id)
+И write методы (или service слой) для решения:
+- adminDecideKycApplicant({id, decision, reason, details, actorAdminUserId, requestId, ip, userAgent})
+Реализация должна:
+- Загружать текущего applicant
+- Валидировать переход статуса по state machine (существующей)
+- Обновлять applicant.status (+ поля decisionReason/updatedAt если есть место; иначе добавь поле decisionReason в таблицу ТОЛЬКО если таблица ваша и это допустимо; если нельзя — складывай reason в audit.afterJson)
+- (Опционально) создавать admin_inbox_item: KYC_REVIEW -> DONE при финальном решении
+- Писать audit_log с before/after + reason
+- Оборачивать в транзакцию (используй withTransaction() где принято)
+
+3) Admin API (server/admin/router.ts)
+Добавь endpoints:
+- GET /api/admin/kyc/applicants (perm: kyc.read)
+- GET /api/admin/kyc/applicants/:id (perm: kyc.read)
+- POST /api/admin/kyc/applicants/:id/decision (perm: kyc.review)
+  * требует Idempotency-Key
+  * body валидируется Zod
+  * возвращает обновлённый applicant
+Используй общий wrapMutation (audit+idempotency) который уже сделан на Stage G.
+
+4) Permissions
+Проверь, что в permissions есть:
+- kyc.read
+- kyc.review
+Если нет — добавь в shared/schema.ts seed constants и пересиди (npm run db:seed).
+
+5) Admin UI
+- Добавь модуль в shared/admin/modules.ts: KYC Queue (/admin/kyc) requiredPermissions: ["kyc.read"]
+- Создай страницу client/src/admin/pages/Kyc.tsx:
+  * DataTable: createdAt, email/userId, status, updatedAt
+  * фильтры: status, q
+  * next page через nextCursor
+  * row click → открыть EntityDrawer
+- Drawer: детали applicant + кнопки решений:
+  * Approve / Needs action / On hold / Reject
+  * Модалка/ConfirmDialog: reason required
+  * POST decision с Idempotency-Key (сгенерируй на клиенте UUID)
+  * После успеха: invalidate query list + detail
+- Обработай loading/error/empty.
+
+6) Manual tests (curl)
+- GET list (admin) → 200
+- GET detail → 200/404
+- POST decision без Idempotency-Key → 400
+- POST decision с Idempotency-Key → 200 + audit record created
+- Повтор POST decision с тем же Idempotency-Key → cached replay
+
+7) Update docs
+- Добавь в docs/admin/manual-test.md сценарий KYC Queue.
+- Коротко обнови docs/admin/plan.md (S3 отмечен как implemented после завершения).
