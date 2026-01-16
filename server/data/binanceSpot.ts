@@ -3,8 +3,9 @@ import type { Candle, Timeframe } from "@shared/schema";
 const BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines";
 const MAX_KLINES_LIMIT = 1000;
 const REQUEST_TIMEOUT_MS = 15000;
+const THROTTLE_MS = 250; // Throttle between requests to avoid rate limits
 
-const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000, 16000];
+const BACKOFF_STEPS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const MAX_RETRIES = 5;
 
 export interface BinanceSpotConfig {
@@ -27,8 +28,15 @@ export class BinanceSpotDataSource {
     const interval = this.timeframeToInterval(timeframe);
     const allCandles: Candle[] = [];
     let currentStart = startMs;
+    let isFirstRequest = true;
 
     while (currentStart < endMs) {
+      // Throttle between requests (skip first request)
+      if (!isFirstRequest) {
+        await this.sleep(THROTTLE_MS);
+      }
+      isFirstRequest = false;
+
       const batch = await this.fetchBatch(symbol, interval, currentStart, endMs);
       if (batch.length === 0) break;
 

@@ -1,0 +1,82 @@
+ROLE: Ты — Senior Backend Engineer в проекте ZEON (Node.js + TypeScript, Express, Postgres, Drizzle). Репозиторий уже имеет: `server/marketData/loadCandles.ts`, таблицу `market_candles` в `shared/schema.ts`, storage-абстракцию `server/storage.ts` с методами `getCandlesFromCache()` и `upsertCandles()`, авторизацию Replit OIDC (`isAuthenticated`), и огромный `server/routes.ts` где большинство user-API объявлено inline. Миграции делаются через `npm run db:push` (drizzle-kit push), папка `migrations/` фактически не используется. НЕЛЬЗЯ добавлять новые базы/воркеры/сервисы. Всё должно вписаться в существующие модули и стиль кода.
+
+ЦЕЛЬ ИТЕРАЦИИ A (MARKET DATA FOUNDATION, Binance): сделать production-ready слой рыночных данных Binance Spot (OHLCV klines), используя УЖЕ существующие `market_candles`, `loadCandles`, `storage.getCandlesFromCache/upsertCandles`. Источник данных — только Binance. Результат итерации: `loadCandles()` гарантированно возвращает свечи из кеша Postgres, при отсутствии — догружает с Binance REST, пишет в `market_candles` идемпотентно (без дублей), уважает лимиты/429 (backoff), и есть безопасный способ верификации (selftest + небольшой API для чтения свечей).
+
+0) Recon (обязательное, кратко в отчёт):
+- Покажи текущую реализацию `server/marketData/loadCandles.ts` (что именно она делает сейчас, какой у неё интерфейс).
+- Покажи текущую таблицу `market_candles` из `shared/schema.ts`: названия колонок (особенно `openTimeMs`/`o/h/l/c/v`) и какие типы (varchar/numeric/bigint).
+- Покажи реализацию `storage.getCandlesFromCache` и `storage.upsertCandles` (или хотя бы их Drizzle запросы), чтобы мы не сломали текущие контракты.
+- Скажи, какие форматы `symbol` используются в системе: `"BTCUSDT"` или `"BTC/USDT"`, и какой формат хранится в `market_candles` и используется в `sim_sessions/strategy_profiles`.
+
+1) Schema hardening (ТОЛЬКО если реально нужно):
+- НЕ создавай новую таблицу. Используй существующую `market_candles`.
+- Проверь, есть ли уникальность на свечу. Должно быть UNIQUE по ключу: (`exchange`,`symbol`,`timeframe`,`openTimeMs`) (или эквивалент, если колонка называется иначе).
+- Проверь индексы для быстрых выборок по диапазону: index на (`exchange`,`symbol`,`timeframe`,`openTimeMs`) и/или (`symbol`,`timeframe`,`openTimeMs`).
+- Если уникальности/индексов нет — добавь их в `shared/schema.ts` в стиле проекта и прогони `npm run db:push`.
+- Если при добавлении UNIQUE возможен конфликт из-за дублей — добавь одноразовый скрипт `server/marketData/dedupeCandles.ts`, который удалит дубликаты, оставив одну запись на ключ (в отчёте дать команду запуска). Только после этого включай UNIQUE.
+
+2) Нормализация symbol/timeframe (Binance формат):
+- Добавь утилиты `normalizeSymbol()` и `normalizeTimeframe()` (например в `server/marketData/utils.ts`):
+  - `"BTC/USDT"` → `"BTCUSDT"` (убрать `/`, upper-case).
+  - timeframe должен совпадать с Binance interval (`"15m"`, `"1h"`, `"1d"` и т.д.). Если у вас где-то хранятся другие значения — маппинг сделать тут.
+- Внутри marketData слоя ВСЕГДА работаем с нормализованным Binance-форматом, но в БД храним `symbol` в том же стандарте, что уже используется в `market_candles` (чтобы не плодить разные представления).
+
+3) Binance REST fetcher (строго Binance, без сторонних провайдеров):
+- Создай модуль `server/marketData/binance.ts`:
+  - Функция `fetchKlines(params)` вызывает `GET https://api.binance.com/api/v3/klines` с параметрами `symbol`, `interval`, `startTime`, `endTime`, `limit` (по умолчанию 1000).
+  - Парсит ответ Binance (массив массивов) в Candle-объекты, СОВМЕСТИМЫЕ с тем, что ожидает `storage.upsertCandles` и текущая schema (o/h/l/c/v — строки если в schema varchar; openTimeMs — number bigint-safe).
+  - Время свечи: используем `openTime` как `openTimeMs` (UTC ms number).
+- Обработка ошибок и лимитов (обязательно):
+  - 429: экспоненциальный backoff (1s,2s,4s,8s, max 30s), затем retry.
+  - 5xx/сетевые: 3–5 retry с backoff.
+  - 4xx (кроме 429): фейлить с понятной ошибкой (не ретраить).
+  - Между успешными запросами: throttle 200–400ms.
+- Логирование: использовать существующий логгер проекта, добавить meta `{ symbol, timeframe, startTime, endTime }`.
+
+4) Backfill/Ensure coverage внутри существующего `loadCandles` (контракт НЕ ломать):
+- Внешний контракт `loadCandles` оставить тем же.
+- Целевое поведение `loadCandles({ exchange, symbol, timeframe, startMs, endMs })`:
+  1) Нормализовать `symbol/timeframe`.
+  2) Прочитать кеш: `storage.getCandlesFromCache(exchange, symbol, timeframe, startMs, endMs)`.
+  3) Если кеш пустой ИЛИ явно не покрывает диапазон по min/max openTimeMs:
+     - Догрузить с Binance диапазон чанками по 1000 через `fetchKlines` (двигая startTime вперёд: nextStart = lastOpenTimeMs + timeframeMs).
+     - Записать в БД через `storage.upsertCandles(exchange, symbol, timeframe, candlesChunk)` (идемпотентно).
+     - Повторно прочитать из кеша и вернуть итоговый массив (ASC по openTimeMs).
+- Защита по объёму:
+  - Введи лимит на максимальный диапазон по умолчанию (например maxBars=20000). Если запрос больше — либо режь до maxBars, либо требуй явный флаг `allowLargeRange` (внутренний), чтобы не подвесить процесс и не упереться в лимиты.
+  - При возврате свечей также ограничь max свечей (например 20000).
+
+5) User API для чтения свечей (минимальный, для UI/отладки):
+- В `server/routes.ts` добавь новый эндпоинт (inline, как принято в user API):
+  - `GET /api/market/candles` (только `isAuthenticated`)
+  - query: `symbol`, `timeframe`, `startMs`, `endMs`, `exchange` (optional default `"binance_spot"`)
+  - внутри вызывает `loadCandles` и возвращает:
+    - `res.json({ success: true, data: { candles } })`
+    - ошибки: `res.status(400).json({ error: "..." })`
+- НЕ добавляй публичный тяжёлый “backfill endpoint” без защиты. Если очень нужно — сделай только dev-only (`NODE_ENV !== "production"`) или под секрет-хедер по аналогии с `/api/metrics` (например `x-marketdata-secret` + env `MARKETDATA_SECRET`).
+
+6) Selftest (обязателен):
+- Добавь `server/marketData/selftest.ts` (запуск через `tsx`):
+  - Дважды вызывает `loadCandles` для `BTCUSDT` `15m` за последние 2 дня.
+  - Проверяет/логирует:
+    - свечи не пустые
+    - упорядочены по openTimeMs ASC
+    - в ответе нет дублей openTimeMs
+    - повторный вызов не создаёт дублей в БД (проверить через `storage.getCandlesFromCache` count + уникальность ключей)
+  - В отчёте дать точную команду запуска selftest.
+
+7) Acceptance criteria:
+- `loadCandles` возвращает свечи и при необходимости автоматически догружает с Binance
+- При повторных вызовах одного диапазона в БД нет дублей (UNIQUE на ключ свечи работает)
+- 429/5xx корректно ретраятся с backoff, нет бесконечных tight-loops
+- `GET /api/market/candles` работает и быстро отвечает при наличии кеша
+- Никаких изменений в финансовых таблицах/ledger (`operations`) и бизнес-логике денег
+- Изменения локализованы в `server/marketData/*`, `shared/schema.ts` (только если нужны индексы/unique), и минимальная вставка в `server/routes.ts`
+
+DELIVERABLES:
+- Обновлённый `server/marketData/loadCandles.ts`
+- Новый `server/marketData/binance.ts` + `server/marketData/utils.ts`
+- (Опционально) `server/marketData/dedupeCandles.ts` если нужны чистка дублей перед UNIQUE
+- Новый endpoint `GET /api/market/candles` в `server/routes.ts`
+- `server/marketData/selftest.ts`
+- Короткий отчёт: что сделано, как проверить (curl + selftest), какие лимиты и ограничения по диапазонам
