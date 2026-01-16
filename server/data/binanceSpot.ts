@@ -80,7 +80,11 @@ export class BinanceSpotDataSource {
           continue;
         }
 
-        if (!response.ok) {
+        if (response.status === 451) {
+          throw new Error(`Binance API blocked (451): Access restricted from this region`);
+        }
+
+        if (response.status >= 400 && response.status < 500) {
           throw new Error(`Binance API error: ${response.status} ${response.statusText}`);
         }
 
