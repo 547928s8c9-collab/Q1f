@@ -1,14 +1,17 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt, Target, Settings } from "lucide-react";
 import { formatMoney } from "@shared/schema";
+import type { VaultData } from "@shared/schema";
 
 interface VaultCardProps {
   type: "principal" | "profit" | "taxes";
-  balance: string;
+  data: VaultData;
   asset: string;
   onTransferIn?: () => void;
   onTransferOut?: () => void;
+  onEditGoal?: () => void;
 }
 
 const vaultConfig = {
@@ -32,9 +35,10 @@ const vaultConfig = {
   },
 };
 
-export function VaultCard({ type, balance, asset, onTransferIn, onTransferOut }: VaultCardProps) {
+export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEditGoal }: VaultCardProps) {
   const config = vaultConfig[type];
   const Icon = config.icon;
+  const hasGoal = data.goalAmount && BigInt(data.goalAmount) > 0;
 
   return (
     <Card className="p-5" data-testid={`vault-card-${type}`}>
@@ -48,15 +52,46 @@ export function VaultCard({ type, balance, asset, onTransferIn, onTransferOut }:
             <p className="text-xs text-muted-foreground">{config.description}</p>
           </div>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onEditGoal}
+          data-testid={`vault-${type}-edit-goal`}
+          aria-label="Edit goal"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
       </div>
 
       <div className="mb-4">
         <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Balance</p>
         <p className="text-2xl font-semibold tabular-nums">
-          {formatMoney(balance, asset)}
+          {formatMoney(data.balance, asset)}
           <span className="text-sm text-muted-foreground font-normal ml-1">{asset}</span>
         </p>
       </div>
+
+      {hasGoal && (
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Target className="w-3 h-3" />
+              <span>{data.goalName || "Goal"}</span>
+            </div>
+            <span className="text-foreground font-medium">{data.progress}%</span>
+          </div>
+          <Progress value={data.progress} className="h-2" data-testid={`vault-${type}-progress`} />
+          <p className="text-xs text-muted-foreground">
+            {formatMoney(data.balance, asset)} / {formatMoney(data.goalAmount!, asset)} {asset}
+          </p>
+        </div>
+      )}
+
+      {data.autoSweepEnabled && data.autoSweepPct > 0 && (
+        <div className="mb-4 p-2 rounded-md bg-muted/50 text-xs text-muted-foreground">
+          Auto-sweep: {data.autoSweepPct}% of profit
+        </div>
+      )}
 
       <div className="flex gap-2">
         <Button

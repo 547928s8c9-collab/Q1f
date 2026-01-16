@@ -28,12 +28,26 @@ export const vaults = pgTable("vaults", {
   type: text("type").notNull(), // principal, profit, taxes
   asset: text("asset").notNull().default("USDT"),
   balance: text("balance").notNull().default("0"),
+  goalName: text("goal_name"), // e.g., "Emergency Fund", "Tax Reserve"
+  goalAmount: text("goal_amount"), // target in minor units
+  autoSweepPct: integer("auto_sweep_pct").default(0), // 0-100
+  autoSweepEnabled: boolean("auto_sweep_enabled").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertVaultSchema = createInsertSchema(vaults).omit({ id: true, updatedAt: true });
 export type InsertVault = z.infer<typeof insertVaultSchema>;
 export type Vault = typeof vaults.$inferSelect;
+
+// Vault goal update schema
+export const updateVaultGoalSchema = z.object({
+  type: z.enum(["principal", "profit", "taxes"]),
+  goalName: z.string().max(50).optional().nullable(),
+  goalAmount: z.string().optional().nullable(),
+  autoSweepPct: z.number().min(0).max(100).optional(),
+  autoSweepEnabled: z.boolean().optional(),
+});
+export type UpdateVaultGoal = z.infer<typeof updateVaultGoalSchema>;
 
 // ==================== STRATEGIES ====================
 export const strategies = pgTable("strategies", {
@@ -446,6 +460,16 @@ export const OperationStatus = {
 // Onboarding stages
 export type OnboardingStage = "welcome" | "verify" | "consent" | "kyc" | "done";
 
+// Vault data with goals
+export interface VaultData {
+  balance: string;
+  goalName: string | null;
+  goalAmount: string | null;
+  autoSweepPct: number;
+  autoSweepEnabled: boolean;
+  progress: number; // 0-100 percent of goal reached
+}
+
 // Bootstrap response type
 export interface BootstrapResponse {
   user: {
@@ -485,9 +509,9 @@ export interface BootstrapResponse {
     principal: string;
   };
   vaults: {
-    principal: string;
-    profit: string;
-    taxes: string;
+    principal: VaultData;
+    profit: VaultData;
+    taxes: VaultData;
   };
   portfolioSeries: Array<{ date: string; value: string }>;
   quotes: {

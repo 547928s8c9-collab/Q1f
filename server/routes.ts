@@ -129,10 +129,28 @@ export async function registerRoutes(
       const usdtBalance = balances.find((b) => b.asset === "USDT");
       const rubBalance = balances.find((b) => b.asset === "RUB");
 
+      // Build vault data with goals
+      const buildVaultData = (vault: typeof vaults[0] | undefined) => {
+        const balance = vault?.balance || "0";
+        const goalAmount = vault?.goalAmount || null;
+        let progress = 0;
+        if (goalAmount && BigInt(goalAmount) > 0) {
+          progress = Math.min(100, Math.round((Number(BigInt(balance) * 100n) / Number(BigInt(goalAmount)))));
+        }
+        return {
+          balance,
+          goalName: vault?.goalName || null,
+          goalAmount,
+          autoSweepPct: vault?.autoSweepPct ?? 0,
+          autoSweepEnabled: vault?.autoSweepEnabled ?? false,
+          progress,
+        };
+      };
+      
       const vaultMap = vaults.reduce((acc, v) => {
-        acc[v.type] = v.balance;
+        acc[v.type] = v;
         return acc;
-      }, {} as Record<string, string>);
+      }, {} as Record<string, typeof vaults[0]>);
 
       res.json({
         user: {
@@ -169,9 +187,9 @@ export async function registerRoutes(
         },
         invested,
         vaults: {
-          principal: vaultMap.principal || "0",
-          profit: vaultMap.profit || "0",
-          taxes: vaultMap.taxes || "0",
+          principal: buildVaultData(vaultMap.principal),
+          profit: buildVaultData(vaultMap.profit),
+          taxes: buildVaultData(vaultMap.taxes),
         },
         portfolioSeries: portfolioSeries.map((s) => ({ date: s.date, value: s.value })),
         quotes: {
@@ -1076,6 +1094,30 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error("Auto-sweep toggle error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/vault/goal (protected) - Update vault goal settings
+  app.post("/api/vault/goal", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { updateVaultGoalSchema } = await import("@shared/schema");
+      const { type, goalName, goalAmount, autoSweepPct, autoSweepEnabled } = updateVaultGoalSchema.parse(req.body);
+
+      const vault = await storage.updateVaultGoal(userId, type, {
+        goalName,
+        goalAmount,
+        autoSweepPct,
+        autoSweepEnabled,
+      });
+
+      res.json({ success: true, vault });
+    } catch (error) {
+      console.error("Update vault goal error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });

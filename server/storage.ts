@@ -401,6 +401,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async updateVaultGoal(userId: string, type: string, updates: {
+    goalName?: string | null;
+    goalAmount?: string | null;
+    autoSweepPct?: number;
+    autoSweepEnabled?: boolean;
+  }): Promise<Vault> {
+    const existing = await this.getVault(userId, type);
+    if (existing) {
+      const [updated] = await db.update(vaults).set({ ...updates, updatedAt: new Date() }).where(eq(vaults.id, existing.id)).returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(vaults).values({ userId, type, asset: "USDT", balance: "0", ...updates }).returning();
+      return created;
+    }
+  }
+
   async getStrategies(): Promise<Strategy[]> {
     return db.select().from(strategies).where(eq(strategies.isActive, true));
   }
