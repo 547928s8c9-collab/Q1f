@@ -42,10 +42,10 @@ export type Vault = typeof vaults.$inferSelect;
 // Vault goal update schema
 export const updateVaultGoalSchema = z.object({
   type: z.enum(["principal", "profit", "taxes"]),
-  goalName: z.string().max(50).optional().nullable(),
-  goalAmount: z.string().optional().nullable(),
-  autoSweepPct: z.number().min(0).max(100).optional(),
-  autoSweepEnabled: z.boolean().optional(),
+  goalName: z.string().max(50).optional().nullable().transform(v => v === "" ? null : v),
+  goalAmount: z.string().regex(/^\d+$/, "Must be a valid amount in minor units").optional().nullable().transform(v => v === "" ? null : v),
+  autoSweepPct: z.number().int().min(0).max(100).default(0),
+  autoSweepEnabled: z.boolean().default(false),
 });
 export type UpdateVaultGoal = z.infer<typeof updateVaultGoalSchema>;
 

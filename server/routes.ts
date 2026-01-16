@@ -134,8 +134,16 @@ export async function registerRoutes(
         const balance = vault?.balance || "0";
         const goalAmount = vault?.goalAmount || null;
         let progress = 0;
-        if (goalAmount && BigInt(goalAmount) > 0) {
-          progress = Math.min(100, Math.round((Number(BigInt(balance) * 100n) / Number(BigInt(goalAmount)))));
+        try {
+          if (goalAmount && /^\d+$/.test(goalAmount)) {
+            const balanceBig = BigInt(balance);
+            const goalBig = BigInt(goalAmount);
+            if (goalBig > 0n) {
+              progress = Math.min(100, Number((balanceBig * 100n) / goalBig));
+            }
+          }
+        } catch {
+          progress = 0;
         }
         return {
           balance,

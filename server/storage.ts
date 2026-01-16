@@ -66,6 +66,12 @@ export interface IStorage {
   getVaults(userId: string): Promise<Vault[]>;
   getVault(userId: string, type: string): Promise<Vault | undefined>;
   updateVault(userId: string, type: string, balance: string): Promise<Vault>;
+  updateVaultGoal(userId: string, type: string, updates: {
+    goalName?: string | null;
+    goalAmount?: string | null;
+    autoSweepPct?: number;
+    autoSweepEnabled?: boolean;
+  }): Promise<Vault>;
 
   getStrategies(): Promise<Strategy[]>;
   getStrategy(id: string): Promise<Strategy | undefined>;
