@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, uniqueIndex, bigint, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -391,6 +391,70 @@ export const idempotencyKeys = pgTable("idempotency_keys", {
 export const insertIdempotencyKeySchema = createInsertSchema(idempotencyKeys).omit({ id: true, createdAt: true });
 export type InsertIdempotencyKey = z.infer<typeof insertIdempotencyKeySchema>;
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+
+// ==================== MARKET CANDLES ====================
+// OHLCV candle data for charting and analytics
+// ts = start-of-candle UTC milliseconds
+export const marketCandles = pgTable("market_candles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("binance_spot"),
+  symbol: text("symbol").notNull(), // e.g., "BTCUSDT", "ETHUSDT"
+  timeframe: text("timeframe").notNull(), // "15m" | "1h" | "1d"
+  ts: bigint("ts", { mode: "number" }).notNull(), // UTC ms, start-of-candle
+  open: text("open").notNull(), // stored as string for precision
+  high: text("high").notNull(),
+  low: text("low").notNull(),
+  close: text("close").notNull(),
+  volume: text("volume").notNull(),
+}, (table) => [
+  uniqueIndex("market_candles_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("market_candles_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertMarketCandleSchema = createInsertSchema(marketCandles).omit({ id: true });
+export type InsertMarketCandle = z.infer<typeof insertMarketCandleSchema>;
+export type MarketCandle = typeof marketCandles.$inferSelect;
+
+// ==================== MARKET DATA TYPES ====================
+// Timeframe validation
+export const VALID_TIMEFRAMES = ["15m", "1h", "1d"] as const;
+export type Timeframe = typeof VALID_TIMEFRAMES[number];
+
+// Candle DTO (numbers for API consumers)
+export interface Candle {
+  ts: number;      // start-of-candle UTC ms
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// Gap info for data quality reporting
+export interface GapInfo {
+  startMs: number;
+  endMs: number;
+  reason: string;
+}
+
+// Result from loading candles
+export interface LoadCandlesResult {
+  candles: Candle[];
+  gaps: GapInfo[];
+  source: "cache" | "cache+binance";
+}
+
+// Helper: convert DB row to Candle DTO
+export function dbRowToCandle(row: MarketCandle): Candle {
+  return {
+    ts: row.ts,
+    open: parseFloat(row.open),
+    high: parseFloat(row.high),
+    low: parseFloat(row.low),
+    close: parseFloat(row.close),
+    volume: parseFloat(row.volume),
+  };
+}
 
 // Notification types for inbox
 export const NotificationType = {
