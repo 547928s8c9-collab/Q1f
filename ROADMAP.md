@@ -6,7 +6,7 @@
 |---|---------|--------|-----------------|-----------|
 | 1 | Inbox/Notifications 2.0 | DONE | `/inbox`, `/api/notifications` | `client/src/pages/inbox.tsx`, `client/src/components/notification-bell.tsx`, `client/src/lib/inbox-map.ts` |
 | 2 | Statements | DONE | `/statements`, `/api/statements/summary`, `/api/statements/monthly` | `server/routes.ts`, `client/src/pages/statements.tsx` |
-| 3 | Vault Goals | PARTIAL | `/api/vault/goal` | `shared/schema.ts` (vaults table), `client/src/pages/wallet/vaults.tsx` |
+| 3 | Vault Goals | DONE | `/api/vault/goal` | `shared/schema.ts`, `client/src/pages/wallet/vaults.tsx`, `client/src/components/vault/vault-card.tsx` |
 | 4 | Risk Controls | DONE | `/api/positions/:id/risk-controls`, `/api/positions/:id/pause` | `server/routes.ts`, `client/src/pages/invest/strategy-detail.tsx` |
 | 5 | Status Page | DONE | `/status`, `/api/status` | `server/routes.ts`, `client/src/pages/status.tsx`, `client/src/components/global-banner.tsx` |
 | 6 | Smart Start | DONE | `/onboarding/smart-start`, `/onboarding/smart-start/results` | `client/src/lib/smart-start.ts`, `client/src/pages/onboarding/smart-start.tsx`, `client/src/pages/onboarding/smart-start-results.tsx` |
@@ -49,20 +49,18 @@
 
 ---
 
-### 3. Vault Goals (PARTIAL)
+### 3. Vault Goals (DONE)
 
-**Done:**
+**Completed:**
 - Schema fields: `goalName`, `goalAmount`, `autoSweepPct`, `autoSweepEnabled`
 - Vault goal API: `POST /api/vault/goal`
 - VaultData DTO includes progress calculation
 - Basic goal editing dialog
+- Milestones visualization (25/50/75/100% markers with checkmarks)
+- Progress celebrations/toasts at milestone crossings
+- Auto-sweep execution in payout job (ITER-3)
 
-**Missing:**
-- Milestones visualization
-- Auto-sweep execution in payout job
-- Progress celebrations/toasts
-
-**Files:** `shared/schema.ts`, `server/routes.ts`, `client/src/pages/wallet/vaults.tsx`
+**Files:** `shared/schema.ts`, `server/routes.ts`, `client/src/pages/wallet/vaults.tsx`, `client/src/components/vault/vault-card.tsx`
 
 ---
 
