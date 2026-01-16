@@ -1,0 +1,339 @@
+PROMPT ДЛЯ GPT PRO — VERSION B+ (REPLIT-READY, копируй целиком)
+
+Ты — Principal Full-Stack Engineer + Fintech Product Architect + Security/Compliance Lead. Ты работаешь в существующем репозитории Replit со стеком:
+
+- Frontend: React 18 + TypeScript, Wouter router, TanStack Query, Tailwind, shadcn/ui
+- Backend: Node.js + Express.js, TypeScript ESM
+- DB: PostgreSQL через Drizzle ORM
+- Auth: Replit OIDC
+- В репо уже есть: server/db.ts, server/storage.ts (DatabaseStorage), /api/bootstrap, и operations — канонический журнал денег (ledger/journal).
+
+──────────────────────────────────────────────────────────────────────────────
+0) ПРАВИЛО №1: СНАЧАЛА “СЛЕПОК РЕПОЗИТОРИЯ”, ПОТОМ ДИЗАЙН
+──────────────────────────────────────────────────────────────────────────────
+
+Перед тем как предлагать архитектуру или код, ты обязан:
+1) Проанализировать текущее состояние репозитория (папки, роуты, storage, таблицы/схемы, ключевые сущности, существующие enum/status flows, существующие API и UI-страницы).
+2) Выдать Current State Map (коротко, но точно):
+   - Existing DB entities / Drizzle schema (что уже есть)
+   - Existing endpoints (что уже есть и как они работают)
+   - Existing domain flows (deposit/withdraw, vaults, strategies, operations, simulation и т.д.)
+   - Глобальные инварианты, которые уже реализованы в коде (например, operations как канон)
+3) Везде, где есть выбор: не ломай существующее. Проектируй “накладку” админки над текущей системой, избегая переписываний.
+
+Если чего-то нет в репо — ты можешь предложить, но пометь как NEW и обоснуй.
+
+──────────────────────────────────────────────────────────────────────────────
+КЛЮЧЕВОЙ КОНТЕКСТ ПЛАТФОРМЫ (обязателен)
+──────────────────────────────────────────────────────────────────────────────
+
+Платформа — fintech-MVP с wallet/vaults/strategies/operations и режимом Invest (Simulation):
+- Пользователь кладёт деньги (реальная операция в платформе), но в Simulation деньги НЕ уходят на биржу.
+- Результаты “торговли” — это backtest/simulation на исторических данных (возможен oracle-режим). Это НЕ live-торговля и НЕ прогноз.
+- Нужна жёсткая граница:
+  - REAL money: только через operations ledger (истина).
+  - SIM P&L: только в отдельной подсистеме (derived analytics), никогда не влияет на real ledger.
+- В UI и в админке любые метрики должны быть промаркированы как REAL или SIM.
+
+──────────────────────────────────────────────────────────────────────────────
+ЗАДАЧА
+──────────────────────────────────────────────────────────────────────────────
+
+Создать Admin Console / админ-панель для управления платформой: деньгами/ledger, KYC/KYB, пользователями и доступами, vaults, goals, стратегиями, симуляциями, доходностью, комиссиями, рисками, инцидентами, статус-страницей, экспортами и “умным стартом”.
+
+Это должна быть устойчивая расширяемая система, где добавление нового раздела делается как модуль/плагин, без переписывания ядра. Реализуем итерациями в Replit → конвенции, границы и стандарты важнее скорости.
+
+──────────────────────────────────────────────────────────────────────────────
+НЕСНИЖАЕМЫЕ ИНВАРИАНТЫ (НЕЛЬЗЯ НАРУШАТЬ)
+──────────────────────────────────────────────────────────────────────────────
+
+1) Operations ledger каноничен. Никаких “ручных правок баланса” напрямую. Коррекции — только как отдельные correction operations с причиной, идемпотентностью, аудитом и (где нужно) 4-eyes.
+2) REAL ≠ SIM. SIM-результаты не попадают в real balance / real P&L / real statements.
+3) Любое чувствительное действие: RBAC + Audit log + Idempotency + (при необходимости) 4-eyes.
+4) PII/KYC документы: минимизация, маскирование в UI, строгий доступ.
+5) Единый стандарт API (контракты, ошибки, пагинация). Никакого “каждый эндпоинт по-своему”.
+6) Денежные значения: целые числа в minor units (копейки/центы), валюта — ISO код. Если в репо уже иначе — адаптируйся к тому, что есть, но не ухудшай целостность.
+
+──────────────────────────────────────────────────────────────────────────────
+“WOW-ФИЧИ” (встроить в архитектуру с первого дня)
+──────────────────────────────────────────────────────────────────────────────
+
+Архитектура админки должна поддерживать (даже если не всё делаем сразу):
+1) Inbox/Notifications (как Revolut): события денег/KYC/рисков → карточки с next step (и для юзера, и для админа).
+2) Statements / Export: месячная выписка, CSV операций, отчёт fee, отчёт P&L (REAL отдельно, SIM отдельно).
+3) Goals на Vaults: цели, прогресс, правила авто-отчислений (например % от профита) — управляется в админке, с аудитом.
+4) Risk controls для стратегий: Pause, лимит просадки, автопауза при DD > X, eligibility/visibility.
+5) Status page внутри приложения: баннер/инцидент (вкл/выкл), причины, сроки.
+6) Smart Start: 3 вопроса → рекомендуемые стратегии/лимиты; админ настраивает правила и контент.
+
+──────────────────────────────────────────────────────────────────────────────
+СТРОГИЕ КОНВЕНЦИИ РЕПОЗИТОРИЯ (ОБЯЗАТЕЛЬНО)
+──────────────────────────────────────────────────────────────────────────────
+
+1) Folder Structure
+- server/routes/admin/* — только HTTP-роуты (тонкие), без бизнес-логики
+- server/services/admin/* — бизнес-логика (use-cases)
+- server/middlewares/* — requestId/auth/rbac/idempotency/step-up
+- server/lib/* — pagination/errors/audit/outbox/inbox/stateMachine
+- shared/schema/* — DTO + Zod validation + общие типы FE/BE
+- db/schema/* — Drizzle tables
+- db/migrations/* — миграции
+- client/src/admin/* — админ-UI (страницы/компоненты)
+- client/src/components/* — общие компоненты (DataTable, StatusPill, Money, Drawer, ConfirmDialog, Timeline)
+
+2) Module Registry (чтобы админка была “как конструктор”)
+Добавь реестр модулей, чтобы FE/BE не расходились:
+- shared/admin/modules.ts — список модулей: id, title, route, navGroup, requiredPermissions, featureFlag, dangerLevel
+- FE строит навигацию из этого списка
+- BE использует тот же список для защиты/логирования (минимум — единая модель permission requirement)
+
+3) DTO/Validation Standard (единый)
+- Все запросы/ответы /api/admin/* имеют Zod-схемы в shared/schema.
+- FE импортирует типы/схемы из shared/schema.
+- BE валидирует вход/выход (минимум вход; лучше вход+выход для критичных эндпоинтов).
+- Любой enum статусов — централизован (и в DB, и в DTO).
+
+4) API Envelope Standard
+Успех:
+{ "ok": true, "data": {...}, "meta": {...}, "requestId": "..." }
+
+Ошибка:
+{ "ok": false, "error": { "code": "RBAC_DENIED", "message": "...", "details": {...} }, "requestId": "..." }
+
+- requestId обязателен всегда
+- Коды ошибок стабильные: RBAC_DENIED, VALIDATION_ERROR, NOT_FOUND, CONFLICT, IDEMPOTENCY_REPLAY, FOUR_EYES_REQUIRED, STATE_TRANSITION_INVALID, STEP_UP_REQUIRED, RATE_LIMITED
+
+5) Pagination/Filter/Sort Standard
+- Cursor-pagination предпочтительнее: (createdAt, id) или аналогичный стабильный курсор
+- Единые query-параметры: cursor, limit, q, status, from, to, sort (например -createdAt)
+- Все list endpoints возвращают meta: { nextCursor, limit, totalApprox? }
+
+──────────────────────────────────────────────────────────────────────────────
+SECURITY: RBAC + AUDIT + IDEMPOTENCY + 4-EYES + STEP-UP
+──────────────────────────────────────────────────────────────────────────────
+
+RBAC (granular, в БД)
+Роли минимум: SuperAdmin, Ops, Compliance, Support, ReadOnly.
+Permissions: users.read, users.write, kyc.review, withdrawals.approve, strategies.pause, status.publish, exports.generate, audit.read, config.write, …
+
+Требования:
+- OIDC даёт identity, права — из БД
+- ReadOnly реально read-only (никаких POST/PUT/PATCH/DELETE)
+- Все admin endpoints требуют auth + admin membership
+
+Audit Log (обязателен)
+Любое admin mutation:
+- actor, requestId, ip, userAgent
+- actionType, targetType/targetId
+- before/after (или diff)
+- reason (обязателен для чувствительных действий)
+- outcome (success/failure + errorCode)
+
+Idempotency (обязателен для state-changing)
+- Idempotency-Key обязателен для: approve/decline/pause/limit changes/export generation/config changes
+- храним: key + actor + endpoint + payload hash + response snapshot + createdAt
+- при повторе → IDEMPOTENCY_REPLAY + возвращаем тот же ответ
+
+4-eyes / Maker-Checker
+- Для крупных сумм/опасных действий:
+  - maker создаёт pending_admin_action
+  - checker подтверждает approve_admin_action
+- Политика конфигурируемая (порог суммы, типы действий, роль checker)
+- Любое 4-eyes действие должно быть видно в Audit и в Inbox
+
+Step-up для опасных действий (без новых технологий)
+Для “самых опасных” операций (например, approve withdrawal, корректирующая операция, отключение risk controls):
+- требуй step-up подтверждение: либо “re-auth recently” (если есть), либо одноразовый AdminConfirmToken с TTL (выдаётся после явного подтверждения в UI)
+- фиксируй step-up в audit
+
+──────────────────────────────────────────────────────────────────────────────
+EVENTING: OUTBOX / INBOX (устойчивость)
+──────────────────────────────────────────────────────────────────────────────
+
+Введи outbox:
+- Любое значимое событие → запись в outbox_events (тип, payload, actor?, createdAt)
+- Worker/cron доставляет:
+  - admin_inbox_items (очереди задач)
+  - user_notifications (если применимо)
+  - KPI aggregates (если применимо)
+
+Inbox:
+- раздел “Inbox/Queues” показывает actionable items
+- item имеет: тип, приоритет, status, owner, nextAction, ссылки на сущности
+
+Требования:
+- delivery idempotent
+- retry-safe
+- outbox запись создаётся в той же транзакции, что и доменное изменение
+
+──────────────────────────────────────────────────────────────────────────────
+STATE MACHINES (обязательны, иначе будет хаос)
+──────────────────────────────────────────────────────────────────────────────
+
+Для сущностей с жизненным циклом (withdrawal, KYC case, incident, strategy run/pause):
+- опиши allowed transitions
+- enforce на BE в одном месте (server/lib/stateMachine/*)
+- любые попытки “перескочить” → STATE_TRANSITION_INVALID
+
+──────────────────────────────────────────────────────────────────────────────
+МОДУЛИ АДМИНКИ (как плагины)
+──────────────────────────────────────────────────────────────────────────────
+
+Админка должна поддерживать минимум:
+1) Dashboard (REAL/SIM KPIs + alerts)
+2) Inbox/Queues (Withdrawals, KYC, Risk)
+3) Users & Access (roles/permissions/blocks/limits; “view as user” только безопасно + audit)
+4) Money / Ledger / Operations (каноника): read-only расследования + цепочки + idempotency trace
+5) Deposits & Withdrawals Ops: review → approve → processing → done/failed + 4-eyes
+6) KYC/KYB Console: кейсы/доки/решения/причины/история
+7) Vaults & Goals
+8) Strategies Control (visibility/eligibility, pause, risk limits, autopause policy)
+9) Simulation Analytics (SIM ONLY): runs/trades/equity/P&L, заметная маркировка “SIMULATION”
+10) Revenue/Fees/Statements (REAL отдельно, SIM отдельно)
+11) Incidents/Status Page (баннер/инциденты)
+12) Audit Log (поиск/фильтры)
+13) Config/Feature Flags (включение модулей и опасных функций)
+
+──────────────────────────────────────────────────────────────────────────────
+FRONTEND: ЕДИНЫЕ КОМПОНЕНТЫ + UX FINTECH-УРОВНЯ
+──────────────────────────────────────────────────────────────────────────────
+
+Обязательные UI-блоки:
+- DataTable (cursor pagination, filters, sort, persist filters)
+- StatusPill (единые статусы)
+- Money (minor units → формат, ISO currency, знак)
+- EntityDrawer (детали справа)
+- ConfirmDialog (reason required, idempotency key, 4-eyes/step-up warnings)
+- Timeline (audit + status changes + outbox/inbox events)
+
+UX-правило: любая карточка/строка отвечает:
+- что это, какой статус, что дальше, что будет если нажму
+
+──────────────────────────────────────────────────────────────────────────────
+BACKEND: СЕРВИСНЫЕ ГРАНИЦЫ (без бизнес-логики в роутах)
+──────────────────────────────────────────────────────────────────────────────
+
+- AdminUsersService (RBAC)
+- LedgerAdminService (read-only расследования; коррекции → только correction ops)
+- WithdrawalsAdminService (state machine + 4-eyes)
+- KycAdminService
+- StrategiesAdminService (pause/limits/autopause policy)
+- SimulationAdminService (SIM runs/trades/equity)
+- ReportingAdminService (exports/statements: async job + secure download)
+- IncidentsAdminService (status page)
+- AuditService, IdempotencyService, OutboxService, InboxService
+
+──────────────────────────────────────────────────────────────────────────────
+КАЧЕСТВО И ВЫХОД ФОРМАТ (важно для итераций)
+──────────────────────────────────────────────────────────────────────────────
+
+Как ты должен выдавать код:
+- Если создаёшь новый файл → даёшь полный файл (с путём).
+- Если правишь существующий → показываешь unified diff patch.
+- Всегда указывай “Files changed” списком.
+- Никакого псевдокода.
+
+После каждого slice:
+- добавь checklist: DB migration ok, endpoints ok, UI ok, RBAC ok, audit ok, idempotency ok
+- если в репо есть тесты/линтер/типчек — запускай; если нет — предложи минимальный “manual test script”.
+
+──────────────────────────────────────────────────────────────────────────────
+ВЫХОДНЫЕ АРТЕФАКТЫ (ОБЯЗАТЕЛЬНО В ЭТОМ ПОРЯДКЕ)
+──────────────────────────────────────────────────────────────────────────────
+
+A) Current State Map (снятие слепка репо)
+- таблицы/схемы/ключевые сущности
+- текущие операции и статусы
+- текущие API/роуты
+- где уже есть инварианты real/sim и ledger
+
+B) Admin Console Spec
+- Nav map
+- User stories (Ops/Compliance/Support/ReadOnly)
+- State machines: KYC case, withdrawal, deposit, strategy pause/run, incident
+- Матрица sensitive actions → RBAC + audit + idempotency + 4-eyes + step-up
+
+C) Data Model + миграции (Drizzle)
+- roles/permissions/admin_users/role_permissions
+- audit_log
+- idempotency_keys
+- pending_admin_actions (4-eyes)
+- outbox_events + admin_inbox_items
+- incidents/status_messages
+- simulation tables (если надо) отдельно
+- индексы/constraints/foreign keys
+
+D) API Design /api/admin/*
+- endpoints по модулям
+- стандарты ошибок/пагинации
+- middleware chain: requestId → auth → rbac → validation → idempotency → handler → audit/outbox
+- примеры запросов/ответов
+
+E) Frontend Routes /admin/*
+- layout/nav из module registry
+- страницы + drawers + таблицы
+- маркировка REAL/SIM
+
+F) План итераций (минимум 8 slices)
+Каждый slice = DB + API + UI + DoD + checklist + edge cases.
+
+G) Немедленная реализация — Iteration 1 (с кодом)
+Сразу реализуй:
+1) /admin shell + RBAC (таблицы + middleware + seed initial SuperAdmin из env)
+2) Audit log (на каждый mutation; на read опционально)
+3) Admin Dashboard (минимальный)
+4) Users (read-only list + details)
+5) Operations ledger (read-only list + фильтры + details + trace idempotency)
+6) Inbox (минимальный каркас списка событий/задач)
+
+Дай:
+- список файлов/патчей
+- полный код/диффы
+- команды миграций/seed
+- тест-критерии + ручной чек-лист
+
+──────────────────────────────────────────────────────────────────────────────
+ОГРАНИЧЕНИЯ
+──────────────────────────────────────────────────────────────────────────────
+
+- Не добавляй новые технологии без крайней нужды (если добавляешь зависимость — обоснуй).
+- Нельзя смешивать SIM и REAL в отчётах/балансах.
+- Нельзя вводить прямые ручные правки баланса.
+
+──────────────────────────────────────────────────────────────────────────────
+ДОПОЛНИТЕЛЬНОЕ ТРЕБОВАНИЕ: “КОРОТКИЙ ПРОМТ ДЛЯ REPLIT” + ПРОГРЕСС ПО ЭТАПАМ
+──────────────────────────────────────────────────────────────────────────────
+
+Для КАЖДОГО этапа A, B, C, D, E, F, G ты ОБЯЗАН завершать вывод одинаковым блоком:
+
+1) REPLIT PROMPT (короткий, практичный, чтобы сразу вставить в Replit AI)
+- Максимум 12–15 строк.
+- Только действия: какие файлы открыть/создать/править, какие команды запустить, что проверить.
+- Без длинных рассуждений.
+
+2) DONE/TODO ЧЕК-ЛИСТ ДЛЯ ЭТОГО ЭТАПА
+- Перечисли пункты этапа и отметь статусом: [DONE] или [TODO].
+- Если пункт частично выполнен: [PARTIAL] и что именно осталось.
+
+3) GLOBAL PROGRESS (A→G)
+- Обновляй общий статус этапов одной строкой, например:
+  A:[DONE] B:[TODO] C:[TODO] D:[TODO] E:[TODO] F:[TODO] G:[TODO]
+
+Формат блока (строго придерживайся):
+
+=== REPLIT PROMPT (Stage X) ===
+<короткий промт>
+
+=== STAGE X CHECKLIST ===
+- [DONE/TODO/PARTIAL] ...
+- ...
+
+=== GLOBAL PROGRESS ===
+A:[..] B:[..] C:[..] D:[..] E:[..] F:[..] G:[..]
+
+──────────────────────────────────────────────────────────────────────────────
+НАЧИНАЙ СЕЙЧАС
+──────────────────────────────────────────────────────────────────────────────
+
+Сначала A→F, затем G (Iteration 1 с кодом).
+После каждого этапа обязательно добавляй блок “REPLIT PROMPT + CHECKLIST + GLOBAL PROGRESS”.
