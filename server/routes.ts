@@ -112,16 +112,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /download/project - Download project archive (temporary)
-  app.get("/download/project", (_req, res) => {
-    const filePath = "/home/runner/workspace/zeon-project.tar.gz";
-    res.download(filePath, "zeon-project.tar.gz", (err) => {
-      if (err) {
-        res.status(404).json({ error: "File not found" });
-      }
-    });
-  });
-
   // GET /api/bootstrap - Main bootstrap endpoint (protected)
   app.get("/api/bootstrap", isAuthenticated, async (req, res) => {
     try {
