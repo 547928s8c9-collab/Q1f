@@ -1255,6 +1255,10 @@ export const SEED_PERMISSIONS = [
   { key: "money.approve_withdrawal", name: "Approve Withdrawals", description: "Approve pending withdrawals" },
   { key: "money.create_correction", name: "Create Corrections", description: "Create correction operations" },
   { key: "money.vault_override", name: "Override Vaults", description: "Override vault settings" },
+  // Withdrawals
+  { key: "withdrawals.read", name: "View Withdrawals", description: "View withdrawal queue" },
+  { key: "withdrawals.approve", name: "Approve Withdrawals", description: "Approve/reject withdrawal requests (4-eyes)" },
+  { key: "withdrawals.manage", name: "Manage Withdrawals", description: "Mark withdrawals as processing/completed/failed" },
   // Strategies
   { key: "strategies.read", name: "View Strategies", description: "View strategies" },
   { key: "strategies.pause", name: "Pause Strategies", description: "Pause/resume strategies" },
@@ -1288,6 +1292,7 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "users.read", "users.write", "users.suspend",
     "kyc.read", "kyc.review",
     "money.read", "money.approve_withdrawal", "money.create_correction", "money.vault_override",
+    "withdrawals.read", "withdrawals.approve", "withdrawals.manage",
     "strategies.read", "strategies.pause", "strategies.risk_limits", "strategies.visibility",
     "sim.read", "sim.control",
     "incidents.read", "incidents.publish", "incidents.resolve",
@@ -1301,6 +1306,7 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "users.read", "users.write", "users.suspend",
     "kyc.read",
     "money.read", "money.approve_withdrawal", "money.vault_override",
+    "withdrawals.read", "withdrawals.approve", "withdrawals.manage",
     "strategies.read", "strategies.pause", "strategies.risk_limits", "strategies.visibility",
     "sim.read", "sim.control",
     "incidents.read", "incidents.publish", "incidents.resolve",

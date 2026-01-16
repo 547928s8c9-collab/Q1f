@@ -12,6 +12,9 @@ import {
   securitySettings,
   adminInboxItems,
   incidents,
+  withdrawals,
+  pendingAdminActions,
+  PendingActionStatus,
 } from "@shared/schema";
 import { eq, desc, and, lt, or, ilike } from "drizzle-orm";
 import {
@@ -31,6 +34,11 @@ import {
   KYC_ADMIN_TRANSITIONS,
   type AdminKycApplicantListItem,
   type AdminKycApplicantDetail,
+  type AdminWithdrawalListItem,
+  type AdminWithdrawalDetail,
+  AdminWithdrawalDecisionBody,
+  AdminWithdrawalProcessBody,
+  WITHDRAWAL_ADMIN_TRANSITIONS,
 } from "@shared/admin/dto";
 import { requireIdempotencyKey, wrapMutation } from "./audit";
 
@@ -849,6 +857,606 @@ adminRouter.post(
       targetId: updated.id,
       beforeJson,
       afterJson,
+    };
+  })
+);
+
+// ==================== WITHDRAWALS ====================
+
+function shortenAddress(addr: string): string {
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+adminRouter.get("/withdrawals", requirePermission("withdrawals.read"), async (req, res) => {
+  try {
+    const query = AdminListQuery.safeParse(req.query);
+    if (!query.success) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, "Invalid query", 400, query.error.issues);
+    }
+
+    const { limit, cursor, q, status, sort } = query.data;
+
+    let whereClause = undefined;
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      if (decoded) {
+        whereClause = lt(withdrawals.createdAt, decoded.createdAt);
+      }
+    }
+
+    let baseQuery = db.select().from(withdrawals);
+
+    if (whereClause) {
+      baseQuery = baseQuery.where(whereClause) as typeof baseQuery;
+    }
+
+    if (status) {
+      const statusCondition = eq(withdrawals.status, status);
+      baseQuery = baseQuery.where(
+        whereClause ? and(whereClause, statusCondition) : statusCondition
+      ) as typeof baseQuery;
+    }
+
+    const rows = await baseQuery
+      .orderBy(sort === "asc" ? withdrawals.createdAt : desc(withdrawals.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const items = rows.slice(0, limit);
+
+    const userIds = [...new Set(items.map((w) => w.userId))];
+    const userRows = userIds.length > 0
+      ? await db.select({ id: users.id, email: users.email }).from(users).where(or(...userIds.map((id) => eq(users.id, id))))
+      : [];
+    const userMap = new Map(userRows.map((u) => [u.id, u.email]));
+
+    const result: AdminWithdrawalListItem[] = items.map((w) => ({
+      id: w.id,
+      createdAt: w.createdAt?.toISOString() || new Date().toISOString(),
+      userId: w.userId,
+      email: userMap.get(w.userId) || null,
+      amountMinor: w.amountMinor,
+      feeMinor: w.feeMinor,
+      currency: w.currency,
+      status: w.status,
+      addressShort: shortenAddress(w.address),
+      operationId: w.operationId,
+      riskScore: w.riskScore,
+    }));
+
+    const nextCursor = hasMore && items.length > 0
+      ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
+      : null;
+
+    ok(res, result, { limit, nextCursor });
+  } catch (error) {
+    console.error("[GET /admin/withdrawals]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to fetch withdrawals", 500);
+  }
+});
+
+adminRouter.get("/withdrawals/:id", requirePermission("withdrawals.read"), async (req, res) => {
+  try {
+    const withdrawalId = req.params.id;
+
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, withdrawalId))
+      .limit(1);
+
+    if (!withdrawal) {
+      return fail(res, ErrorCodes.NOT_FOUND, "Withdrawal not found", 404);
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, withdrawal.userId))
+      .limit(1);
+
+    let linkedOperation = null;
+    if (withdrawal.operationId) {
+      const [op] = await db
+        .select()
+        .from(operations)
+        .where(eq(operations.id, withdrawal.operationId))
+        .limit(1);
+      if (op) {
+        linkedOperation = {
+          id: op.id,
+          type: op.type,
+          status: op.status,
+          amount: op.amount,
+          fee: op.fee,
+          createdAt: op.createdAt?.toISOString() || new Date().toISOString(),
+        };
+      }
+    }
+
+    const [pendingAction] = await db
+      .select()
+      .from(pendingAdminActions)
+      .where(and(
+        eq(pendingAdminActions.targetType, "withdrawal"),
+        eq(pendingAdminActions.targetId, withdrawalId),
+        eq(pendingAdminActions.status, PendingActionStatus.PENDING)
+      ))
+      .limit(1);
+
+    const allowedTransitions = WITHDRAWAL_ADMIN_TRANSITIONS[withdrawal.status] || [];
+
+    const result: AdminWithdrawalDetail = {
+      id: withdrawal.id,
+      createdAt: withdrawal.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: withdrawal.updatedAt?.toISOString() || null,
+      userId: withdrawal.userId,
+      email: user?.email || null,
+      amountMinor: withdrawal.amountMinor,
+      feeMinor: withdrawal.feeMinor,
+      currency: withdrawal.currency,
+      status: withdrawal.status,
+      address: withdrawal.address,
+      addressShort: shortenAddress(withdrawal.address),
+      operationId: withdrawal.operationId,
+      riskScore: withdrawal.riskScore,
+      riskFlags: Array.isArray(withdrawal.riskFlags) ? withdrawal.riskFlags as string[] : null,
+      lastError: withdrawal.lastError,
+      approvedBy: withdrawal.approvedBy,
+      approvedAt: withdrawal.approvedAt?.toISOString() || null,
+      rejectedBy: withdrawal.rejectedBy,
+      rejectedAt: withdrawal.rejectedAt?.toISOString() || null,
+      rejectionReason: withdrawal.rejectionReason,
+      processedAt: withdrawal.processedAt?.toISOString() || null,
+      completedAt: withdrawal.completedAt?.toISOString() || null,
+      txHash: withdrawal.txHash,
+      user: user ? {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      } : null,
+      linkedOperation,
+      pendingAction: pendingAction ? {
+        id: pendingAction.id,
+        actionType: pendingAction.actionType,
+        status: pendingAction.status,
+        makerAdminUserId: pendingAction.makerAdminUserId,
+        createdAt: pendingAction.createdAt?.toISOString() || new Date().toISOString(),
+      } : null,
+      allowedTransitions,
+    };
+
+    ok(res, result);
+  } catch (error) {
+    console.error("[GET /admin/withdrawals/:id]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to fetch withdrawal", 500);
+  }
+});
+
+adminRouter.post(
+  "/withdrawals/:id/request-approval",
+  requirePermission("withdrawals.approve"),
+  requireIdempotencyKey,
+  wrapMutation("WITHDRAWAL_APPROVAL_REQUEST", async (req, _res, ctx) => {
+    const withdrawalId = req.params.id;
+    const adminUserId = ctx.adminUserId;
+
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, withdrawalId))
+      .limit(1);
+
+    if (!withdrawal) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Withdrawal not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    if (withdrawal.status !== "PENDING") {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "INVALID_STATUS", message: `Withdrawal is not pending, current status: ${withdrawal.status}` },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const [existingAction] = await db
+      .select()
+      .from(pendingAdminActions)
+      .where(and(
+        eq(pendingAdminActions.targetType, "withdrawal"),
+        eq(pendingAdminActions.targetId, withdrawalId),
+        eq(pendingAdminActions.status, PendingActionStatus.PENDING)
+      ))
+      .limit(1);
+
+    if (existingAction) {
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: { code: "ACTION_ALREADY_PENDING", message: "A pending approval request already exists" },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const [created] = await db.insert(pendingAdminActions).values({
+      actionType: "WITHDRAWAL_APPROVE",
+      targetType: "withdrawal",
+      targetId: withdrawalId,
+      makerAdminUserId: adminUserId,
+      payloadJson: { withdrawalId, requestedAt: new Date().toISOString() },
+      expiresAt,
+    }).returning();
+
+    return {
+      status: 201,
+      body: {
+        ok: true,
+        data: {
+          pendingActionId: created.id,
+          status: "PENDING_APPROVAL",
+          expiresAt: expiresAt.toISOString(),
+        },
+        requestId: ctx.requestId,
+      },
+      targetType: "withdrawal",
+      targetId: withdrawalId,
+      beforeJson: { status: withdrawal.status },
+      afterJson: { status: withdrawal.status, pendingActionId: created.id },
+    };
+  })
+);
+
+adminRouter.post(
+  "/pending-actions/:id/approve",
+  requirePermission("withdrawals.approve"),
+  requireIdempotencyKey,
+  wrapMutation("PENDING_ACTION_APPROVE", async (req, _res, ctx) => {
+    const actionId = req.params.id;
+    const checkerAdminUserId = ctx.adminUserId;
+
+    const [action] = await db
+      .select()
+      .from(pendingAdminActions)
+      .where(eq(pendingAdminActions.id, actionId))
+      .limit(1);
+
+    if (!action) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Pending action not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    if (action.status !== PendingActionStatus.PENDING) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "ACTION_NOT_PENDING", message: `Action is not pending, status: ${action.status}` },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    if (action.expiresAt && new Date() > action.expiresAt) {
+      await db.update(pendingAdminActions)
+        .set({ status: PendingActionStatus.EXPIRED })
+        .where(eq(pendingAdminActions.id, actionId));
+
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "ACTION_EXPIRED", message: "This pending action has expired" },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    if (action.makerAdminUserId === checkerAdminUserId) {
+      return {
+        status: 403,
+        body: {
+          ok: false,
+          error: { code: "SAME_USER_FORBIDDEN", message: "Maker and checker must be different users (4-eyes principle)" },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    if (action.actionType === "WITHDRAWAL_APPROVE") {
+      const [withdrawal] = await db
+        .select()
+        .from(withdrawals)
+        .where(eq(withdrawals.id, action.targetId))
+        .limit(1);
+
+      if (!withdrawal) {
+        return {
+          status: 404,
+          body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Withdrawal not found" }, requestId: ctx.requestId },
+        };
+      }
+
+      if (withdrawal.status !== "PENDING") {
+        return {
+          status: 400,
+          body: {
+            ok: false,
+            error: { code: "INVALID_STATUS", message: `Withdrawal status changed, current: ${withdrawal.status}` },
+            requestId: ctx.requestId,
+          },
+        };
+      }
+
+      await db.update(pendingAdminActions)
+        .set({
+          status: PendingActionStatus.APPROVED,
+          checkerAdminUserId,
+          decisionAt: new Date(),
+        })
+        .where(eq(pendingAdminActions.id, actionId));
+
+      const [updated] = await db.update(withdrawals)
+        .set({
+          status: "APPROVED",
+          approvedBy: checkerAdminUserId,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(withdrawals.id, action.targetId))
+        .returning();
+
+      await db.update(adminInboxItems)
+        .set({
+          status: "DONE",
+          resolvedAt: new Date(),
+          resolvedByAdminUserId: checkerAdminUserId,
+        })
+        .where(and(
+          eq(adminInboxItems.entityType, "withdrawal"),
+          eq(adminInboxItems.entityId, action.targetId),
+          eq(adminInboxItems.status, "OPEN")
+        ));
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          data: { withdrawalId: updated.id, status: updated.status },
+          requestId: ctx.requestId,
+        },
+        targetType: "withdrawal",
+        targetId: updated.id,
+        beforeJson: { status: "PENDING" },
+        afterJson: { status: "APPROVED", approvedBy: checkerAdminUserId },
+      };
+    }
+
+    return {
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "UNSUPPORTED_ACTION", message: `Action type ${action.actionType} is not supported` },
+        requestId: ctx.requestId,
+      },
+    };
+  })
+);
+
+adminRouter.post(
+  "/withdrawals/:id/reject",
+  requirePermission("withdrawals.approve"),
+  requireIdempotencyKey,
+  wrapMutation("WITHDRAWAL_REJECT", async (req, _res, ctx) => {
+    const withdrawalId = req.params.id;
+    const adminUserId = ctx.adminUserId;
+
+    const parsed = AdminWithdrawalDecisionBody.safeParse(req.body);
+    if (!parsed.success || parsed.data.action !== "REJECT") {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Invalid input - action must be REJECT" },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const { reason } = parsed.data;
+
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, withdrawalId))
+      .limit(1);
+
+    if (!withdrawal) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Withdrawal not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    const allowedFrom = ["PENDING"];
+    if (!allowedFrom.includes(withdrawal.status)) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "INVALID_TRANSITION", message: `Cannot reject from status: ${withdrawal.status}` },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    await db.update(pendingAdminActions)
+      .set({ status: PendingActionStatus.CANCELLED })
+      .where(and(
+        eq(pendingAdminActions.targetType, "withdrawal"),
+        eq(pendingAdminActions.targetId, withdrawalId),
+        eq(pendingAdminActions.status, PendingActionStatus.PENDING)
+      ));
+
+    const [updated] = await db.update(withdrawals)
+      .set({
+        status: "REJECTED",
+        rejectedBy: adminUserId,
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(withdrawals.id, withdrawalId))
+      .returning();
+
+    await db.update(adminInboxItems)
+      .set({
+        status: "DONE",
+        resolvedAt: new Date(),
+        resolvedByAdminUserId: adminUserId,
+      })
+      .where(and(
+        eq(adminInboxItems.entityType, "withdrawal"),
+        eq(adminInboxItems.entityId, withdrawalId),
+        eq(adminInboxItems.status, "OPEN")
+      ));
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        data: { withdrawalId: updated.id, status: updated.status },
+        requestId: ctx.requestId,
+      },
+      targetType: "withdrawal",
+      targetId: updated.id,
+      beforeJson: { status: withdrawal.status },
+      afterJson: { status: "REJECTED", rejectedBy: adminUserId, reason },
+    };
+  })
+);
+
+adminRouter.post(
+  "/withdrawals/:id/process",
+  requirePermission("withdrawals.manage"),
+  requireIdempotencyKey,
+  wrapMutation("WITHDRAWAL_PROCESS", async (req, _res, ctx) => {
+    const withdrawalId = req.params.id;
+
+    const parsed = AdminWithdrawalProcessBody.safeParse(req.body);
+    if (!parsed.success) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: ErrorCodes.VALIDATION_ERROR, message: "Invalid input", details: parsed.error.issues },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const { action, reason, txHash, error } = parsed.data;
+
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, withdrawalId))
+      .limit(1);
+
+    if (!withdrawal) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Withdrawal not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    let newStatus: string;
+    let updates: Record<string, any> = { updatedAt: new Date() };
+
+    if (action === "MARK_PROCESSING") {
+      if (withdrawal.status !== "APPROVED") {
+        return {
+          status: 400,
+          body: {
+            ok: false,
+            error: { code: "INVALID_TRANSITION", message: `Cannot mark processing from status: ${withdrawal.status}` },
+            requestId: ctx.requestId,
+          },
+        };
+      }
+      newStatus = "PROCESSING";
+      updates.status = newStatus;
+      updates.processedAt = new Date();
+    } else if (action === "MARK_COMPLETED") {
+      if (withdrawal.status !== "PROCESSING") {
+        return {
+          status: 400,
+          body: {
+            ok: false,
+            error: { code: "INVALID_TRANSITION", message: `Cannot mark completed from status: ${withdrawal.status}` },
+            requestId: ctx.requestId,
+          },
+        };
+      }
+      newStatus = "COMPLETED";
+      updates.status = newStatus;
+      updates.completedAt = new Date();
+      if (txHash) updates.txHash = txHash;
+    } else if (action === "MARK_FAILED") {
+      if (withdrawal.status !== "PROCESSING") {
+        return {
+          status: 400,
+          body: {
+            ok: false,
+            error: { code: "INVALID_TRANSITION", message: `Cannot mark failed from status: ${withdrawal.status}` },
+            requestId: ctx.requestId,
+          },
+        };
+      }
+      newStatus = "FAILED";
+      updates.status = newStatus;
+      updates.lastError = error || reason;
+    } else {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "INVALID_ACTION", message: `Unknown action: ${action}` },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const [updated] = await db.update(withdrawals)
+      .set(updates)
+      .where(eq(withdrawals.id, withdrawalId))
+      .returning();
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        data: { withdrawalId: updated.id, status: updated.status },
+        requestId: ctx.requestId,
+      },
+      targetType: "withdrawal",
+      targetId: updated.id,
+      beforeJson: { status: withdrawal.status },
+      afterJson: { status: newStatus, action, reason },
     };
   })
 );

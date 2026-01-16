@@ -97,7 +97,13 @@ Preferred communication style: Simple, everyday language.
 - **KYC Queue Management**: Admin UI at `/admin/kyc` with list view, detail sheet, and decision dialog. Supports filtering by status, search by email/userId.
 - **KYC Admin Transitions**: IN_REVIEW → [APPROVED, NEEDS_ACTION, REJECTED, ON_HOLD], ON_HOLD → [APPROVED, REJECTED]. All decisions require a reason and create audit logs.
 - **KYC Permissions**: `kyc.read` (view applications), `kyc.review` (make decisions)
-- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/audit.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`, `client/src/pages/admin/kyc.tsx`
+- **Withdrawals Queue Management**: Admin UI at `/admin/withdrawals` with list view, detail sheet, and 4-eyes approval workflow.
+- **Withdrawals Table**: `withdrawals` table with 7 statuses: PENDING, APPROVED, PROCESSING, COMPLETED, FAILED, REJECTED, CANCELLED
+- **4-Eyes (Maker-Checker) Pattern**: Uses `pendingAdminActions` table with `makerAdminUserId` and `checkerAdminUserId`. Maker creates approval request, different admin (checker) must approve. Same user cannot approve their own request.
+- **Withdrawal State Machine**: PENDING → [APPROVED, REJECTED, CANCELLED], APPROVED → [PROCESSING, CANCELLED], PROCESSING → [COMPLETED, FAILED], FAILED → [PROCESSING]
+- **Withdrawal Endpoints**: `GET /api/admin/withdrawals` (list), `GET /api/admin/withdrawals/:id` (detail), `POST /api/admin/withdrawals/:id/request-approval` (maker step), `POST /api/admin/pending-actions/:id/approve` (checker step), `POST /api/admin/withdrawals/:id/reject`, `POST /api/admin/withdrawals/:id/process` (mark processing/completed/failed)
+- **Withdrawal Permissions**: `withdrawals.read` (view queue), `withdrawals.approve` (4-eyes approve/reject), `withdrawals.manage` (mark processing/completed/failed)
+- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/audit.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`, `client/src/pages/admin/kyc.tsx`, `client/src/pages/admin/withdrawals.tsx`, `server/lib/stateMachine/withdrawal.ts`
 
 ### Key Design Decisions
 - **Multi-User Architecture**: All data is user-scoped and initialized upon first login.

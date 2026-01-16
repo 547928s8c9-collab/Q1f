@@ -1,0 +1,134 @@
+Ты — QA Lead + Full-Stack Engineer. Проверь работоспособность Admin Console и связанных модулей в текущем репозитории. Цель: дать уверенный E2E smoke/regression по Admin API и Admin UI, не меняя бизнес-логику (только если найдешь баг — предложи фикс отдельным блоком).
+
+КОНТЕКСТ (что уже реализовано)
+- RBAC: admin_users/roles/permissions + cache TTL 60s
+- Admin API: /api/admin/me, /users, /operations, /inbox, /incidents (GET/POST/PATCH), /kyc/applicants (GET/GET/:id/POST decision)
+- Требования: envelope {ok,data,meta?,requestId}, ошибки {ok:false,error:{code,message},requestId}
+- Mutations: Idempotency-Key обязателен, ответы кэшируются при повторе
+- Audit: admin_audit_logs with before/after snapshots на всех admin mutations
+- KYC: state transitions enforced
+- UI: /admin (Dashboard), /admin/users, /admin/operations, /admin/inbox, /admin/incidents, /admin/kyc
+- Prod auth: OIDC sub; dev fallback: x-replit-user-id
+
+ЗАДАЧА
+1) Подготовь тестовую среду:
+   - Убедись, что миграции применены (npm run db:push если нужно)
+   - Убедись, что RBAC seeded (npm run db:seed или npx tsx server/seed.ts)
+   - Убедись, что SuperAdmin назначен:
+     * ADMIN_SUPER_EMAIL выставлен
+     * пользователь с этим email уже логинился (users запись есть)
+     * seed назначил роль super_admin
+   - Если чего-то не хватает — выведи конкретные команды/шаги для исправления.
+
+2) API Checks (через curl/HTTP и/или небольшим Node скриптом):
+   A) Auth/RBAC:
+     - без auth /api/admin/me → 401/403 (проверь code)
+     - с admin auth → 200 и содержит roles+permissions
+     - с non-admin auth → 403 ADMIN_REQUIRED/RBAC_DENIED
+   B) Envelope/requestId:
+     - любой success содержит ok=true + requestId
+     - любой error содержит ok=false + error.code + requestId
+   C) Cursor pagination:
+     - users list limit=5 возвращает meta.nextCursor (или null если нет)
+     - operations list limit=5 возвращает meta.nextCursor
+   D) Incidents:
+     - GET list работает
+     - POST create требует Idempotency-Key (без него → 400)
+     - POST create с Idempotency-Key → 200, сохраняется инцидент
+     - Повтор POST с тем же Idempotency-Key → cached response (идентичный data/requestId допускается разный/одинаковый — зафиксируй как реализовано)
+     - PATCH update валидирует state transitions (попробуй недопустимый переход → STATE_TRANSITION_INVALID)
+   E) KYC Queue:
+     - GET /kyc/applicants list работает + фильтр status
+     - GET detail работает/404 на несуществующий
+     - POST decision без Idempotency-Key → 400
+     - POST decision с reason → 200 и статус изменен согласно state machine
+     - Повтор decision с тем же key → replay
+   F) Audit logs:
+     - после POST/PATCH incidents и POST kyc decision проверь, что admin_audit_logs добавились записи
+     - проверь: actorAdminUserId, actionType, targetType/id, beforeJson/afterJson, reason, outcome
+   G) RBAC cache:
+     - Убедись, что после изменения ролей (если есть invalidatePermissionsCache) права обновляются (или зафиксируй, что обновляются через TTL).
+
+3) UI Checks (через браузер вручную, но ты должен дать точные шаги):
+   - Открой /admin (Dashboard) под админом: нет ошибок в консоли, данные грузятся/плейсхолдеры корректны
+   - /admin/users: таблица грузится, поиск/пагинация, drawer details открывается
+   - /admin/operations: таблица грузится, drawer details открывается
+   - /admin/inbox: пустое состояние или данные, без падений
+   - /admin/incidents: список виден, создание через UI работает (если UI уже есть), ошибки красиво показываются
+   - /admin/kyc: список грузится, фильтры/поиск, drawer, decision dialog с reason обязателен
+   - Проверить guard: non-admin не попадает в /admin (redirect или Access denied)
+
+4) Если найдешь баг:
+   - Не правь код молча.
+   - Сформируй “Fix Proposal” блок: файл → что изменить → почему → как проверить.
+
+ВЫХОД (ОБЯЗАТЕЛЬНО)
+Сгенерируй в конце единый COPY-PASTE REPORT (одним блоком Markdown) в строгом формате ниже.
+Заполни фактическими результатами и точными командами.
+
+=== COPY-PASTE REPORT ===
+## Environment
+- App URL/Host:
+- Commit/Branch (если есть):
+- Node version:
+- DB status: (migrated? seeded?)
+- Admin identity used: (email or user-id)
+
+## Smoke Status
+- Overall: PASS/FAIL
+- Blocking issues: (count)
+
+## API Tests
+### Auth/RBAC
+- /api/admin/me unauth: (expected vs actual)
+- /api/admin/me admin: (expected vs actual)
+- /api/admin/me non-admin: (expected vs actual)
+
+### Envelope/requestId
+- Success shape: PASS/FAIL (example response snippet)
+- Error shape: PASS/FAIL (example response snippet)
+
+### Pagination
+- Users list: limit (limit, nextCursor behavior)
+- Operations list: (limit, nextCursor behavior)
+
+### Incidents
+- GET list: PASS/FAIL
+- POST create (no Idempotency-Key): PASS/FAIL
+- POST create (with Idempotency-Key): PASS/FAIL (created id)
+- POST replay: PASS/FAIL (same response? same id? details)
+- PATCH transition validation: PASS/FAIL (test case)
+
+### KYC
+- GET list + filter: PASS/FAIL
+- GET detail: PASS/FAIL
+- POST decision (no key): PASS/FAIL
+- POST decision (with key + reason): PASS/FAIL (status change)
+- POST replay: PASS/FAIL
+
+### Audit Logs
+- Incidents audit created: PASS/FAIL (rows count / sample)
+- KYC decision audit created: PASS/FAIL (rows count / sample)
+
+## UI Tests
+- /admin guard non-admin: PASS/FAIL (behavior)
+- Dashboard: PASS/FAIL
+- Users page + drawer: PASS/FAIL
+- Operations page + drawer: PASS/FAIL
+- Inbox page: PASS/FAIL
+- Incidents UI (list/create/update): PASS/FAIL
+- KYC UI (list/filter/drawer/decision): PASS/FAIL
+- Console errors: (none / list)
+
+## Notes
+- Any deviations from spec:
+- Performance (slow pages?):
+- Suggestions:
+
+## Fix Proposal (if any)
+- Issue 1:
+  - Symptom:
+  - Root cause guess:
+  - Suggested patch (file + change):
+  - Verification steps:
+=== END REPORT ===
