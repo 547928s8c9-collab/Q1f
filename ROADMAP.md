@@ -134,6 +134,23 @@
   - Removed `securitySettings.kycStatus` fallback from bootstrap calculation
 - **Files:** `server/storage.ts`, `server/routes.ts`
 
+### ITER-2: Money Ops Audit Trail (DONE - Jan 2026)
+- **Goal:** Add comprehensive audit logging for all financial operations
+- **Coverage:**
+
+| Route | Event | Fields Logged |
+|-------|-------|---------------|
+| `/api/deposit/usdt/simulate` | DEPOSIT_USDT | amountMinor, asset, idempotencyKey, requestId, ip |
+| `/api/deposit/card/simulate` | DEPOSIT_CARD | amountMinor, asset, sourceAmount, sourceAsset, idempotencyKey, requestId, ip |
+| `/api/invest` | INVEST | amountMinor, asset, strategyId, idempotencyKey, requestId, ip |
+| `/api/withdraw/usdt` | WITHDRAW_USDT | amountMinor, feeMinor, asset, idempotencyKey, requestId, ip |
+| `/api/vault/transfer` | VAULT_TRANSFER | amountMinor, asset, fromVault, toVault, idempotencyKey, requestId, ip |
+| `/api/payout/daily` | DAILY_PAYOUT | amountMinor, asset, strategyId, requestId, ip |
+| `/api/payout/daily` (auto-sweep) | VAULT_TRANSFER_AUTO_SWEEP | amountMinor, asset, fromVault, toVault, autoSweep, requestId, ip |
+
+- **Privacy:** Wallet addresses excluded from audit details
+- **Files:** `server/routes.ts`
+
 ---
 
 ## Next Iteration Recommendations

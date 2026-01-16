@@ -1055,6 +1055,22 @@ export async function registerRoutes(
         reason: null,
       });
 
+      // Audit log for DEPOSIT_USDT
+      await storage.createAuditLog({
+        userId,
+        event: "DEPOSIT_USDT",
+        resourceType: "operation",
+        resourceId: operation.id,
+        details: {
+          amountMinor: amount,
+          asset: "USDT",
+          idempotencyKey: req.headers["idempotency-key"] || null,
+          requestId: req.requestId,
+        },
+        ip: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
@@ -1110,6 +1126,24 @@ export async function registerRoutes(
         toVault: null,
         metadata: { rubAmount: amount },
         reason: null,
+      });
+
+      // Audit log for DEPOSIT_CARD
+      await storage.createAuditLog({
+        userId,
+        event: "DEPOSIT_CARD",
+        resourceType: "operation",
+        resourceId: operation.id,
+        details: {
+          amountMinor: usdtAmount,
+          asset: "USDT",
+          sourceAmount: amount,
+          sourceAsset: "RUB",
+          idempotencyKey: req.headers["idempotency-key"] || null,
+          requestId: req.requestId,
+        },
+        ip: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
       });
 
       const responseBody = { success: true, usdtAmount, operation: { id: operation.id } };
@@ -1227,6 +1261,23 @@ export async function registerRoutes(
         reason: null,
       });
 
+      // Audit log for INVEST
+      await storage.createAuditLog({
+        userId,
+        event: "INVEST",
+        resourceType: "operation",
+        resourceId: operation.id,
+        details: {
+          amountMinor: amount,
+          asset: "USDT",
+          strategyId,
+          idempotencyKey: req.headers["idempotency-key"] || null,
+          requestId: req.requestId,
+        },
+        ip: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
@@ -1261,7 +1312,7 @@ export async function registerRoutes(
         const strategy = await storage.getStrategy(position.strategyId);
 
         // Create payout operation
-        await storage.createOperation({
+        const payoutOperation = await storage.createOperation({
           userId,
           type: "DAILY_PAYOUT",
           status: "completed",
@@ -1278,6 +1329,22 @@ export async function registerRoutes(
           reason: null,
         });
 
+        // Audit log for DAILY_PAYOUT
+        await storage.createAuditLog({
+          userId,
+          event: "DAILY_PAYOUT",
+          resourceType: "operation",
+          resourceId: payoutOperation.id,
+          details: {
+            amountMinor: payoutAmount,
+            asset: "USDT",
+            strategyId: position.strategyId,
+            requestId: req.requestId,
+          },
+          ip: req.ip || null,
+          userAgent: req.headers["user-agent"] || null,
+        });
+
         // Auto-sweep if enabled
         const security = await storage.getSecuritySettings(userId);
         if (security?.autoSweepEnabled) {
@@ -1292,7 +1359,7 @@ export async function registerRoutes(
           await storage.updateBalance(userId, "USDT", afterSweep, updatedBalance?.locked || "0");
 
           // Create sweep operation
-          await storage.createOperation({
+          const sweepOperation = await storage.createOperation({
             userId,
             type: "VAULT_TRANSFER",
             status: "completed",
@@ -1307,6 +1374,24 @@ export async function registerRoutes(
             toVault: "profit",
             metadata: { autoSweep: true },
             reason: null,
+          });
+
+          // Audit log for auto-sweep VAULT_TRANSFER
+          await storage.createAuditLog({
+            userId,
+            event: "VAULT_TRANSFER_AUTO_SWEEP",
+            resourceType: "operation",
+            resourceId: sweepOperation.id,
+            details: {
+              amountMinor: payoutAmount,
+              asset: "USDT",
+              fromVault: "wallet",
+              toVault: "profit",
+              autoSweep: true,
+              requestId: req.requestId,
+            },
+            ip: req.ip || null,
+            userAgent: req.headers["user-agent"] || null,
           });
         }
       }
@@ -1420,6 +1505,23 @@ export async function registerRoutes(
         reason: null,
       });
 
+      // Audit log for WITHDRAW_USDT (no address in details for privacy)
+      await storage.createAuditLog({
+        userId,
+        event: "WITHDRAW_USDT",
+        resourceType: "operation",
+        resourceId: operation.id,
+        details: {
+          amountMinor: amount,
+          feeMinor: fee,
+          asset: "USDT",
+          idempotencyKey: req.headers["idempotency-key"] || null,
+          requestId: req.requestId,
+        },
+        ip: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
@@ -1513,6 +1615,24 @@ export async function registerRoutes(
         toVault,
         metadata: null,
         reason: null,
+      });
+
+      // Audit log for VAULT_TRANSFER
+      await storage.createAuditLog({
+        userId,
+        event: "VAULT_TRANSFER",
+        resourceType: "operation",
+        resourceId: operation.id,
+        details: {
+          amountMinor: amount,
+          asset: "USDT",
+          fromVault,
+          toVault,
+          idempotencyKey: req.headers["idempotency-key"] || null,
+          requestId: req.requestId,
+        },
+        ip: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
       });
 
       const responseBody = { success: true, operation: { id: operation.id } };
