@@ -1070,7 +1070,11 @@ export async function registerRoutes(
       }
 
       const schema = z.object({ amount: z.string() });
-      const { amount } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { amount } = parsed.data;
 
       const balance = await storage.getBalance(userId, "USDT");
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
@@ -1135,7 +1139,11 @@ export async function registerRoutes(
       }
 
       const schema = z.object({ amount: z.string() }); // RUB in kopeks
-      const { amount } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { amount } = parsed.data;
 
       // Convert RUB to USDT using current quote rate
       const rubQuotes = await storage.getQuotes("USDT/RUB", 1);
@@ -1213,7 +1221,11 @@ export async function registerRoutes(
         strategyId: z.string(),
         amount: z.string(),
       });
-      const { strategyId, amount } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { strategyId, amount } = parsed.data;
 
       // Gate checks: consent and KYC required
       const security = await storage.getSecuritySettings(userId);
@@ -1346,6 +1358,9 @@ export async function registerRoutes(
       res.json(responseBody);
     } catch (error) {
       console.error("Invest error:", error);
+      if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1534,7 +1549,11 @@ export async function registerRoutes(
         amount: z.string(),
         address: z.string().min(30),
       });
-      const { amount, address } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { amount, address } = parsed.data;
 
       const security = await storage.getSecuritySettings(userId);
       const kycApplicant = await storage.getKycApplicant(userId);
@@ -1660,6 +1679,9 @@ export async function registerRoutes(
       res.json(responseBody);
     } catch (error) {
       console.error("Withdraw error:", error);
+      if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1683,7 +1705,11 @@ export async function registerRoutes(
         toVault: z.string(),
         amount: z.string(),
       });
-      const { fromVault, toVault, amount } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { fromVault, toVault, amount } = parsed.data;
 
       if (fromVault === toVault) {
         return res.status(400).json({ error: "Source and destination must be different" });
@@ -1820,6 +1846,14 @@ export async function registerRoutes(
       res.json(responseBody);
     } catch (error) {
       console.error("Vault transfer error:", error);
+      if (error instanceof Error) {
+        if (error.message === "INSUFFICIENT_BALANCE") {
+          return res.status(400).json({ error: "Insufficient wallet balance" });
+        }
+        if (error.message === "INSUFFICIENT_VAULT_BALANCE") {
+          return res.status(400).json({ error: "Insufficient vault balance" });
+        }
+      }
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1829,7 +1863,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
-      const { enabled } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { enabled } = parsed.data;
 
       await storage.updateSecuritySettings(userId, { twoFactorEnabled: enabled });
       res.json({ success: true });
@@ -1844,7 +1882,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
-      const { enabled } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { enabled } = parsed.data;
 
       await storage.updateSecuritySettings(userId, { whitelistEnabled: enabled });
       res.json({ success: true });
@@ -1874,7 +1916,11 @@ export async function registerRoutes(
         address: z.string().min(30),
         label: z.string().optional(),
       });
-      const { address, label } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { address, label } = parsed.data;
 
       const security = await storage.getSecuritySettings(userId);
       const delay = security?.addressDelay || 0;
@@ -1903,7 +1949,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ addressId: z.string() });
-      const { addressId } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { addressId } = parsed.data;
 
       // IDOR protection: verify ownership before delete
       const address = await storage.getWhitelistAddress(addressId);
@@ -1924,7 +1974,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ delay: z.number().min(0).max(24) });
-      const { delay } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { delay } = parsed.data;
 
       await storage.updateSecuritySettings(userId, { addressDelay: delay });
       res.json({ success: true });
@@ -1939,7 +1993,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ code: z.string().min(1).max(20) });
-      const { code } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { code } = parsed.data;
 
       await storage.updateSecuritySettings(userId, { antiPhishingCode: code });
       res.json({ success: true });
@@ -1954,7 +2012,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
-      const { enabled } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { enabled } = parsed.data;
 
       await storage.updateSecuritySettings(userId, { autoSweepEnabled: enabled });
       res.json({ success: true });
@@ -2006,7 +2068,11 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const schema = z.object({ code: z.string().length(6) });
-      const { code } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { code } = parsed.data;
 
       // Demo: Accept any 6-digit code
       if (!/^\d{6}$/.test(code)) {
@@ -2428,7 +2494,11 @@ export async function registerRoutes(
         toAsset: z.string(),
         amount: z.string(),
       });
-      const { fromAsset, toAsset, amount } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { fromAsset, toAsset, amount } = parsed.data;
 
       // Demo rates
       const rates: Record<string, Record<string, number>> = {
@@ -2776,7 +2846,11 @@ export async function registerRoutes(
         ddLimitPct: z.number().int().min(0).max(100).optional(),
         autoPauseEnabled: z.boolean().optional(),
       });
-      const { ddLimitPct, autoPauseEnabled } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { ddLimitPct, autoPauseEnabled } = parsed.data;
 
       const position = await storage.getPosition(userId, strategyId);
       if (!position) {
@@ -2814,7 +2888,11 @@ export async function registerRoutes(
       const schema = z.object({
         paused: z.boolean(),
       });
-      const { paused } = schema.parse(req.body);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+      const { paused } = parsed.data;
 
       const position = await storage.getPosition(userId, strategyId);
       if (!position) {
