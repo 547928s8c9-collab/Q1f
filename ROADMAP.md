@@ -181,9 +181,16 @@
   - First request: Inserts pending row, processes operation, caches response with operation.id
   - Duplicate request: Returns cached response with same operation.id (no balance duplication)
   - Missing key: Continues without idempotency (backward compatible)
-- **E2E Test Results:**
-  - DEPOSIT_USDT: Duplicate calls returned same operation.id, DB count = 1
-  - VAULT_TRANSFER: Duplicate calls returned same operation.id, DB count = 1
+- **E2E Test Results (NEXT-03 - Jan 2026):**
+
+| Endpoint | Same Key Test | Different Keys Test | Balance Check |
+|----------|---------------|---------------------|---------------|
+| `/api/deposit/usdt/simulate` | ✓ same op.id | ✓ different op.ids | ✓ +1 not +2 |
+| `/api/deposit/card/simulate` | ✓ same op.id | - | ✓ |
+| `/api/invest` | ✓ same op.id | - | ✓ |
+| `/api/withdraw/usdt` | Code verified | (requires 2FA) | - |
+| `/api/vault/transfer` | ✓ same op.id | - | ✓ +1 not +2 |
+
 - **Files:** `server/routes.ts` (lines 22-90 for helpers)
 
 ---
