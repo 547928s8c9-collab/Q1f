@@ -4,7 +4,7 @@
 
 | # | Feature | Status | Routes/Endpoints | Key Files |
 |---|---------|--------|-----------------|-----------|
-| 1 | Inbox/Notifications 2.0 | PARTIAL | `/inbox`, `/api/notifications` | `client/src/pages/inbox.tsx`, `client/src/components/notifications/notification-bell.tsx` |
+| 1 | Inbox/Notifications 2.0 | DONE | `/inbox`, `/api/notifications` | `client/src/pages/inbox.tsx`, `client/src/components/notification-bell.tsx`, `client/src/lib/inbox-map.ts` |
 | 2 | Statements | PARTIAL | `/api/operations/export` (CSV only) | `server/routes.ts` (line 353) |
 | 3 | Vault Goals | PARTIAL | `/api/vault/goal` | `shared/schema.ts` (vaults table), `client/src/pages/wallet/vaults.tsx` |
 | 4 | Risk Controls | DONE | `/api/positions/:id/risk-controls`, `/api/positions/:id/pause` | `server/routes.ts`, `client/src/pages/invest/strategy-detail.tsx` |
@@ -15,24 +15,20 @@
 
 ## Detailed Status
 
-### 1. Inbox/Notifications 2.0 (PARTIAL)
+### 1. Inbox/Notifications 2.0 (DONE)
 
-**Done:**
-- Basic inbox page with card-based notifications
-- Type badges (transaction, kyc, security, system)
-- All/Unread filter tabs
+**Completed (WOW-01):**
+- Centralized `inboxMap.ts` with type->icon/color/label mapping
+- Icon circles per notification type (transaction, kyc, security, system, investment, risk)
+- Enhanced card layout with type chips, unread indicators, timestamps
+- Bell popover with top 5 notifications + "See all" button
+- All/Unread filter tabs with unread count
 - Mark as read (individual + bulk)
-- CTA routing with `ctaPath` + `ctaLabel`
-- Bell icon with unread count badge (polls every 30s)
-- Loading skeleton + empty state
+- CTA buttons with proper styling and navigation
+- Loading skeleton, empty state ("All caught up"), error + retry
+- Refresh button on inbox page
 
-**Missing:**
-- Visual polish (icons per type, richer card layout)
-- "Next step" CTA prominence
-- Grouping by date
-- Rich notification types (investment payouts, DD breach, etc.)
-
-**Files:** `client/src/pages/inbox.tsx`, `client/src/components/notifications/notification-bell.tsx`, `server/routes.ts`
+**Files:** `client/src/pages/inbox.tsx`, `client/src/components/notification-bell.tsx`, `client/src/lib/inbox-map.ts`
 
 ---
 
