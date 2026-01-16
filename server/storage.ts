@@ -25,6 +25,10 @@ import {
   simEvents,
   AddressStatus,
   dbRowToCandle,
+  // Admin tables
+  roles,
+  permissions,
+  rolePermissions,
   type Balance,
   type InsertBalance,
   type Vault,
@@ -1267,6 +1271,52 @@ export class DatabaseStorage implements IStorage {
     await db.update(simSessions)
       .set({ lastSeq, updatedAt: new Date() })
       .where(eq(simSessions.id, sessionId));
+  }
+
+  // ==================== ADMIN RBAC SEED ====================
+  async seedAdminRbac(): Promise<void> {
+    const { SEED_ROLES, SEED_PERMISSIONS, SEED_ROLE_PERMISSIONS } = await import("@shared/schema");
+
+    // Seed roles
+    for (const role of SEED_ROLES) {
+      await db.insert(roles).values({
+        key: role.key,
+        name: role.name,
+        description: role.description,
+      }).onConflictDoNothing();
+    }
+
+    // Seed permissions
+    for (const perm of SEED_PERMISSIONS) {
+      await db.insert(permissions).values({
+        key: perm.key,
+        name: perm.name,
+        description: perm.description,
+      }).onConflictDoNothing();
+    }
+
+    // Get all roles and permissions from DB
+    const allRoles = await db.select().from(roles);
+    const allPerms = await db.select().from(permissions);
+
+    const roleMap = new Map(allRoles.map(r => [r.key, r.id]));
+    const permMap = new Map(allPerms.map(p => [p.key, p.id]));
+
+    // Seed role-permission mappings
+    for (const [roleKey, permKeys] of Object.entries(SEED_ROLE_PERMISSIONS)) {
+      const roleId = roleMap.get(roleKey);
+      if (!roleId) continue;
+
+      for (const permKey of permKeys) {
+        const permissionId = permMap.get(permKey);
+        if (!permissionId) continue;
+
+        await db.insert(rolePermissions).values({
+          roleId,
+          permissionId,
+        }).onConflictDoNothing();
+      }
+    }
   }
 }
 

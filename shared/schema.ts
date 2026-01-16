@@ -892,3 +892,397 @@ export const simEvents = pgTable("sim_events", {
 export const insertSimEventSchema = createInsertSchema(simEvents).omit({ id: true });
 export type InsertSimEvent = z.infer<typeof insertSimEventSchema>;
 export type SimEvent = typeof simEvents.$inferSelect;
+
+// ==================== ADMIN CONSOLE TABLES ====================
+// Stage C: RBAC, Audit, Idempotency, 4-Eyes, Inbox, Incidents
+
+// ==================== A) RBAC ====================
+
+// Admin Users - links to users table via userId
+export const adminUsers = pgTable("admin_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // FK to users.id
+  email: text("email"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("admin_users_user_id_idx").on(table.userId),
+  index("admin_users_email_idx").on(table.email),
+]);
+
+export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+export type AdminUser = typeof adminUsers.$inferSelect;
+
+// Roles
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(), // e.g., "super_admin", "ops", "compliance"
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRoleSchema = createInsertSchema(roles).omit({ id: true, createdAt: true });
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+
+// Permissions
+export const permissions = pgTable("permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(), // e.g., "users.read", "kyc.review"
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPermissionSchema = createInsertSchema(permissions).omit({ id: true, createdAt: true });
+export type InsertPermission = z.infer<typeof insertPermissionSchema>;
+export type Permission = typeof permissions.$inferSelect;
+
+// Role <-> Permission mapping
+export const rolePermissions = pgTable("role_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roleId: varchar("role_id").notNull(), // FK to roles.id
+  permissionId: varchar("permission_id").notNull(), // FK to permissions.id
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("role_permissions_unique_idx").on(table.roleId, table.permissionId),
+  index("role_permissions_role_id_idx").on(table.roleId),
+]);
+
+export type RolePermission = typeof rolePermissions.$inferSelect;
+
+// Admin User <-> Role mapping
+export const adminUserRoles = pgTable("admin_user_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id").notNull(), // FK to admin_users.id
+  roleId: varchar("role_id").notNull(), // FK to roles.id
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("admin_user_roles_unique_idx").on(table.adminUserId, table.roleId),
+  index("admin_user_roles_admin_user_id_idx").on(table.adminUserId),
+]);
+
+export type AdminUserRole = typeof adminUserRoles.$inferSelect;
+
+// ==================== B) ADMIN AUDIT LOG ====================
+// Separate from existing audit_logs for admin-specific actions
+export const AdminAuditOutcome = {
+  SUCCESS: "success",
+  FAILURE: "failure",
+  PARTIAL: "partial",
+} as const;
+
+export type AdminAuditOutcomeType = typeof AdminAuditOutcome[keyof typeof AdminAuditOutcome];
+
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  actorAdminUserId: varchar("actor_admin_user_id").notNull(), // FK to admin_users.id
+  requestId: varchar("request_id"),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  actionType: text("action_type").notNull(), // e.g., "WITHDRAWAL_APPROVED", "KYC_REJECTED"
+  targetType: text("target_type"), // e.g., "operation", "kyc_applicant", "user"
+  targetId: varchar("target_id"),
+  beforeJson: jsonb("before_json"),
+  afterJson: jsonb("after_json"),
+  reason: text("reason"),
+  outcome: text("outcome").notNull().default("success"), // success, failure, partial
+  errorCode: text("error_code"),
+}, (table) => [
+  index("admin_audit_logs_created_at_idx").on(table.createdAt),
+  index("admin_audit_logs_actor_created_idx").on(table.actorAdminUserId, table.createdAt),
+  index("admin_audit_logs_target_idx").on(table.targetType, table.targetId),
+  index("admin_audit_logs_request_id_idx").on(table.requestId),
+]);
+
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({ id: true, createdAt: true });
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+
+// ==================== ADMIN IDEMPOTENCY KEYS ====================
+export const AdminIdempotencyStatus = {
+  PENDING: "pending",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+
+export type AdminIdempotencyStatusType = typeof AdminIdempotencyStatus[keyof typeof AdminIdempotencyStatus];
+
+export const adminIdempotencyKeys = pgTable("admin_idempotency_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  actorAdminUserId: varchar("actor_admin_user_id").notNull(), // FK to admin_users.id
+  endpoint: text("endpoint").notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 64 }).notNull(),
+  payloadHash: text("payload_hash"),
+  responseJson: jsonb("response_json"),
+  status: text("status").notNull().default("pending"), // pending, completed, failed
+}, (table) => [
+  uniqueIndex("admin_idempotency_unique_idx").on(table.actorAdminUserId, table.endpoint, table.idempotencyKey),
+  index("admin_idempotency_created_at_idx").on(table.createdAt),
+]);
+
+export const insertAdminIdempotencyKeySchema = createInsertSchema(adminIdempotencyKeys).omit({ id: true, createdAt: true });
+export type InsertAdminIdempotencyKey = z.infer<typeof insertAdminIdempotencyKeySchema>;
+export type AdminIdempotencyKey = typeof adminIdempotencyKeys.$inferSelect;
+
+// ==================== C) MAKER-CHECKER (4-EYES) ====================
+export const PendingActionStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  CANCELLED: "CANCELLED",
+  EXPIRED: "EXPIRED",
+} as const;
+
+export type PendingActionStatusType = typeof PendingActionStatus[keyof typeof PendingActionStatus];
+
+export const pendingAdminActions = pgTable("pending_admin_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  status: text("status").notNull().default("PENDING"), // PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED
+  actionType: text("action_type").notNull(), // e.g., "APPROVE_WITHDRAWAL", "CREATE_CORRECTION"
+  targetType: text("target_type").notNull(), // e.g., "operation", "user"
+  targetId: varchar("target_id").notNull(),
+  makerAdminUserId: varchar("maker_admin_user_id").notNull(), // FK to admin_users.id
+  checkerAdminUserId: varchar("checker_admin_user_id"), // FK to admin_users.id (who approved/rejected)
+  payloadJson: jsonb("payload_json").notNull(),
+  reason: text("reason"),
+  decisionAt: timestamp("decision_at"),
+  expiresAt: timestamp("expires_at"),
+}, (table) => [
+  index("pending_admin_actions_status_created_idx").on(table.status, table.createdAt),
+  index("pending_admin_actions_action_type_created_idx").on(table.actionType, table.createdAt),
+  index("pending_admin_actions_target_idx").on(table.targetType, table.targetId),
+  index("pending_admin_actions_maker_idx").on(table.makerAdminUserId),
+]);
+
+export const insertPendingAdminActionSchema = createInsertSchema(pendingAdminActions).omit({ id: true, createdAt: true });
+export type InsertPendingAdminAction = z.infer<typeof insertPendingAdminActionSchema>;
+export type PendingAdminAction = typeof pendingAdminActions.$inferSelect;
+
+// ==================== D) OUTBOX / INBOX ====================
+// Outbox for async event processing
+export const outboxEvents = pgTable("outbox_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  eventType: text("event_type").notNull(), // e.g., "WITHDRAWAL_APPROVED", "KYC_APPROVED"
+  payloadJson: jsonb("payload_json").notNull(),
+  actorAdminUserId: varchar("actor_admin_user_id"), // FK to admin_users.id (nullable for system events)
+  processedAt: timestamp("processed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+}, (table) => [
+  index("outbox_events_processed_at_idx").on(table.processedAt),
+  index("outbox_events_created_at_idx").on(table.createdAt),
+  index("outbox_events_event_type_idx").on(table.eventType),
+]);
+
+export const insertOutboxEventSchema = createInsertSchema(outboxEvents).omit({ id: true, createdAt: true });
+export type InsertOutboxEvent = z.infer<typeof insertOutboxEventSchema>;
+export type OutboxEvent = typeof outboxEvents.$inferSelect;
+
+// Admin Inbox Items (work queue)
+export const AdminInboxStatus = {
+  OPEN: "OPEN",
+  IN_PROGRESS: "IN_PROGRESS",
+  DONE: "DONE",
+  DISMISSED: "DISMISSED",
+} as const;
+
+export type AdminInboxStatusType = typeof AdminInboxStatus[keyof typeof AdminInboxStatus];
+
+export const AdminInboxPriority = {
+  CRITICAL: "critical",
+  HIGH: "high",
+  MEDIUM: "medium",
+  LOW: "low",
+} as const;
+
+export type AdminInboxPriorityType = typeof AdminInboxPriority[keyof typeof AdminInboxPriority];
+
+export const AdminInboxType = {
+  WITHDRAWAL_PENDING: "WITHDRAWAL_PENDING",
+  KYC_REVIEW: "KYC_REVIEW",
+  KYC_ON_HOLD: "KYC_ON_HOLD",
+  SIM_FAILED: "SIM_FAILED",
+  SWEEP_FAILED: "SWEEP_FAILED",
+  INCIDENT_DRAFT: "INCIDENT_DRAFT",
+  BALANCE_ASSERTION: "BALANCE_ASSERTION",
+  FOUR_EYES_PENDING: "FOUR_EYES_PENDING",
+} as const;
+
+export type AdminInboxTypeValue = typeof AdminInboxType[keyof typeof AdminInboxType];
+
+export const adminInboxItems = pgTable("admin_inbox_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  type: text("type").notNull(), // AdminInboxType values
+  priority: text("priority").notNull().default("medium"), // critical, high, medium, low
+  status: text("status").notNull().default("OPEN"), // OPEN, IN_PROGRESS, DONE, DISMISSED
+  ownerAdminUserId: varchar("owner_admin_user_id"), // FK to admin_users.id (assigned owner)
+  nextAction: text("next_action"), // e.g., "Review withdrawal", "Approve KYC"
+  entityType: text("entity_type"), // e.g., "operation", "kyc_applicant"
+  entityId: varchar("entity_id"),
+  userId: varchar("user_id"), // Affected user (for filtering)
+  payloadJson: jsonb("payload_json"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedByAdminUserId: varchar("resolved_by_admin_user_id"),
+}, (table) => [
+  index("admin_inbox_status_priority_created_idx").on(table.status, table.priority, table.createdAt),
+  index("admin_inbox_owner_status_idx").on(table.ownerAdminUserId, table.status),
+  index("admin_inbox_type_status_created_idx").on(table.type, table.status, table.createdAt),
+  index("admin_inbox_entity_idx").on(table.entityType, table.entityId),
+]);
+
+export const insertAdminInboxItemSchema = createInsertSchema(adminInboxItems).omit({ id: true, createdAt: true });
+export type InsertAdminInboxItem = z.infer<typeof insertAdminInboxItemSchema>;
+export type AdminInboxItem = typeof adminInboxItems.$inferSelect;
+
+// ==================== E) INCIDENTS / STATUS MESSAGES ====================
+export const IncidentStatus = {
+  DRAFT: "DRAFT",
+  SCHEDULED: "SCHEDULED",
+  ACTIVE: "ACTIVE",
+  RESOLVED: "RESOLVED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type IncidentStatusType = typeof IncidentStatus[keyof typeof IncidentStatus];
+
+export const IncidentSeverity = {
+  INFO: "info",
+  WARNING: "warning",
+  CRITICAL: "critical",
+  MAINTENANCE: "maintenance",
+} as const;
+
+export type IncidentSeverityType = typeof IncidentSeverity[keyof typeof IncidentSeverity];
+
+export const incidents = pgTable("incidents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  status: text("status").notNull().default("DRAFT"), // DRAFT, SCHEDULED, ACTIVE, RESOLVED, CANCELLED
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  severity: text("severity").notNull().default("info"), // info, warning, critical, maintenance
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  createdByAdminUserId: varchar("created_by_admin_user_id").notNull(), // FK to admin_users.id
+  resolvedByAdminUserId: varchar("resolved_by_admin_user_id"),
+  resolvedAt: timestamp("resolved_at"),
+}, (table) => [
+  index("incidents_status_starts_at_idx").on(table.status, table.startsAt),
+  index("incidents_created_at_idx").on(table.createdAt),
+]);
+
+export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIncident = z.infer<typeof insertIncidentSchema>;
+export type Incident = typeof incidents.$inferSelect;
+
+// ==================== ADMIN SEED DATA CONSTANTS ====================
+// Used by seed scripts to initialize RBAC
+
+export const SEED_ROLES = [
+  { key: "super_admin", name: "Super Admin", description: "Full platform access" },
+  { key: "ops", name: "Operations", description: "Operations management" },
+  { key: "compliance", name: "Compliance", description: "KYC/AML and audit access" },
+  { key: "support", name: "Support", description: "User support, read-heavy" },
+  { key: "read_only", name: "Read Only", description: "View-only access for auditors" },
+] as const;
+
+export const SEED_PERMISSIONS = [
+  // Users
+  { key: "users.read", name: "View Users", description: "View user profiles and data" },
+  { key: "users.write", name: "Modify Users", description: "Modify user settings (non-money)" },
+  { key: "users.suspend", name: "Suspend Users", description: "Suspend/unsuspend user accounts" },
+  // KYC
+  { key: "kyc.read", name: "View KYC", description: "View KYC submissions" },
+  { key: "kyc.review", name: "Review KYC", description: "Approve/reject/request-action KYC" },
+  // Money
+  { key: "money.read", name: "View Operations", description: "View operations ledger" },
+  { key: "money.approve_withdrawal", name: "Approve Withdrawals", description: "Approve pending withdrawals" },
+  { key: "money.create_correction", name: "Create Corrections", description: "Create correction operations" },
+  { key: "money.vault_override", name: "Override Vaults", description: "Override vault settings" },
+  // Strategies
+  { key: "strategies.read", name: "View Strategies", description: "View strategies" },
+  { key: "strategies.pause", name: "Pause Strategies", description: "Pause/resume strategies" },
+  { key: "strategies.risk_limits", name: "Modify Risk Limits", description: "Modify risk limits" },
+  { key: "strategies.visibility", name: "Strategy Visibility", description: "Change strategy visibility/eligibility" },
+  // Sim Sessions
+  { key: "sim.read", name: "View Sessions", description: "View simulation sessions" },
+  { key: "sim.control", name: "Control Sessions", description: "Start/stop/cancel sessions" },
+  // Incidents
+  { key: "incidents.read", name: "View Incidents", description: "View incidents" },
+  { key: "incidents.publish", name: "Publish Incidents", description: "Create/publish incidents" },
+  { key: "incidents.resolve", name: "Resolve Incidents", description: "Resolve incidents" },
+  // Exports
+  { key: "exports.generate", name: "Generate Exports", description: "Generate CSV/PDF exports" },
+  // Audit
+  { key: "audit.read", name: "View Audit Logs", description: "View audit logs" },
+  // Access
+  { key: "access.read", name: "View Access", description: "View roles and permissions" },
+  { key: "access.manage", name: "Manage Access", description: "Modify roles and permissions" },
+  // Config
+  { key: "config.read", name: "View Config", description: "View feature flags and settings" },
+  { key: "config.write", name: "Modify Config", description: "Modify feature flags and settings" },
+] as const;
+
+// Role -> Permission matrix (based on docs/admin/spec.md)
+export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
+  super_admin: [
+    "users.read", "users.write", "users.suspend",
+    "kyc.read", "kyc.review",
+    "money.read", "money.approve_withdrawal", "money.create_correction", "money.vault_override",
+    "strategies.read", "strategies.pause", "strategies.risk_limits", "strategies.visibility",
+    "sim.read", "sim.control",
+    "incidents.read", "incidents.publish", "incidents.resolve",
+    "exports.generate",
+    "audit.read",
+    "access.read", "access.manage",
+    "config.read", "config.write",
+  ],
+  ops: [
+    "users.read", "users.write", "users.suspend",
+    "kyc.read",
+    "money.read", "money.approve_withdrawal", "money.vault_override",
+    "strategies.read", "strategies.pause", "strategies.risk_limits", "strategies.visibility",
+    "sim.read", "sim.control",
+    "incidents.read", "incidents.publish", "incidents.resolve",
+    "exports.generate",
+    "audit.read",
+    "config.read",
+  ],
+  compliance: [
+    "users.read",
+    "kyc.read", "kyc.review",
+    "money.read",
+    "strategies.read",
+    "sim.read",
+    "incidents.read",
+    "exports.generate",
+    "audit.read",
+  ],
+  support: [
+    "users.read", "users.write",
+    "kyc.read",
+    "money.read",
+    "strategies.read",
+    "sim.read",
+    "incidents.read",
+  ],
+  read_only: [
+    "users.read",
+    "kyc.read",
+    "money.read",
+    "strategies.read",
+    "sim.read",
+    "incidents.read",
+    "audit.read",
+  ],
+};

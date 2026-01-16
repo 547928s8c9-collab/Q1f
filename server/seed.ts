@@ -8,6 +8,9 @@ async function seed() {
 
     await storage.seedStrategyProfiles();
     console.log("Strategy profiles seeded successfully");
+
+    await storage.seedAdminRbac();
+    console.log("Admin RBAC (roles, permissions, mappings) seeded successfully");
   } catch (error) {
     console.error("Seed error:", error);
     process.exit(1);

@@ -1,0 +1,60 @@
+Сделай Stage C: добавь таблицы админки (RBAC/audit/idempotency/4-eyes/outbox/inbox/incidents) в Drizzle.
+
+Контекст:
+- Drizzle schema сейчас в shared/schema.ts (там уже 22 таблицы).
+- Нельзя ломать существующие таблицы и связи: только add-only.
+- Нужны индексы и ограничения (unique/FK) для целостности и cursor pagination.
+
+Задача:
+1) В shared/schema.ts добавь новые таблицы (или вынеси в shared/schema.admin.ts и импортни в shared/schema.ts — но НЕ меняй существующие импорты/экспорты так, чтобы сломать сборку).
+
+Таблицы (минимальный набор):
+A) RBAC
+- admin_users: id (uuid/serial как принято), userId (FK на users.id если есть), oidcSubject (unique, если userId нет), email (nullable), isActive, createdAt
+- roles: id, key (unique), name, createdAt
+- permissions: id, key (unique), name, createdAt
+- role_permissions: roleId FK, permissionId FK, unique(roleId, permissionId)
+- admin_user_roles: adminUserId FK, roleId FK, unique(adminUserId, roleId)
+
+B) Audit + Idempotency
+- audit_log: id, createdAt, actorAdminUserId FK, requestId, ip, userAgent,
+            actionType, targetType, targetId, beforeJson, afterJson, reason, outcome, errorCode
+  Индексы: createdAt desc, actorAdminUserId+createdAt, targetType+targetId, requestId
+- idempotency_keys: id, createdAt, actorAdminUserId FK, endpoint, idempotencyKey (string),
+                   payloadHash, responseJson, status, unique(actorAdminUserId, endpoint, idempotencyKey)
+
+C) Maker-Checker (4-eyes)
+- pending_admin_actions: id, createdAt, status (PENDING/APPROVED/REJECTED/CANCELLED),
+                        actionType, targetType, targetId,
+                        makerAdminUserId FK, checkerAdminUserId FK nullable,
+                        payloadJson, reason, decisionAt
+  Индексы: status+createdAt, actionType+createdAt, targetType+targetId
+
+D) Outbox / Inbox
+- outbox_events: id, createdAt, eventType, payloadJson, actorAdminUserId nullable, processedAt nullable, attempts int default 0
+  Индексы: processedAt, createdAt
+- admin_inbox_items: id, createdAt, type, priority, status (OPEN/IN_PROGRESS/DONE),
+                    ownerAdminUserId nullable FK, nextAction, entityType, entityId,
+                    payloadJson
+  Индексы: status+priority+createdAt, ownerAdminUserId+status, type+status+createdAt
+
+E) Incidents / Status messages (NEW)
+- incidents: id, createdAt, status (DRAFT/SCHEDULED/ACTIVE/RESOLVED),
+            title, message, severity, startsAt nullable, endsAt nullable, createdByAdminUserId FK
+  Индексы: status+startsAt, createdAt
+
+2) Выбери типы/uuid/serial в стиле существующего schema.ts (как уже сделано для users/operations).
+3) Добавь enum’ы в том же стиле, что и существующие (например kyc statuses).
+4) Сгенерируй и примени миграцию стандартным способом для вашего проекта.
+   - Найди, как сейчас делаются миграции (по репо) и следуй этому методу.
+5) Добавь seed (минимальный) в существующий seed механизм (если есть) ИЛИ создай новый script:
+   - roles: SuperAdmin, Ops, Compliance, Support, ReadOnly
+   - permissions: 24 permission keys из docs/admin/spec.md
+   - роль→permissions матрица из spec.md
+   НО: seed админов (admin_users) пока не делай (это Stage G), только справочники.
+
+Выход:
+- “Files changed” списком.
+- Показать ключевые фрагменты schema для новых таблиц.
+- Команды миграции/применения, которые ты выполнил/рекомендуешь.
+Никакого рефакторинга server/routes.ts на этом этапе.
