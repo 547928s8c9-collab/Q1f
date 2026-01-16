@@ -456,6 +456,125 @@ export function dbRowToCandle(row: MarketCandle): Candle {
   };
 }
 
+// ==================== STRATEGY PROFILES (Live Sessions) ====================
+// Profiles for simulation/backtest strategies with configurable parameters
+export const VALID_SIM_TIMEFRAMES = ["15m", "1h"] as const;
+export type SimTimeframe = typeof VALID_SIM_TIMEFRAMES[number];
+
+export const VALID_RISK_LEVELS = ["low", "medium", "high"] as const;
+export type RiskLevel = typeof VALID_RISK_LEVELS[number];
+
+export const strategyProfiles = pgTable("strategy_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  description: text("description").notNull(),
+  profileKey: text("profile_key").notNull(),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  riskLevel: text("risk_level").notNull(),
+  defaultConfig: jsonb("default_config").$type<StrategyProfileConfig>().notNull(),
+  configSchema: jsonb("config_schema").$type<StrategyProfileConfigSchema>().notNull(),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertStrategyProfileSchema = createInsertSchema(strategyProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStrategyProfile = z.infer<typeof insertStrategyProfileSchema>;
+export type StrategyProfile = typeof strategyProfiles.$inferSelect;
+
+// Strategy Profile Config Types
+export interface WalkForwardConfig {
+  enabled: boolean;
+  lookbackBars: number;
+  recalibEveryBars: number;
+  minWinProb: number;
+  minEVBps: number;
+}
+
+export interface OracleExitConfig {
+  enabled: boolean;
+  horizonBars: number;
+  penaltyBps: number;
+  maxHoldBars: number;
+}
+
+export interface StrategyProfileConfig {
+  feesBps: number;
+  slippageBps: number;
+  maxPositionPct: number;
+  minBarsWarmup: number;
+  walkForward: WalkForwardConfig;
+  oracleExit: OracleExitConfig;
+}
+
+export interface ConfigSchemaField {
+  type: "number" | "boolean";
+  label: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  default: number | boolean;
+}
+
+export interface StrategyProfileConfigSchema {
+  feesBps: ConfigSchemaField;
+  slippageBps: ConfigSchemaField;
+  maxPositionPct: ConfigSchemaField;
+  minBarsWarmup: ConfigSchemaField;
+  walkForward: {
+    enabled: ConfigSchemaField;
+    lookbackBars: ConfigSchemaField;
+    recalibEveryBars: ConfigSchemaField;
+    minWinProb: ConfigSchemaField;
+    minEVBps: ConfigSchemaField;
+  };
+  oracleExit: {
+    enabled: ConfigSchemaField;
+    horizonBars: ConfigSchemaField;
+    penaltyBps: ConfigSchemaField;
+    maxHoldBars: ConfigSchemaField;
+  };
+}
+
+// Validation helpers
+export function isValidSimTimeframe(tf: string): tf is SimTimeframe {
+  return VALID_SIM_TIMEFRAMES.includes(tf as SimTimeframe);
+}
+
+export function isValidRiskLevel(level: string): level is RiskLevel {
+  return VALID_RISK_LEVELS.includes(level as RiskLevel);
+}
+
+export function validateStrategyProfileConfig(config: StrategyProfileConfig): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (config.feesBps < 0 || config.feesBps > 100) errors.push("feesBps must be 0-100");
+  if (config.slippageBps < 0 || config.slippageBps > 100) errors.push("slippageBps must be 0-100");
+  if (config.maxPositionPct < 0.1 || config.maxPositionPct > 1) errors.push("maxPositionPct must be 0.1-1.0");
+  if (config.minBarsWarmup < 50 || config.minBarsWarmup > 1000) errors.push("minBarsWarmup must be 50-1000");
+  
+  if (config.walkForward.lookbackBars < 100 || config.walkForward.lookbackBars > 5000) 
+    errors.push("walkForward.lookbackBars must be 100-5000");
+  if (config.walkForward.recalibEveryBars < 10 || config.walkForward.recalibEveryBars > 500) 
+    errors.push("walkForward.recalibEveryBars must be 10-500");
+  if (config.walkForward.minWinProb < 0 || config.walkForward.minWinProb > 1) 
+    errors.push("walkForward.minWinProb must be 0-1");
+  if (config.walkForward.minEVBps < -100 || config.walkForward.minEVBps > 500) 
+    errors.push("walkForward.minEVBps must be -100 to 500");
+  
+  if (config.oracleExit.horizonBars < 1 || config.oracleExit.horizonBars > 100) 
+    errors.push("oracleExit.horizonBars must be 1-100");
+  if (config.oracleExit.penaltyBps < 0 || config.oracleExit.penaltyBps > 200) 
+    errors.push("oracleExit.penaltyBps must be 0-200");
+  if (config.oracleExit.maxHoldBars < 1 || config.oracleExit.maxHoldBars > 500) 
+    errors.push("oracleExit.maxHoldBars must be 1-500");
+  
+  return { valid: errors.length === 0, errors };
+}
+
 // Notification types for inbox
 export const NotificationType = {
   TRANSACTION: "transaction",

@@ -5,6 +5,9 @@ async function seed() {
   try {
     await storage.seedStrategies();
     console.log("Strategies seeded successfully");
+
+    await storage.seedStrategyProfiles();
+    console.log("Strategy profiles seeded successfully");
   } catch (error) {
     console.error("Seed error:", error);
     process.exit(1);

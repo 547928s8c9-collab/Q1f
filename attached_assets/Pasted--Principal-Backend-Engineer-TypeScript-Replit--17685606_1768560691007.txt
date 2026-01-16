@@ -1,0 +1,78 @@
+Ты — Principal Backend Engineer (TypeScript) в существующем репозитории Replit.
+
+ФИЧА: стратегии работают в Live Session режиме: исторические свечи подаются как live-поток; стратегия обрабатывает candle-by-candle и эмитит события (orders/trades/equity/status).
+
+ОБЩИЕ ПРАВИЛА:
+1) Не переписывай проект целиком.
+2) Никаких TODO/placeholder.
+3) В конце: PATCH + WALKTHROUGH + CHANGED FILES.
+4) Детерминизм: без рандома; стабильные причины reason; сортировка ts asc; одинаковый вход => одинаковый выход.
+5) Без lookahead в базовой логике сигналов. Исключение: oracleExit разрешён ТОЛЬКО для btc_squeeze_breakout, и должен быть явно маркирован как "oracle_penalized" в событиях.
+
+СДЕЛАЙ:
+1) Единые контракты (в shared/types или по стилю репо):
+- Candle (ts, open, high, low, close, volume) number
+- Timeframe = "15m"|"1h" (для этих профилей)
+- StrategyProfileSlug (8 значений)
+- StrategyConfig (общие поля + профиль-специфичные)
+- StrategyEvent:
+  - type: "candle" | "signal" | "order" | "fill" | "trade" | "equity" | "status"
+  - ts:number
+  - seq:number (внутри сессии)
+  - payload (строго типизированный union)
+- StrategyState (позиция, cash, equity, openOrders, stats для winProb/EV)
+
+2) Индикаторы (стримовые, без зависимости от внешних libs, детерминированные):
+- SMA/EMA
+- RSI
+- Bollinger Bands + bandwidth/squeeze metric
+- ATR
+- Keltner Channel (EMA + ATR*k)
+- Return percentile (реализуй как rolling quantile через фиксированную корзину/сэмплинг детерминированно; без рандома)
+- Volume MA
+
+3) Единый интерфейс стратегии:
+createStrategy(profileSlug, config, meta:{symbol,timeframe}) -> { onCandle(candle): StrategyEvent[]; getState():... }
+
+4) Реализуй 8 профилей (в отдельных файлах, одинаковый стиль):
+A) btc_squeeze_breakout:
+- squeeze: Bollinger bandwidth ниже порога
+- entry: breakout вверх + volume confirm
+- exit: oracleExit enabled: выбрать best exit внутри horizonBars (на основе будущих свечей), но:
+  - применить penaltyBps + доп. slippage
+  - явно маркировать события reason="oracle_penalized_exit"
+- walkForward фильтр: не брать новые входы, если rolling stats дают winProb < minWinProb или EV < minEVBps (EV net of costs)
+B) eth_ema_revert:
+- entry: отклонение от EMA50 + RSI oversold
+- exit: revert к EMA или RSI нормализовался
+- walkForward thresholds (используй общий фильтр; параметры профиль-специфичные)
+C) bnb_trend_pullback:
+- uptrend: EMA(??) slope positive + price above EMA
+- entry: pullback к EMA20
+- exit: take profit / trend break
+D) sol_vol_burst:
+- entry: return percentile выше порога + volume burst
+- costs выше по дефолту; быстрый выход (maxHoldBars низкий)
+E) xrp_keltner_revert:
+- entry: touch lower keltner + volume “не пробой”
+- exit: midline/upper
+F) doge_fast_momo:
+- entry: EMA 9/21 cross + volume confirm
+- строгий EV filter, costs выше
+G) ada_deep_revert:
+- entry: сильное отклонение от EMA200 + RSI oversold
+- exit: partial/full revert к EMA200
+H) trx_lowvol_band:
+- regime filter: ATR ниже порога (low vol)
+- entry: Bollinger band touch
+- exit: mean / small target
+
+5) Исполнение сделок в Live Session:
+- если сигнал на candle t (закрытая свеча), то fill происходит на open следующей свечи (t+1) — без lookahead.
+- поддержи pending order, который исполняется когда приходит следующая свеча.
+- feesBps + slippageBps применяются детерминированно.
+
+ВЫВОД:
+--- PATCH ---
+--- WALKTHROUGH --- (как прогнать локальный “dry run” на маленьком синтетическом массиве свечей и увидеть events)
+--- CHANGED FILES ---
