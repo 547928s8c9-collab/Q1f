@@ -1,0 +1,60 @@
+Stop planning. Perform a strict code audit and fix issues.
+
+GOAL:
+Audit the ZEON Next.js + Prisma codebase for correctness, missing implementations, and bugs. Then implement fixes directly in code.
+
+WHAT TO CHECK (must):
+1) Build & TypeScript:
+   - `npm run build` must pass (no TS errors).
+   - no `any` leaks in critical money paths (balances, operations, payouts).
+   - fix lint issues if configured.
+
+2) Prisma & DB:
+   - `npx prisma validate` must pass.
+   - `npx prisma migrate dev` must succeed from a clean DB.
+   - `npx prisma db seed` must succeed deterministically.
+   - ensure schema types for money use string for minor units.
+
+3) API correctness:
+   - /api/bootstrap returns the full required payload (balances, vaults, portfolio series, quotes series, gate flags, onboarding state if present).
+   - all UI pages must read data from API routes + Prisma (no hardcoded mock arrays in pages/components).
+   - POST endpoints must validate input (Zod) and return consistent error codes.
+
+4) Operations integrity:
+   - Every money action creates an Operation record (deposit, invest, fx, payout, withdraw, vault transfer, redemption).
+   - Operation statuses transition correctly (PENDING/PROCESSING/CONFIRMING/COMPLETED/FAILED/ON_HOLD).
+   - Activity and Receipt read only from Operations and always find matching receipts.
+
+5) Money invariants:
+   - balances never go negative (server-side enforced).
+   - payout net = gross - networkFee; if net < minPayout => payout skipped and payable remains.
+   - weekly principal redemption is scheduled and executed only on weekly job run.
+   - pending operations must NOT be counted into cashflow totals.
+
+6) Security & gating:
+   - invest/withdraw/payout settings require consent + KYC approved.
+   - withdraw requires 2FA enabled.
+   - whitelist + delay rules are enforced server-side (not only UI).
+
+TASKS TO DO (output requirements):
+A) Run/execute checks in this order:
+   1. npm run build
+   2. npx prisma validate
+   3. npx prisma migrate dev
+   4. npx prisma db seed
+B) Fix ALL issues found (code changes required).
+C) Add minimal automated checks:
+   - add npm scripts:
+     - "check": runs typecheck + build + prisma validate
+     - "db:reset": resets db + migrate + seed
+D) At the end, output:
+   - EXACT commands you ran and their results
+   - list of files changed
+   - short list of remaining known limitations (if any)
+
+CONSTRAINTS:
+- Do not add new features.
+- Do not change UI design.
+- Focus on correctness and missing implementations.
+- Keep money amounts as string minor units everywhere.
+Implement now.

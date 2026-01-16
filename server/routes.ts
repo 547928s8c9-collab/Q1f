@@ -511,7 +511,7 @@ export async function registerRoutes(
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
       await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
 
-      await storage.createOperation({
+      const operation = await storage.createOperation({
         userId,
         type: "DEPOSIT_USDT",
         status: "completed",
@@ -528,7 +528,7 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, operation: { id: operation.id } });
     } catch (error) {
       console.error("Deposit USDT simulate error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -554,7 +554,7 @@ export async function registerRoutes(
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(usdtAmount)).toString();
       await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
 
-      await storage.createOperation({
+      const operation = await storage.createOperation({
         userId,
         type: "DEPOSIT_CARD",
         status: "completed",
@@ -571,7 +571,7 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true, usdtAmount });
+      res.json({ success: true, usdtAmount, operation: { id: operation.id } });
     } catch (error) {
       console.error("Deposit card simulate error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -643,7 +643,7 @@ export async function registerRoutes(
       }
 
       // Create operation
-      await storage.createOperation({
+      const operation = await storage.createOperation({
         userId,
         type: "INVEST",
         status: "completed",
@@ -660,7 +660,7 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, operation: { id: operation.id } });
     } catch (error) {
       console.error("Invest error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -790,7 +790,7 @@ export async function registerRoutes(
       // Check whitelist and activation delay
       if (security?.whitelistEnabled) {
         const whitelist = await storage.getWhitelistAddresses(userId);
-        const whitelisted = whitelist.find((w) => w.address === address && w.status === "ACTIVE");
+        const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
         if (!whitelisted) {
           return res.status(403).json({ 
             error: "Whitelist required",
@@ -809,18 +809,20 @@ export async function registerRoutes(
       }
 
       const balance = await storage.getBalance(userId, "USDT");
-      if (BigInt(balance?.available || "0") < BigInt(amount)) {
-        return res.status(400).json({ error: "Insufficient balance" });
+      const fee = "1000000"; // 1 USDT
+      const totalDeduct = BigInt(amount) + BigInt(fee);
+      
+      // Check balance includes fee
+      if (BigInt(balance?.available || "0") < totalDeduct) {
+        return res.status(400).json({ error: "Insufficient balance (including network fee)" });
       }
 
-      // Deduct from balance (including 1 USDT fee)
-      const fee = "1000000"; // 1 USDT
-      const totalDeduct = (BigInt(amount) + BigInt(fee)).toString();
-      const newAvailable = (BigInt(balance!.available) - BigInt(totalDeduct)).toString();
+      // Deduct from balance (including fee)
+      const newAvailable = (BigInt(balance!.available) - totalDeduct).toString();
       await storage.updateBalance(userId, "USDT", newAvailable, balance!.locked);
 
       // Create withdrawal operation
-      await storage.createOperation({
+      const operation = await storage.createOperation({
         userId,
         type: "WITHDRAW_USDT",
         status: "completed",
@@ -837,7 +839,7 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, operation: { id: operation.id } });
     } catch (error) {
       console.error("Withdraw error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -854,6 +856,10 @@ export async function registerRoutes(
         amount: z.string(),
       });
       const { fromVault, toVault, amount } = schema.parse(req.body);
+
+      if (fromVault === toVault) {
+        return res.status(400).json({ error: "Source and destination must be different" });
+      }
 
       if (fromVault === "wallet") {
         // Transfer from wallet to vault
@@ -881,10 +887,23 @@ export async function registerRoutes(
         const balance = await storage.getBalance(userId, "USDT");
         const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
         await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
+      } else {
+        // Vault to vault transfer
+        const sourceVault = await storage.getVault(userId, fromVault);
+        if (BigInt(sourceVault?.balance || "0") < BigInt(amount)) {
+          return res.status(400).json({ error: "Insufficient vault balance" });
+        }
+
+        const newSourceBalance = (BigInt(sourceVault!.balance) - BigInt(amount)).toString();
+        await storage.updateVault(userId, fromVault, newSourceBalance);
+
+        const destVault = await storage.getVault(userId, toVault);
+        const newDestBalance = (BigInt(destVault?.balance || "0") + BigInt(amount)).toString();
+        await storage.updateVault(userId, toVault, newDestBalance);
       }
 
       // Create operation
-      await storage.createOperation({
+      const operation = await storage.createOperation({
         userId,
         type: "VAULT_TRANSFER",
         status: "completed",
@@ -901,7 +920,7 @@ export async function registerRoutes(
         reason: null,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, operation: { id: operation.id } });
     } catch (error) {
       console.error("Vault transfer error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -1635,7 +1654,7 @@ export async function registerRoutes(
         
         // Check address is ACTIVE
         const address = await storage.getWhitelistAddress(addressId);
-        if (!address || address.status !== "ACTIVE") {
+        if (!address || address.status !== "active") {
           return res.status(400).json({ 
             error: "Address not active",
             code: "ADDRESS_NOT_ACTIVE",
@@ -1899,7 +1918,7 @@ export async function registerRoutes(
         }
 
         const address = await storage.getWhitelistAddress(instruction.addressId);
-        if (!address || address.status !== "ACTIVE") {
+        if (!address || address.status !== "active") {
           results.push({ instructionId: instruction.id, status: "address_not_active" });
           continue;
         }
