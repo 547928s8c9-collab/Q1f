@@ -193,6 +193,47 @@
 
 - **Files:** `server/routes.ts` (lines 22-90 for helpers)
 
+### NEXT-04: Financial Transaction Integrity (DONE - Jan 2026)
+- **Goal:** Wrap critical money operations in atomic DB transactions to prevent partial state updates
+- **Implementation:**
+  - Added `withTransaction()` helper in `server/db.ts` using Drizzle's `db.transaction()`
+  - Added `assertNonNegative()` invariant check for balance validation
+  - All balance changes, position updates, operation records, and audit logs wrapped in single transaction
+  
+- **Endpoints Updated:**
+
+| Endpoint | Transaction Scope | Invariant Check |
+|----------|------------------|-----------------|
+| `/api/invest` | balance + position + operation + audit | assertNonNegative(USDT balance) |
+| `/api/withdraw/usdt` | balance + operation + audit | assertNonNegative(USDT balance) |
+| `/api/vault/transfer` | source + dest + operation + audit | assertNonNegative(source balance/vault) |
+
+- **Transaction Pattern:**
+```typescript
+const operation = await withTransaction(async (tx) => {
+  // Re-fetch balance within transaction for consistency
+  const [currentBalance] = await tx.select().from(balances).where(...);
+  
+  // Invariant check
+  const newAvailable = BigInt(currentBalance.available) - BigInt(amount);
+  assertNonNegative(newAvailable, "USDT balance");
+  
+  // Atomic updates using tx (not storage methods)
+  await tx.update(balances).set({ available: newAvailable.toString() }).where(...);
+  await tx.insert(operations).values({...}).returning();
+  await tx.insert(auditLogs).values({...});
+  
+  return op;
+});
+```
+
+- **Rollback Behavior:**
+  - If any step throws, entire transaction rolls back (Drizzle auto-rollback)
+  - INSUFFICIENT_BALANCE errors caught early, no balance mutation
+  - INVARIANT_VIOLATION errors prevent negative balances from being committed
+
+- **Files:** `server/db.ts`, `server/routes.ts`
+
 ---
 
 ## Next Iteration Recommendations
