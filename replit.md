@@ -125,6 +125,26 @@ PDF statement generation with monthly summaries:
 - Operations table with Date, Type, Status, Asset, Amount columns
 - Footer with generation timestamp
 
+### Status Page
+System status and health monitoring:
+- `/status` page showing overall status and component health
+- Global banner when system is degraded or under maintenance
+- Config-based status (no DB required)
+
+**Status API Endpoint**:
+- `GET /api/status` - Returns system status JSON
+
+**Environment Variables** (optional, defaults to operational):
+- `SYSTEM_STATUS` - "operational" | "degraded" | "maintenance"
+- `SYSTEM_STATUS_MESSAGE` - Custom message displayed in banner
+- `STATUS_DEPOSITS`, `STATUS_WITHDRAWALS`, `STATUS_STRATEGIES`, `STATUS_API` - Per-component status
+
+**Components Monitored**:
+- Deposits: USDT and card deposits
+- Withdrawals: USDT withdrawals to external wallets
+- Investment Strategies: Strategy investments and profit accrual
+- API Services: Core platform services
+
 ### Observability
 Production-ready observability features:
 - **Request ID Middleware**: UUID added to every request for tracing

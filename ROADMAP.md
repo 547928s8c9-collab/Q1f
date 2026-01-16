@@ -8,7 +8,7 @@
 | 2 | Statements | DONE | `/statements`, `/api/statements/summary`, `/api/statements/monthly` | `server/routes.ts`, `client/src/pages/statements.tsx` |
 | 3 | Vault Goals | PARTIAL | `/api/vault/goal` | `shared/schema.ts` (vaults table), `client/src/pages/wallet/vaults.tsx` |
 | 4 | Risk Controls | DONE | `/api/positions/:id/risk-controls`, `/api/positions/:id/pause` | `server/routes.ts`, `client/src/pages/invest/strategy-detail.tsx` |
-| 5 | Status Page | NOT STARTED | - | - |
+| 5 | Status Page | DONE | `/status`, `/api/status` | `server/routes.ts`, `client/src/pages/status.tsx`, `client/src/components/global-banner.tsx` |
 | 6 | Smart Start | NOT STARTED | - | - |
 
 ---
@@ -85,13 +85,22 @@
 
 ---
 
-### 5. Status Page (NOT STARTED)
+### 5. Status Page (DONE)
 
-**Planned:**
-- `/status` page showing system health
-- Maintenance mode banners (app-wide)
-- Optional incident history
-- Admin controls for status updates
+**Completed (WOW-05):**
+- GET `/api/status` - Config-based system status endpoint
+- `/status` page showing overall status and component health
+- Components: Deposits, Withdrawals, Investment Strategies, API Services
+- Global banner integration: shows warnings when overall != "operational"
+- Status configurable via env vars: SYSTEM_STATUS, SYSTEM_STATUS_MESSAGE, STATUS_*
+- Auto-refresh every 30s on page, 60s for banner
+
+**Files:** `server/routes.ts`, `client/src/pages/status.tsx`, `client/src/components/global-banner.tsx`
+
+**Env Vars:**
+- `SYSTEM_STATUS` - "operational" | "degraded" | "maintenance"
+- `SYSTEM_STATUS_MESSAGE` - Custom message for banner
+- `STATUS_DEPOSITS`, `STATUS_WITHDRAWALS`, `STATUS_STRATEGIES`, `STATUS_API` - Per-component status
 
 ---
 
@@ -109,7 +118,6 @@
 
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
-| 1 | Vault Goals: Auto-sweep execution | Small | High |
-| 2 | Status Page: Basic health + banners | Medium | Medium |
-| 3 | Smart Start: Quiz + recommendations | Large | High |
-| 4 | Inbox 2.0: Polish + grouping | Small | Medium |
+| 1 | Vault Goals: Milestones visualization (25/50/75/100%) | Small | High |
+| 2 | Smart Start: Quiz + recommendations | Large | High |
+| 3 | Inbox 2.0: Grouping + polish | Small | Medium |
