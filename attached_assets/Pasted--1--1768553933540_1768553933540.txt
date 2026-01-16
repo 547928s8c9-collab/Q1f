@@ -1,0 +1,103 @@
+ОБЩИЕ ПРАВИЛА (не обсуждаются):
+1) Не переписывай проект целиком. Меняй только то, что нужно для этой итерации.
+2) Никаких TODO/placeholder/“left as exercise”.
+3) В конце итерации: (a) unified diff (git patch), (b) walkthrough (команды и ожидаемый результат), (c) список изменённых файлов.
+4) Следуй существующим паттернам репозитория: server/db.ts, server/storage.ts, роутинг, seed, /api/bootstrap.
+5) Все write-операции (если появятся) должны быть идемпотентными (Idempotency-Key или эквивалентный паттерн проекта).
+6) История должна быть пригодна для “live-like” стрима в следующих итерациях, поэтому данные должны быть детерминированны, сортированы и без дублей.
+
+ИТЕРАЦИЯ 1: MARKET DATA FOUNDATION (candles cache + loader + строгие контракты)
+
+ЦЕЛЬ ИТЕРАЦИИ:
+Сделать “Market Data Layer” — единый источник свечей для всех будущих стратегий и для live-like replay stream.
+На этой итерации НЕТ UI и НЕТ sessions/stream — только кэш + загрузчик + API для проверки.
+
+1) Repo reconnaissance (коротко, но конкретно):
+- где Drizzle schema + миграции/seed
+- где основные server routes
+- как устроен server/storage.ts (как добавлять методы)
+- как формируется /api/bootstrap (просто отметить, не менять)
+- где принято хранить “market data” модули (предложи место по стилю репо)
+
+2) DB: market_candles (Drizzle schema + миграция)
+Таблица: market_candles
+Поля:
+- exchange: string (default "binance_spot")
+- symbol: string (например "BTCUSDT")
+- timeframe: string ("15m"|"1h"|"1d") — валидация на уровне кода
+- ts: bigint (UTC ms, начало свечи)
+- open, high, low, close, volume: numeric/decimal (как принято в проекте)
+Ограничения:
+- UNIQUE(exchange, symbol, timeframe, ts)
+Индексы:
+- (exchange, symbol, timeframe, ts)  // для выборок диапазонов
+- (symbol, timeframe, ts)            // ускорение типовых запросов
+
+ВАЖНО: ts — это start-of-candle в UTC (ms). Это станет “единым временем” для replay-as-live.
+
+3) Market data types (единый контракт)
+Добавь отдельный файл типов (где принято в репо), минимум:
+- type Candle = { ts:number; open:number; high:number; low:number; close:number; volume:number }
+- type GapInfo = { startMs:number; endMs:number; reason:string }
+- type LoadCandlesResult = { candles:Candle[]; gaps:GapInfo[]; source:"cache"|"cache+binance" }
+
+4) DataLoader: Binance Spot klines -> write-through cache в Postgres
+Сделай модуль server/data/binanceSpot.ts (или аналогично стилю репо) и метод storage:
+Интерфейс:
+- loadCandles({exchange, symbol, timeframe, startMs, endMs}): Promise<LoadCandlesResult>
+
+Требования к загрузчику:
+- Пагинация (лимиты Binance), поддержка больших диапазонов
+- Retry/backoff на 429 (rate limit) + retry на временных сетевых ошибках
+- Дедупликация по ts, сортировка по ts asc
+- Нормализация: привести все числа к типам/формату проекта
+- Проверка целостности: если есть пропуски ts (дырки в равномерной сетке таймфрейма):
+  - 1 повторная попытка дозагрузки “дырки”
+  - если не получилось — добавить GapInfo в результат
+- Write-through cache:
+  - upsert батчами в market_candles (чтобы повторные вызовы не плодили записи)
+  - использовать транзакцию или батч-вставку как принято (важно: устойчиво и быстро)
+
+5) Storage API (чтобы стратегии и sessions потом использовали одинаково)
+В server/storage.ts (DatabaseStorage) добавь методы:
+- getCandlesFromCache(exchange, symbol, timeframe, startMs, endMs) -> Candle[]
+- upsertCandles(exchange, symbol, timeframe, candles) -> void
+- (опционально) getMissingRanges(...) -> list of [start,end] недостающих кусков (если удобно)
+
+Важно:
+- Логика определения “недостающих диапазонов” должна быть стабильной и детерминированной.
+- На выходе loadCandles всегда возвращает полный отсортированный ряд из кэша (насколько возможно) + gaps.
+
+6) API endpoint (только для проверки, но будет основой для stream)
+Добавь endpoint:
+- GET /api/market/candles
+Query:
+- symbol, timeframe, start, end, exchange? (default "binance_spot")
+Response:
+- { candles, gaps, source }
+Требования:
+- строгая валидация параметров (start/end ISO или ms, выбери один формат и зафиксируй)
+- start < end
+- разумный лимит на диапазон (например max 365 дней на 15m в одном запросе) — чтобы не убить сервер; при превышении вернуть понятную ошибку
+- endpoint должен:
+  1) прочитать кэш и определить недостающие интервалы
+  2) дозагрузить недостающее из Binance (через loader)
+  3) вернуть свечи из кэша в полном диапазоне + gaps
+
+7) Тесты (минимум 6, чтобы база была надёжной)
+Юнит/интеграционные тесты (как принято в репо):
+- дедуп/сортировка свечей
+- upsert + UNIQUE: повторный upsert не создаёт дублей
+- фильтрация диапазона start/end корректна
+- gap detection на синтетике (дырка в сетке)
+- getMissingRanges работает корректно на наборе свечей
+- loadCandles детерминированен (одинаковый вход -> одинаковый выход, без рандома)
+
+ВЫВОД:
+- unified diff (патч)
+- walkthrough:
+  1) миграции
+  2) запуск сервера
+  3) curl /api/market/candles?symbol=BTCUSDT&timeframe=15m&start=...&end=...
+  4) ожидаемо: список свечей, source="cache+binance" на первом вызове и "cache" на повторном (если так реализовано)
+- перечисли изменённые файлы
