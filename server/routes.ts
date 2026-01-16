@@ -224,6 +224,25 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/strategies/performance-all - Get performance data for all strategies (for sparklines)
+  // NOTE: Must be defined BEFORE /api/strategies/:id to avoid route conflict
+  app.get("/api/strategies/performance-all", async (req, res) => {
+    try {
+      const strategies = await storage.getStrategies();
+      const result: Record<string, StrategyPerformance[]> = {};
+      
+      for (const strategy of strategies) {
+        const perf = await storage.getStrategyPerformance(strategy.id, 30);
+        result[strategy.id] = perf;
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Get all strategy performance error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // GET /api/strategies/:id
   app.get("/api/strategies/:id", async (req, res) => {
     try {
@@ -257,24 +276,6 @@ export async function registerRoutes(
       res.json(performance);
     } catch (error) {
       console.error("Get strategy performance error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // GET /api/strategies/performance-all - Get performance data for all strategies (for sparklines)
-  app.get("/api/strategies/performance-all", async (req, res) => {
-    try {
-      const strategies = await storage.getStrategies();
-      const result: Record<string, StrategyPerformance[]> = {};
-      
-      for (const strategy of strategies) {
-        const perf = await storage.getStrategyPerformance(strategy.id, 30);
-        result[strategy.id] = perf;
-      }
-      
-      res.json(result);
-    } catch (error) {
-      console.error("Get all strategy performance error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
