@@ -1528,7 +1528,7 @@ export async function registerRoutes(
 
   // ==================== NOTIFICATION ROUTES ====================
 
-  // GET /api/notifications (protected)
+  // GET /api/notifications (protected) - returns InboxCard format
   app.get("/api/notifications", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -1538,17 +1538,22 @@ export async function registerRoutes(
       const notificationsData = await storage.getNotifications(userId, unreadOnly, limit);
       const unreadCount = await storage.getUnreadNotificationCount(userId);
       
+      const { getNotificationCta } = await import("@shared/schema");
+      
       res.json({
-        notifications: notificationsData.map((n) => ({
-          id: n.id,
-          type: n.type,
-          title: n.title,
-          message: n.message,
-          resourceType: n.resourceType,
-          resourceId: n.resourceId,
-          isRead: n.isRead,
-          createdAt: n.createdAt?.toISOString(),
-        })),
+        notifications: notificationsData.map((n) => {
+          const cta = getNotificationCta(n.type, n.resourceType, n.resourceId);
+          return {
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            message: n.message,
+            isRead: n.isRead,
+            createdAt: n.createdAt?.toISOString(),
+            ctaLabel: cta.label,
+            ctaPath: cta.path,
+          };
+        }),
         unreadCount,
       });
     } catch (error) {

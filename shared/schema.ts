@@ -354,6 +354,50 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+// Notification types for inbox
+export const NotificationType = {
+  TRANSACTION: "transaction",
+  KYC: "kyc",
+  SECURITY: "security",
+  SYSTEM: "system",
+} as const;
+export type NotificationTypeValue = typeof NotificationType[keyof typeof NotificationType];
+
+// InboxCard DTO for frontend rendering
+export interface InboxCard {
+  id: string;
+  type: NotificationTypeValue;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  ctaLabel: string | null;
+  ctaPath: string | null;
+}
+
+// CTA mapping by notification type
+export function getNotificationCta(
+  type: string,
+  resourceType?: string | null,
+  resourceId?: string | null
+): { label: string | null; path: string | null } {
+  switch (type) {
+    case NotificationType.TRANSACTION:
+      if (resourceId) {
+        return { label: "View receipt", path: `/activity/${resourceId}` };
+      }
+      return { label: "View activity", path: "/activity" };
+    case NotificationType.KYC:
+      return { label: "Continue verification", path: "/settings/security" };
+    case NotificationType.SECURITY:
+      return { label: "Review security", path: "/settings/security" };
+    case NotificationType.SYSTEM:
+      return { label: null, path: null };
+    default:
+      return { label: null, path: null };
+  }
+}
+
 // Consent status response type
 export interface ConsentStatusResponse {
   hasAccepted: boolean;

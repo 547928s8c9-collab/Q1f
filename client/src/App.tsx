@@ -28,6 +28,7 @@ import OnboardingVerify from "@/pages/onboarding/verify";
 import OnboardingConsent from "@/pages/onboarding/consent";
 import OnboardingKyc from "@/pages/onboarding/kyc";
 import OnboardingDone from "@/pages/onboarding/done";
+import Inbox from "@/pages/inbox";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRouter() {
@@ -49,6 +50,7 @@ function ProtectedRouter() {
           <Route path="/activity/:operationId" component={Receipt} />
           <Route path="/settings" component={Settings} />
           <Route path="/settings/security" component={SecuritySettings} />
+          <Route path="/inbox" component={Inbox} />
           <Route component={NotFound} />
         </Switch>
       </AppShell>

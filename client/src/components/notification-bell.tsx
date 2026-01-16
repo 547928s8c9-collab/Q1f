@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Bell, Check } from "lucide-react";
+import { useLocation } from "wouter";
+import { Bell, Check, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -7,29 +8,56 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Chip } from "@/components/ui/chip";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
-
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  resourceType?: string;
-  resourceId?: string;
-  isRead: boolean;
-  createdAt: string;
-}
+import type { InboxCard, NotificationTypeValue } from "@shared/schema";
 
 interface NotificationsResponse {
-  notifications: Notification[];
+  notifications: InboxCard[];
   unreadCount: number;
 }
 
+function getTypeVariant(type: NotificationTypeValue): "default" | "success" | "warning" | "danger" | "primary" {
+  switch (type) {
+    case "transaction":
+      return "primary";
+    case "kyc":
+      return "warning";
+    case "security":
+      return "danger";
+    case "system":
+    default:
+      return "default";
+  }
+}
+
+function getTypeLabel(type: NotificationTypeValue): string {
+  switch (type) {
+    case "transaction":
+      return "Transaction";
+    case "kyc":
+      return "Verification";
+    case "security":
+      return "Security";
+    case "system":
+      return "System";
+    default:
+      return type;
+  }
+}
+
 export function NotificationBell() {
+  const [, navigate] = useLocation();
+
   const { data } = useQuery<NotificationsResponse>({
-    queryKey: ["/api/notifications"],
+    queryKey: ["/api/notifications", { limit: 5 }],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications?limit=5", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch notifications");
+      return res.json();
+    },
     refetchInterval: 30000,
   });
 
@@ -50,6 +78,15 @@ export function NotificationBell() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
   });
+
+  const handleCardClick = (card: InboxCard) => {
+    if (!card.isRead) {
+      markReadMutation.mutate(card.id);
+    }
+    if (card.ctaPath) {
+      navigate(card.ctaPath);
+    }
+  };
 
   const unreadCount = data?.unreadCount || 0;
   const notifications = data?.notifications || [];
@@ -76,44 +113,53 @@ export function NotificationBell() {
               className="h-7 text-xs"
               onClick={() => markAllReadMutation.mutate()}
               disabled={markAllReadMutation.isPending}
-              data-testid="button-mark-all-read"
+              data-testid="button-mark-all-read-popover"
             >
               <Check className="h-3 w-3 mr-1" />
               Mark all read
             </Button>
           )}
         </div>
-        <ScrollArea className="h-72">
+        <ScrollArea className="max-h-72">
           {notifications.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
               No notifications
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {notifications.map((card) => (
                 <div
-                  key={notification.id}
+                  key={card.id}
                   className={cn(
                     "px-4 py-3 hover-elevate cursor-pointer",
-                    !notification.isRead && "bg-primary/5"
+                    !card.isRead && "bg-primary/5"
                   )}
-                  onClick={() => {
-                    if (!notification.isRead) {
-                      markReadMutation.mutate(notification.id);
-                    }
-                  }}
-                  data-testid={`notification-${notification.id}`}
+                  onClick={() => handleCardClick(card)}
+                  data-testid={`notification-${card.id}`}
                 >
                   <div className="flex items-start gap-2">
-                    {!notification.isRead && (
+                    {!card.isRead && (
                       <span className="h-2 w-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                     )}
-                    <div className={cn("flex-1 min-w-0", notification.isRead && "ml-4")}>
-                      <p className="text-sm font-medium truncate">{notification.title}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{notification.message}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </p>
+                    <div className={cn("flex-1 min-w-0", card.isRead && "ml-4")}>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Chip size="sm" variant={getTypeVariant(card.type)}>
+                          {getTypeLabel(card.type)}
+                        </Chip>
+                      </div>
+                      <p className="text-sm font-medium truncate">{card.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{card.message}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true })}
+                        </p>
+                        {card.ctaLabel && (
+                          <span className="text-xs text-primary flex items-center gap-0.5">
+                            {card.ctaLabel}
+                            <ChevronRight className="h-3 w-3" />
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -121,6 +167,18 @@ export function NotificationBell() {
             </div>
           )}
         </ScrollArea>
+        <div className="border-t px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs"
+            onClick={() => navigate("/inbox")}
+            data-testid="button-see-all"
+          >
+            See all notifications
+            <ChevronRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );
