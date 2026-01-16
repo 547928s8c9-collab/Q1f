@@ -3,8 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe } from "@shared/schema";
+import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus } from "@shared/schema";
 import { loadCandles } from "./marketData/loadCandles";
+import { sessionRunner } from "./sim/runner";
 
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -3058,6 +3059,285 @@ export async function registerRoutes(
   app.get("/api/status", (_req, res) => {
     const status = getSystemStatus();
     res.json(status);
+  });
+
+  // ==================== SIMULATION SESSIONS ====================
+  
+  // Configure session runner callbacks for event persistence
+  sessionRunner.setEventCallback(async (sessionId, event) => {
+    await storage.insertSimEvent(sessionId, event.seq, event.ts, event.type, event.payload);
+    await storage.updateSessionLastSeq(sessionId, event.seq);
+  });
+
+  sessionRunner.setStatusChangeCallback(async (sessionId, status, errorMessage) => {
+    await storage.updateSimSession(sessionId, { status, errorMessage });
+  });
+
+  // POST /api/sim/sessions - Create a new simulation session
+  app.post("/api/sim/sessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      const schema = z.object({
+        profileSlug: z.string(),
+        configOverrides: z.record(z.unknown()).optional(),
+        idempotencyKey: z.string().optional(),
+      });
+      
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+      }
+      
+      const { profileSlug, configOverrides, idempotencyKey } = parsed.data;
+      
+      // Check idempotency
+      if (idempotencyKey) {
+        const existing = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
+        if (existing) {
+          return res.status(200).json(existing);
+        }
+      }
+      
+      // Get profile by slug
+      const profile = await storage.getStrategyProfile(profileSlug);
+      if (!profile) {
+        return res.status(404).json({ error: "Strategy profile not found" });
+      }
+      
+      // Calculate simulation time range (last 90 days)
+      const endMs = Date.now();
+      const startMs = endMs - (90 * 24 * 60 * 60 * 1000);
+      
+      // Create session
+      const session = await storage.createSimSession({
+        userId,
+        profileSlug,
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        startMs,
+        endMs,
+        configOverrides: configOverrides as any,
+        status: SimSessionStatus.CREATED,
+        idempotencyKey,
+      });
+      
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Create sim session error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/sim/sessions - List user's simulation sessions
+  app.get("/api/sim/sessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const status = req.query.status as string | undefined;
+      
+      const sessions = await storage.getSimSessionsByUser(userId, status);
+      res.json({ sessions });
+    } catch (error) {
+      console.error("Get sim sessions error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/sim/sessions/:id - Get a specific session
+  app.get("/api/sim/sessions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+      
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      res.json(session);
+    } catch (error) {
+      console.error("Get sim session error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/sim/sessions/:id/events - Get session events with pagination
+  app.get("/api/sim/sessions/:id/events", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+      const fromSeq = req.query.fromSeq ? parseInt(req.query.fromSeq as string, 10) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+      
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      const events = await storage.getSimEvents(sessionId, fromSeq, limit);
+      res.json({ events, lastSeq: session.lastSeq });
+    } catch (error) {
+      console.error("Get sim events error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/sim/sessions/:id/control - Control session (start/pause/resume/stop)
+  app.post("/api/sim/sessions/:id/control", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+      
+      const schema = z.object({
+        action: z.enum(["start", "pause", "resume", "stop"]),
+      });
+      
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid action", details: parsed.error.errors });
+      }
+      
+      const { action } = parsed.data;
+      
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      if (action === "start") {
+        if (session.status !== SimSessionStatus.CREATED) {
+          return res.status(400).json({ error: "Session already started or finished" });
+        }
+        
+        // Get profile config
+        const profile = await storage.getStrategyProfile(session.profileSlug);
+        if (!profile) {
+          return res.status(404).json({ error: "Profile not found" });
+        }
+        
+        // Start simulation via singleton runner
+        const result = await sessionRunner.startSession(session, profile.defaultConfig);
+        if (!result.success) {
+          return res.status(400).json({ error: result.error });
+        }
+        
+        res.json({ status: "started", sessionId });
+        
+      } else if (action === "pause") {
+        if (!sessionRunner.isRunning(sessionId)) {
+          return res.status(400).json({ error: "Session not running" });
+        }
+        sessionRunner.pause(sessionId);
+        res.json({ status: "paused", sessionId });
+        
+      } else if (action === "resume") {
+        if (!sessionRunner.isRunning(sessionId)) {
+          return res.status(400).json({ error: "Session not running" });
+        }
+        sessionRunner.resume(sessionId);
+        res.json({ status: "resumed", sessionId });
+        
+      } else if (action === "stop") {
+        sessionRunner.stop(sessionId);
+        res.json({ status: "stopped", sessionId });
+      }
+    } catch (error) {
+      console.error("Control sim session error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/sim/sessions/:id/stream - SSE endpoint for real-time events
+  app.get("/api/sim/sessions/:id/stream", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const sessionId = req.params.id;
+    const fromSeq = req.query.fromSeq ? parseInt(req.query.fromSeq as string, 10) : 0;
+    
+    const session = await storage.getSimSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    if (session.userId !== userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    
+    // Set up SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+    
+    // Send heartbeat
+    const sendHeartbeat = () => {
+      res.write(": heartbeat\n\n");
+    };
+    const heartbeatInterval = setInterval(sendHeartbeat, 15000);
+    
+    // Track current sequence
+    let currentSeq = fromSeq;
+    
+    // First, send any missed events from DB
+    const missedEvents = await storage.getSimEvents(sessionId, fromSeq, 1000);
+    for (const event of missedEvents) {
+      res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+      currentSeq = event.seq + 1;
+    }
+    
+    // Subscribe to live events from the session runner
+    const isActive = sessionRunner.isRunning(sessionId);
+    
+    if (isActive) {
+      const eventHandler = (_sid: string, event: { seq: number; type: string; payload: unknown }) => {
+        if (event.seq >= currentSeq) {
+          res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+          currentSeq = event.seq + 1;
+        }
+      };
+      
+      const statusHandler = (_sid: string, status: string) => {
+        res.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
+        if (status === SimSessionStatus.FINISHED || 
+            status === SimSessionStatus.FAILED || 
+            status === SimSessionStatus.STOPPED) {
+          cleanup();
+        }
+      };
+      
+      // Listen to emitter events (filtered by sessionId)
+      const wrappedEventHandler = (sid: string, event: { seq: number; type: string; payload: unknown }) => {
+        if (sid === sessionId) eventHandler(sid, event);
+      };
+      const wrappedStatusHandler = (sid: string, status: string) => {
+        if (sid === sessionId) statusHandler(sid, status);
+      };
+      
+      sessionRunner.on("event", wrappedEventHandler);
+      sessionRunner.on("statusChange", wrappedStatusHandler);
+      
+      const cleanup = () => {
+        clearInterval(heartbeatInterval);
+        sessionRunner.off("event", wrappedEventHandler);
+        sessionRunner.off("statusChange", wrappedStatusHandler);
+        res.end();
+      };
+      
+      req.on("close", cleanup);
+    } else {
+      // No active runner - just send current status and close
+      res.write(`event: status\ndata: ${JSON.stringify({ status: session.status })}\n\n`);
+      clearInterval(heartbeatInterval);
+      res.end();
+    }
   });
 
   return httpServer;

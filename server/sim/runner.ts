@@ -70,6 +70,7 @@ class SessionRunnerManager extends EventEmitter {
       if (result.gaps && result.gaps.length > 0) {
         const errorMessage = `Data gaps detected: ${result.gaps.length} gaps found`;
         await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
+        this.emit("statusChange", session.id, SimSessionStatus.FAILED);
         return { success: false, error: errorMessage };
       }
 
@@ -78,11 +79,13 @@ class SessionRunnerManager extends EventEmitter {
       if (candles.length < config.minBarsWarmup + 10) {
         const errorMessage = `Insufficient candles: ${candles.length} < ${config.minBarsWarmup + 10} required`;
         await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
+        this.emit("statusChange", session.id, SimSessionStatus.FAILED);
         return { success: false, error: errorMessage };
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load candles";
       await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
+      this.emit("statusChange", session.id, SimSessionStatus.FAILED);
       return { success: false, error: errorMessage };
     }
 
@@ -107,6 +110,7 @@ class SessionRunnerManager extends EventEmitter {
     this.runners.set(session.id, state);
 
     await this.onStatusChangeCallback?.(session.id, SimSessionStatus.RUNNING);
+    this.emit("statusChange", session.id, SimSessionStatus.RUNNING);
 
     this.scheduleTick(session.id);
 
@@ -130,6 +134,7 @@ class SessionRunnerManager extends EventEmitter {
 
     if (state.candleIndex >= state.candles.length) {
       await this.onStatusChangeCallback?.(sessionId, SimSessionStatus.FINISHED);
+      this.emit("statusChange", sessionId, SimSessionStatus.FINISHED);
       this.cleanup(sessionId);
       return;
     }
@@ -170,6 +175,7 @@ class SessionRunnerManager extends EventEmitter {
     }
 
     this.onStatusChangeCallback?.(sessionId, SimSessionStatus.PAUSED);
+    this.emit("statusChange", sessionId, SimSessionStatus.PAUSED);
     return true;
   }
 
@@ -179,6 +185,7 @@ class SessionRunnerManager extends EventEmitter {
 
     state.isPaused = false;
     this.onStatusChangeCallback?.(sessionId, SimSessionStatus.RUNNING);
+    this.emit("statusChange", sessionId, SimSessionStatus.RUNNING);
     this.scheduleTick(sessionId);
     return true;
   }
@@ -194,6 +201,7 @@ class SessionRunnerManager extends EventEmitter {
     }
 
     this.onStatusChangeCallback?.(sessionId, SimSessionStatus.STOPPED);
+    this.emit("statusChange", sessionId, SimSessionStatus.STOPPED);
     this.cleanup(sessionId);
     return true;
   }
