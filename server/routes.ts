@@ -1538,14 +1538,15 @@ export async function registerRoutes(
       const notificationsData = await storage.getNotifications(userId, unreadOnly, limit);
       const unreadCount = await storage.getUnreadNotificationCount(userId);
       
-      const { getNotificationCta } = await import("@shared/schema");
+      const { getNotificationCta, normalizeNotificationType } = await import("@shared/schema");
       
       res.json({
         notifications: notificationsData.map((n) => {
+          const normalizedType = normalizeNotificationType(n.type);
           const cta = getNotificationCta(n.type, n.resourceType, n.resourceId);
           return {
             id: n.id,
-            type: n.type,
+            type: normalizedType,
             title: n.title,
             message: n.message,
             isRead: n.isRead,
@@ -1596,6 +1597,72 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error("Mark all notifications read error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // POST /api/notifications/seed - Seed demo notifications (protected, dev only)
+  app.post("/api/notifications/seed", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const operations = await storage.getOperations(userId, undefined, undefined, undefined, 5);
+      const operationId = operations.operations[0]?.id;
+      
+      const demoNotifications = [
+        {
+          userId,
+          type: "transaction",
+          title: "Deposit completed",
+          message: "Your USDT deposit of 500.00 has been credited to your wallet",
+          resourceType: "operation",
+          resourceId: operationId || null,
+          isRead: false,
+        },
+        {
+          userId,
+          type: "kyc",
+          title: "Verification required",
+          message: "Complete your identity verification to unlock all features",
+          resourceType: "kyc",
+          resourceId: null,
+          isRead: false,
+        },
+        {
+          userId,
+          type: "security",
+          title: "New login detected",
+          message: "A new login was detected from Chrome on Windows. If this wasn't you, secure your account.",
+          resourceType: "security",
+          resourceId: null,
+          isRead: false,
+        },
+        {
+          userId,
+          type: "system",
+          title: "Scheduled maintenance",
+          message: "Scheduled maintenance on Jan 20 from 2:00 AM to 4:00 AM UTC. Some features may be unavailable.",
+          resourceType: null,
+          resourceId: null,
+          isRead: true,
+        },
+        {
+          userId,
+          type: "transaction",
+          title: "Profit payout received",
+          message: "Daily profit payout of 12.45 USDT has been added to your Profit Vault",
+          resourceType: "operation",
+          resourceId: null,
+          isRead: false,
+        },
+      ];
+      
+      for (const n of demoNotifications) {
+        await storage.createNotification(n);
+      }
+      
+      res.json({ success: true, count: demoNotifications.length });
+    } catch (error) {
+      console.error("Seed notifications error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

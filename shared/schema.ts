@@ -375,7 +375,7 @@ export interface InboxCard {
   ctaPath: string | null;
 }
 
-// CTA mapping by notification type
+// CTA mapping by notification type (handles both legacy "operation" and new "transaction")
 export function getNotificationCta(
   type: string,
   resourceType?: string | null,
@@ -383,6 +383,7 @@ export function getNotificationCta(
 ): { label: string | null; path: string | null } {
   switch (type) {
     case NotificationType.TRANSACTION:
+    case "operation": // Legacy type alias
       if (resourceId) {
         return { label: "View receipt", path: `/activity/${resourceId}` };
       }
@@ -396,6 +397,15 @@ export function getNotificationCta(
     default:
       return { label: null, path: null };
   }
+}
+
+// Normalize notification type to standard values
+export function normalizeNotificationType(type: string): NotificationTypeValue {
+  if (type === "operation") return NotificationType.TRANSACTION;
+  if (Object.values(NotificationType).includes(type as NotificationTypeValue)) {
+    return type as NotificationTypeValue;
+  }
+  return NotificationType.SYSTEM; // Default fallback
 }
 
 // Consent status response type
