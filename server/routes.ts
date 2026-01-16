@@ -3061,6 +3061,74 @@ export async function registerRoutes(
     res.json(status);
   });
 
+  // ==================== STRATEGY PROFILES ====================
+
+  const PROFILE_ORDER = [
+    "btc_squeeze_breakout",
+    "eth_ema_revert", 
+    "bnb_trend_pullback",
+    "sol_vol_burst",
+    "xrp_keltner_revert",
+    "doge_fast_momo",
+    "ada_deep_revert",
+    "trx_lowvol_band",
+  ];
+
+  const SIM_TIMEFRAME_MS: Record<string, number> = {
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "1d": 24 * 60 * 60 * 1000,
+  };
+
+  const MAX_CANDLES = 50000;
+  const MIN_SPEED = 1;
+  const MAX_SPEED = 200;
+
+  // GET /api/strategy-profiles - List enabled profiles with stable ordering
+  app.get("/api/strategy-profiles", async (_req, res) => {
+    try {
+      const profiles = await storage.getStrategyProfiles();
+      const sorted = profiles.sort((a, b) => {
+        const aIdx = PROFILE_ORDER.indexOf(a.slug);
+        const bIdx = PROFILE_ORDER.indexOf(b.slug);
+        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+      });
+      res.json({ profiles: sorted });
+    } catch (error) {
+      console.error("Get strategy profiles error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  // GET /api/strategy-profiles/:slug - Profile detail with defaultConfig and configSchema
+  app.get("/api/strategy-profiles/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const profile = await storage.getStrategyProfile(slug);
+      if (!profile) {
+        return res.status(404).json({ error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" } });
+      }
+      if (!profile.isEnabled) {
+        return res.status(404).json({ error: { code: "PROFILE_DISABLED", message: "Strategy profile is disabled" } });
+      }
+      res.json({
+        id: profile.id,
+        slug: profile.slug,
+        displayName: profile.displayName,
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        description: profile.description,
+        tags: profile.tags,
+        riskLevel: profile.riskLevel,
+        defaultConfig: profile.defaultConfig,
+        configSchema: profile.configSchema,
+      });
+    } catch (error) {
+      console.error("Get strategy profile error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
   // ==================== SIMULATION SESSIONS ====================
   
   // Configure session runner callbacks for event persistence
@@ -3073,41 +3141,119 @@ export async function registerRoutes(
     await storage.updateSimSession(sessionId, { status, errorMessage });
   });
 
-  // POST /api/sim/sessions - Create a new simulation session
+  // POST /api/sim/sessions - Create a new simulation session with full validation
   app.post("/api/sim/sessions", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
+      
+      // Check idempotency via header
+      if (idempotencyKey) {
+        const existing = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
+        if (existing) {
+          return res.status(200).json({
+            sessionId: existing.id,
+            status: existing.status,
+            streamUrl: `/api/sim/sessions/${existing.id}/stream`,
+          });
+        }
+      }
       
       const schema = z.object({
-        profileSlug: z.string(),
-        configOverrides: z.record(z.unknown()).optional(),
-        idempotencyKey: z.string().optional(),
+        profileSlug: z.string().min(1),
+        startMs: z.number().int().positive(),
+        endMs: z.number().int().positive(),
+        speed: z.number().int().min(MIN_SPEED).max(MAX_SPEED).optional().default(1),
+        configOverride: z.record(z.unknown()).optional(),
       });
       
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request", details: parsed.error.errors });
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: parsed.error.errors,
+          },
+        });
       }
       
-      const { profileSlug, configOverrides, idempotencyKey } = parsed.data;
-      
-      // Check idempotency
-      if (idempotencyKey) {
-        const existing = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
-        if (existing) {
-          return res.status(200).json(existing);
-        }
-      }
+      const { profileSlug, startMs, endMs, speed, configOverride } = parsed.data;
       
       // Get profile by slug
       const profile = await storage.getStrategyProfile(profileSlug);
       if (!profile) {
-        return res.status(404).json({ error: "Strategy profile not found" });
+        return res.status(404).json({
+          error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" },
+        });
+      }
+      if (!profile.isEnabled) {
+        return res.status(400).json({
+          error: { code: "PROFILE_DISABLED", message: "Strategy profile is disabled" },
+        });
       }
       
-      // Calculate simulation time range (last 90 days)
-      const endMs = Date.now();
-      const startMs = endMs - (90 * 24 * 60 * 60 * 1000);
+      // Validate startMs < endMs
+      if (startMs >= endMs) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIME_RANGE", message: "startMs must be less than endMs" },
+        });
+      }
+      
+      // Get timeframe ms
+      const tfMs = SIM_TIMEFRAME_MS[profile.timeframe];
+      if (!tfMs) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
+        });
+      }
+      
+      // Validate alignment to timeframe grid
+      if (startMs % tfMs !== 0) {
+        return res.status(400).json({
+          error: {
+            code: "START_NOT_ALIGNED",
+            message: `startMs must be aligned to ${profile.timeframe} grid (multiple of ${tfMs}ms)`,
+          },
+        });
+      }
+      if (endMs % tfMs !== 0) {
+        return res.status(400).json({
+          error: {
+            code: "END_NOT_ALIGNED",
+            message: `endMs must be aligned to ${profile.timeframe} grid (multiple of ${tfMs}ms)`,
+          },
+        });
+      }
+      
+      // Validate max candles
+      const candleCount = (endMs - startMs) / tfMs;
+      if (candleCount > MAX_CANDLES) {
+        return res.status(400).json({
+          error: {
+            code: "RANGE_TOO_LARGE",
+            message: `Range exceeds maximum ${MAX_CANDLES} candles (requested: ${candleCount})`,
+          },
+        });
+      }
+      
+      // Load candles and check for gaps before creating session
+      const candleResult = await loadCandles({
+        symbol: profile.symbol,
+        timeframe: profile.timeframe as Timeframe,
+        startMs,
+        endMs,
+      });
+      
+      if (candleResult.gaps && candleResult.gaps.length > 0) {
+        return res.status(422).json({
+          error: {
+            code: "MARKET_DATA_GAPS",
+            message: "Market data has gaps in the requested range",
+            gaps: candleResult.gaps,
+          },
+        });
+      }
       
       // Create session
       const session = await storage.createSimSession({
@@ -3117,15 +3263,32 @@ export async function registerRoutes(
         timeframe: profile.timeframe,
         startMs,
         endMs,
-        configOverrides: configOverrides as any,
+        speed,
+        configOverrides: configOverride as any,
         status: SimSessionStatus.CREATED,
         idempotencyKey,
       });
       
-      res.status(201).json(session);
+      // Auto-start the session
+      const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
+      if (!startResult.success) {
+        await storage.updateSimSession(session.id, { 
+          status: SimSessionStatus.FAILED, 
+          errorMessage: startResult.error,
+        });
+        return res.status(400).json({
+          error: { code: "START_FAILED", message: startResult.error },
+        });
+      }
+      
+      res.status(201).json({
+        sessionId: session.id,
+        status: SimSessionStatus.RUNNING,
+        streamUrl: `/api/sim/sessions/${session.id}/stream`,
+      });
     } catch (error) {
       console.error("Create sim session error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
 
@@ -3143,7 +3306,7 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/sim/sessions/:id - Get a specific session
+  // GET /api/sim/sessions/:id - Get a specific session with metadata
   app.get("/api/sim/sessions/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -3151,16 +3314,38 @@ export async function registerRoutes(
       
       const session = await storage.getSimSession(sessionId);
       if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
       }
       if (session.userId !== userId) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
       }
       
-      res.json(session);
+      const runnerState = sessionRunner.getState(sessionId);
+      
+      res.json({
+        id: session.id,
+        profileSlug: session.profileSlug,
+        symbol: session.symbol,
+        timeframe: session.timeframe,
+        startMs: session.startMs,
+        endMs: session.endMs,
+        speed: session.speed,
+        status: session.status,
+        lastSeq: session.lastSeq,
+        errorMessage: session.errorMessage,
+        configOverrides: session.configOverrides,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        progress: runnerState ? {
+          candleIndex: runnerState.candleIndex,
+          totalCandles: runnerState.totalCandles,
+          pct: Math.round((runnerState.candleIndex / runnerState.totalCandles) * 100),
+        } : null,
+        streamUrl: `/api/sim/sessions/${session.id}/stream`,
+      });
     } catch (error) {
       console.error("Get sim session error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
 
@@ -3188,71 +3373,58 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/sim/sessions/:id/control - Control session (start/pause/resume/stop)
+  // POST /api/sim/sessions/:id/control - Control session (pause/resume/stop)
   app.post("/api/sim/sessions/:id/control", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const sessionId = req.params.id;
       
       const schema = z.object({
-        action: z.enum(["start", "pause", "resume", "stop"]),
+        action: z.enum(["pause", "resume", "stop"]),
       });
       
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid action", details: parsed.error.errors });
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid action",
+            details: parsed.error.errors,
+          },
+        });
       }
       
       const { action } = parsed.data;
       
       const session = await storage.getSimSession(sessionId);
       if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
       }
       if (session.userId !== userId) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
       }
       
-      if (action === "start") {
-        if (session.status !== SimSessionStatus.CREATED) {
-          return res.status(400).json({ error: "Session already started or finished" });
-        }
-        
-        // Get profile config
-        const profile = await storage.getStrategyProfile(session.profileSlug);
-        if (!profile) {
-          return res.status(404).json({ error: "Profile not found" });
-        }
-        
-        // Start simulation via singleton runner
-        const result = await sessionRunner.startSession(session, profile.defaultConfig);
-        if (!result.success) {
-          return res.status(400).json({ error: result.error });
-        }
-        
-        res.json({ status: "started", sessionId });
-        
-      } else if (action === "pause") {
+      if (action === "pause") {
         if (!sessionRunner.isRunning(sessionId)) {
-          return res.status(400).json({ error: "Session not running" });
+          return res.status(400).json({ error: { code: "NOT_RUNNING", message: "Session is not running" } });
         }
         sessionRunner.pause(sessionId);
-        res.json({ status: "paused", sessionId });
+        res.json({ sessionId, status: SimSessionStatus.PAUSED });
         
       } else if (action === "resume") {
         if (!sessionRunner.isRunning(sessionId)) {
-          return res.status(400).json({ error: "Session not running" });
+          return res.status(400).json({ error: { code: "NOT_RUNNING", message: "Session is not running" } });
         }
         sessionRunner.resume(sessionId);
-        res.json({ status: "resumed", sessionId });
+        res.json({ sessionId, status: SimSessionStatus.RUNNING });
         
       } else if (action === "stop") {
         sessionRunner.stop(sessionId);
-        res.json({ status: "stopped", sessionId });
+        res.json({ sessionId, status: SimSessionStatus.STOPPED });
       }
     } catch (error) {
       console.error("Control sim session error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
 
