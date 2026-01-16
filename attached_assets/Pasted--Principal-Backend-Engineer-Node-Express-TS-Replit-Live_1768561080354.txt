@@ -1,0 +1,62 @@
+Ты — Principal Backend Engineer (Node/Express TS) в существующем репозитории Replit.
+
+ФИЧА: Live Session — исторические свечи подаются как live-поток (ускоренный), стратегия поверх этого эмитит события сделок и equity. Это simulation-only.
+
+ОБЩИЕ ПРАВИЛА:
+1) Не переписывай проект целиком.
+2) Никаких TODO/placeholder.
+3) В конце: PATCH + WALKTHROUGH + CHANGED FILES.
+4) Идемпотентность для write: уникальные ключи/UPSERT.
+5) Детерминизм: события строго упорядочены по seq; один и тот же вход => один и тот же event log.
+
+СДЕЛАЙ:
+1) DB (если нет аналогов в репо) добавь таблицы:
+A) sim_sessions:
+- id (uuid/serial)
+- userId (как принято из OIDC)
+- profileSlug
+- symbol, timeframe
+- startMs, endMs
+- speed (например 1..200; “ускорение”)
+- status ("created"|"running"|"paused"|"stopped"|"finished"|"failed")
+- createdAt, updatedAt
+- UNIQUE(userId, idempotencyKey) если используете idempotency key паттерн (или отдельная таблица idempotency — как принято в проекте)
+B) sim_events:
+- id
+- sessionId
+- seq BIGINT NOT NULL
+- ts BIGINT NOT NULL
+- type TEXT NOT NULL
+- payload JSONB NOT NULL
+- UNIQUE(sessionId, seq)
+- index(sessionId, seq), index(sessionId, ts)
+
+2) SessionRunner (server/sim/runner.ts):
+- при старте сессии:
+  - получить candles через существующий Market Data Layer loadCandles(startMs,endMs)
+  - если gaps -> fail (status=failed) и вернуть ошибку с gaps
+  - создать strategy instance по profileSlug + config
+- runtime:
+  - выдавать events по мере “тика” (скорость = ускорение)
+  - на каждом шаге: emit candle event, прогнать strategy.onCandle, emit strategy events, emit equity snapshots
+  - писать events в sim_events UPSERT/insert с UNIQUE(sessionId,seq)
+  - seq инкремент строго +1; никаких пропусков; детерминированно
+
+3) SSE stream:
+- GET /api/sim/sessions/:id/stream?fromSeq=...
+- при подключении:
+  - отдать backlog из БД начиная fromSeq (если есть)
+  - подписать клиента на новые events
+  - heartbeat (детерминированный интервал, например 15s)
+- при разрыве клиент может переподключиться с fromSeq.
+
+4) Controls:
+- POST /api/sim/sessions/:id/control
+  body: { action:"pause"|"resume"|"stop" }
+  - обновить статус; runner должен реагировать
+  - идемпотентно: повторный pause/resume не ломает state
+
+ВЫВОД:
+--- PATCH ---
+--- WALKTHROUGH --- (как создать сессию, открыть SSE, увидеть события; как pause/resume)
+--- CHANGED FILES ---
