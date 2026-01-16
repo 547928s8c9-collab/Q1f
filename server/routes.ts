@@ -36,6 +36,224 @@ const MIN_WITHDRAWAL_MINOR = process.env.MIN_WITHDRAWAL_MINOR || "10000000"; // 
 const MIN_DEPOSIT_MINOR = process.env.MIN_DEPOSIT_MINOR || "10000000"; // 10 USDT
 const DEFAULT_RUB_RATE = parseFloat(process.env.DEFAULT_RUB_RATE || "92.5");
 
+// Consent constants (canonical source)
+const CURRENT_CONSENT_VERSION = "1.0";
+const CURRENT_DOC_HASH = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+// ==================== SHARED SERVICE FUNCTIONS ====================
+// These ensure onboarding routes behave identically to canonical routes
+
+interface AcceptConsentParams {
+  userId: string;
+  ip: string;
+  userAgent: string;
+}
+
+interface AcceptConsentResult {
+  success: true;
+  alreadyAccepted: boolean;
+  consentId: string;
+  acceptedAt: string | undefined;
+}
+
+/**
+ * Canonical consent acceptance logic.
+ * Creates consent record, audit log, and updates security settings.
+ * Used by both /api/consent/accept and /api/onboarding/accept-consent.
+ */
+async function acceptConsentCanonical(params: AcceptConsentParams): Promise<AcceptConsentResult> {
+  const { userId, ip, userAgent } = params;
+
+  // Check if user already accepted current version (idempotent)
+  const latestConsent = await storage.getLatestConsent(userId, "combined");
+  if (latestConsent?.version === CURRENT_CONSENT_VERSION) {
+    return {
+      success: true,
+      alreadyAccepted: true,
+      consentId: latestConsent.id,
+      acceptedAt: latestConsent.acceptedAt?.toISOString(),
+    };
+  }
+
+  // Create new consent record
+  const consent = await storage.createConsent({
+    userId,
+    version: CURRENT_CONSENT_VERSION,
+    documentType: "combined",
+    docHash: CURRENT_DOC_HASH,
+    acceptedAt: new Date(),
+    ip,
+    userAgent,
+  });
+
+  // Create audit log
+  await storage.createAuditLog({
+    userId,
+    event: "CONSENT_ACCEPTED",
+    resourceType: "consent",
+    resourceId: consent.id,
+    details: {
+      version: CURRENT_CONSENT_VERSION,
+      docHash: CURRENT_DOC_HASH,
+    },
+    ip,
+    userAgent,
+  });
+
+  // Update security settings
+  await storage.updateSecuritySettings(userId, { consentAccepted: true });
+
+  return {
+    success: true,
+    alreadyAccepted: false,
+    consentId: consent.id,
+    acceptedAt: consent.acceptedAt?.toISOString(),
+  };
+}
+
+interface StartKycParams {
+  userId: string;
+  ip: string;
+  userAgent: string;
+}
+
+interface StartKycResult {
+  success: true;
+  status: string;
+  message?: string;
+  error?: { code: string; message: string; currentStatus?: string; allowedTransitions?: string[] };
+}
+
+/**
+ * Canonical KYC start logic.
+ * Validates state transition, creates/updates applicant, audit log, notification.
+ * Used by both /api/kyc/start and /api/onboarding/start-kyc.
+ */
+async function startKycCanonical(params: StartKycParams): Promise<StartKycResult & { httpStatus: number }> {
+  const { userId, ip, userAgent } = params;
+  const { KycTransitions, KycStatus } = await import("@shared/schema");
+
+  // Check if applicant exists
+  let applicant = await storage.getKycApplicant(userId);
+  const previousStatus = applicant?.status || "NOT_STARTED";
+
+  // Validate transition
+  const allowedTransitions = KycTransitions[previousStatus as keyof typeof KycTransitions] || [];
+  if (!allowedTransitions.includes("IN_REVIEW")) {
+    return {
+      httpStatus: 400,
+      success: true,
+      status: previousStatus,
+      error: {
+        code: "INVALID_KYC_TRANSITION",
+        message: "Invalid transition",
+        currentStatus: previousStatus,
+        allowedTransitions,
+      },
+    };
+  }
+
+  // Create or update applicant to IN_REVIEW
+  if (!applicant) {
+    applicant = await storage.createKycApplicant({
+      userId,
+      status: "IN_REVIEW",
+      level: "basic",
+      submittedAt: new Date(),
+    });
+  } else {
+    applicant = await storage.updateKycApplicant(userId, {
+      status: "IN_REVIEW",
+      submittedAt: new Date(),
+      rejectionReason: null,
+      needsActionReason: null,
+    });
+  }
+
+  // Log audit event
+  await storage.createAuditLog({
+    userId,
+    event: "KYC_STATUS_CHANGED",
+    resourceType: "kyc",
+    resourceId: applicant?.id,
+    details: { previousStatus, newStatus: "IN_REVIEW" },
+    ip,
+    userAgent,
+  });
+
+  // Create notification
+  await storage.createNotification({
+    userId,
+    type: "kyc",
+    title: "KYC Verification Started",
+    message: "Your identity verification is now being reviewed.",
+    resourceType: "kyc",
+    resourceId: applicant?.id,
+  });
+
+  // Demo mode: auto-approve after 2 seconds
+  setTimeout(async () => {
+    try {
+      const currentApplicant = await storage.getKycApplicant(userId);
+      if (currentApplicant?.status === "IN_REVIEW") {
+        await storage.updateKycApplicant(userId, {
+          status: "APPROVED",
+          reviewedAt: new Date(),
+        });
+        await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+
+        // Log audit event
+        await storage.createAuditLog({
+          userId,
+          event: "KYC_STATUS_CHANGED",
+          resourceType: "kyc",
+          resourceId: currentApplicant.id,
+          details: { previousStatus: "IN_REVIEW", newStatus: "APPROVED" },
+          ip: "system",
+          userAgent: "demo-auto-approve",
+        });
+
+        // Create notification
+        await storage.createNotification({
+          userId,
+          type: "kyc",
+          title: "KYC Approved",
+          message: "Your identity has been successfully verified.",
+          resourceType: "kyc",
+          resourceId: currentApplicant.id,
+        });
+
+        // Create operation record
+        await storage.createOperation({
+          userId,
+          type: "KYC",
+          status: "completed",
+          asset: null,
+          amount: null,
+          fee: null,
+          txHash: null,
+          providerRef: null,
+          strategyId: null,
+          strategyName: null,
+          fromVault: null,
+          toVault: null,
+          metadata: null,
+          reason: null,
+        });
+      }
+    } catch (err) {
+      console.error("Demo KYC auto-approve error:", err);
+    }
+  }, 2000);
+
+  return {
+    httpStatus: 200,
+    success: true,
+    status: "IN_REVIEW",
+    message: "KYC verification started. Demo mode will auto-approve in ~2 seconds.",
+  };
+}
+
 // Helper to get userId from authenticated request
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub;
@@ -934,126 +1152,26 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/kyc/start - Start KYC process (demo: auto-approve after delay)
+  // POST /api/kyc/start - Start KYC process (uses canonical logic)
   app.post("/api/kyc/start", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
       const userAgent = req.headers["user-agent"] || "unknown";
 
-      // Check if applicant exists
-      let applicant = await storage.getKycApplicant(userId);
-      const previousStatus = applicant?.status || "NOT_STARTED";
-
-      // Validate transition
-      const { KycTransitions, KycStatus } = await import("@shared/schema");
-      const allowedTransitions = KycTransitions[previousStatus as keyof typeof KycTransitions] || [];
-      if (!allowedTransitions.includes("IN_REVIEW")) {
-        return res.status(400).json({ 
-          error: "Invalid transition",
-          code: "INVALID_KYC_TRANSITION",
-          currentStatus: previousStatus,
-          allowedTransitions
+      const result = await startKycCanonical({ userId, ip, userAgent });
+      if (result.error) {
+        return res.status(result.httpStatus).json({
+          error: result.error.message,
+          code: result.error.code,
+          currentStatus: result.error.currentStatus,
+          allowedTransitions: result.error.allowedTransitions,
         });
       }
-
-      // Create or update applicant to IN_REVIEW
-      if (!applicant) {
-        applicant = await storage.createKycApplicant({
-          userId,
-          status: "IN_REVIEW",
-          level: "basic",
-          submittedAt: new Date(),
-        });
-      } else {
-        applicant = await storage.updateKycApplicant(userId, {
-          status: "IN_REVIEW",
-          submittedAt: new Date(),
-          rejectionReason: null,
-          needsActionReason: null,
-        });
-      }
-
-      // Log audit event
-      await storage.createAuditLog({
-        userId,
-        event: "KYC_STATUS_CHANGED",
-        resourceType: "kyc",
-        resourceId: applicant?.id,
-        details: { previousStatus, newStatus: "IN_REVIEW" },
-        ip,
-        userAgent,
-      });
-
-      // Create notification
-      await storage.createNotification({
-        userId,
-        type: "kyc",
-        title: "KYC Verification Started",
-        message: "Your identity verification is now being reviewed.",
-        resourceType: "kyc",
-        resourceId: applicant?.id,
-      });
-
-      // Demo mode: auto-approve after 2 seconds
-      setTimeout(async () => {
-        try {
-          const currentApplicant = await storage.getKycApplicant(userId);
-          if (currentApplicant?.status === "IN_REVIEW") {
-            await storage.updateKycApplicant(userId, {
-              status: "APPROVED",
-              reviewedAt: new Date(),
-            });
-            await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
-
-            // Log audit event
-            await storage.createAuditLog({
-              userId,
-              event: "KYC_STATUS_CHANGED",
-              resourceType: "kyc",
-              resourceId: currentApplicant.id,
-              details: { previousStatus: "IN_REVIEW", newStatus: "APPROVED" },
-              ip: "system",
-              userAgent: "demo-auto-approve",
-            });
-
-            // Create notification
-            await storage.createNotification({
-              userId,
-              type: "kyc",
-              title: "KYC Approved",
-              message: "Your identity has been successfully verified.",
-              resourceType: "kyc",
-              resourceId: currentApplicant.id,
-            });
-
-            // Create operation record
-            await storage.createOperation({
-              userId,
-              type: "KYC",
-              status: "completed",
-              asset: null,
-              amount: null,
-              fee: null,
-              txHash: null,
-              providerRef: null,
-              strategyId: null,
-              strategyName: null,
-              fromVault: null,
-              toVault: null,
-              metadata: null,
-              reason: null,
-            });
-          }
-        } catch (err) {
-          console.error("Demo KYC auto-approve error:", err);
-        }
-      }, 2000);
-
-      res.json({ 
-        success: true, 
-        status: "IN_REVIEW",
-        message: "KYC verification started. Demo mode will auto-approve in ~2 seconds."
+      res.json({
+        success: result.success,
+        status: result.status,
+        message: result.message,
       });
     } catch (error) {
       console.error("KYC start error:", error);
@@ -2094,30 +2212,38 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/onboarding/accept-consent (protected)
+  // POST /api/onboarding/accept-consent (protected) - Uses canonical consent logic
   app.post("/api/onboarding/accept-consent", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      await storage.updateSecuritySettings(userId, { consentAccepted: true });
-      res.json({ success: true });
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      const result = await acceptConsentCanonical({ userId, ip, userAgent });
+      res.json({ success: result.success });
     } catch (error) {
       console.error("Accept consent error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // POST /api/onboarding/start-kyc (protected) - Demo: marks KYC as IN_REVIEW
+  // POST /api/onboarding/start-kyc (protected) - Uses canonical KYC logic
   app.post("/api/onboarding/start-kyc", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      // Update kycApplicants table (single source of truth)
-      await storage.upsertKycApplicant(userId, {
-        status: "IN_REVIEW",
-        level: "basic",
-        providerRef: `demo-${userId}`,
-        submittedAt: new Date(),
-      });
-      res.json({ success: true, status: "IN_REVIEW" });
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+
+      const result = await startKycCanonical({ userId, ip, userAgent });
+      if (result.error) {
+        return res.status(result.httpStatus).json({
+          error: result.error.message,
+          code: result.error.code,
+          currentStatus: result.error.currentStatus,
+          allowedTransitions: result.error.allowedTransitions,
+        });
+      }
+      res.json({ success: result.success, status: result.status });
     } catch (error) {
       console.error("Start KYC error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -2144,10 +2270,6 @@ export async function registerRoutes(
 
   // ==================== CONSENT ROUTES ====================
 
-  // Current consent version and document hash (would be managed separately in production)
-  const CURRENT_CONSENT_VERSION = "1.0";
-  const CURRENT_DOC_HASH = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
   // GET /api/consent/status (protected)
   app.get("/api/consent/status", isAuthenticated, async (req, res) => {
     try {
@@ -2171,58 +2293,15 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/consent/accept (protected, idempotent)
+  // POST /api/consent/accept (protected, idempotent) - Uses canonical consent logic
   app.post("/api/consent/accept", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
       const userAgent = req.headers["user-agent"] || "unknown";
 
-      // Check if user already accepted current version (idempotent)
-      const latestConsent = await storage.getLatestConsent(userId, "combined");
-      if (latestConsent?.version === CURRENT_CONSENT_VERSION) {
-        return res.json({
-          success: true,
-          alreadyAccepted: true,
-          consentId: latestConsent.id,
-          acceptedAt: latestConsent.acceptedAt?.toISOString(),
-        });
-      }
-
-      // Create new consent record
-      const consent = await storage.createConsent({
-        userId,
-        version: CURRENT_CONSENT_VERSION,
-        documentType: "combined",
-        docHash: CURRENT_DOC_HASH,
-        acceptedAt: new Date(),
-        ip,
-        userAgent,
-      });
-
-      // Create audit log
-      await storage.createAuditLog({
-        userId,
-        event: "CONSENT_ACCEPTED",
-        resourceType: "consent",
-        resourceId: consent.id,
-        details: {
-          version: CURRENT_CONSENT_VERSION,
-          docHash: CURRENT_DOC_HASH,
-        },
-        ip,
-        userAgent,
-      });
-
-      // Update security settings
-      await storage.updateSecuritySettings(userId, { consentAccepted: true });
-
-      res.json({
-        success: true,
-        alreadyAccepted: false,
-        consentId: consent.id,
-        acceptedAt: consent.acceptedAt?.toISOString(),
-      });
+      const result = await acceptConsentCanonical({ userId, ip, userAgent });
+      res.json(result);
     } catch (error) {
       console.error("Accept consent error:", error);
       res.status(500).json({ error: "Internal server error" });
