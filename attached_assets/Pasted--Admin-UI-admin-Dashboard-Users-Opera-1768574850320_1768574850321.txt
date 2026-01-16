@@ -1,0 +1,62 @@
+Сделай Admin UI в клиенте. Цель: /admin доступен только админам, есть страницы Dashboard/Users/Operations/Inbox, все тянется из /api/admin/*.
+
+1) Создай module registry:
+   - shared/admin/modules.ts (id, title, route, navGroup, requiredPermissions, featureFlag?, dangerLevel?)
+   - Добавь модули минимум: dashboard, users, operations, inbox (в группах Overview, Core).
+
+2) Добавь роуты /admin в client/src/App.tsx (Wouter):
+   - /admin → AdminLayout + вложенные маршруты
+   - /admin/users, /admin/operations, /admin/inbox
+   Не ломай существующие маршруты.
+
+3) Сделай guard на уровне /admin:
+   - Используй существующий gate-guard (client/src/components/onboarding/gate-guard.tsx) или создай admin guard,
+     который дергает GET /api/admin/me через TanStack Query.
+   - Если 401/403 → редирект на "/" или показывай аккуратный “Access denied” экран.
+   - Кэшируй /api/admin/me.
+
+4) Создай API клиент для админки:
+   - client/src/admin/api.ts: fetchAdminMe, fetchAdminUsers, fetchAdminUser(id), fetchAdminOperations, fetchAdminOperation(id), fetchAdminInbox
+   - Парсинг query параметров cursor/limit.
+   - Типы и Zod схемы импортируй из shared/admin/dto.ts (z.infer + safeParse на входе).
+
+5) Создай layout и страницы:
+   - client/src/admin/AdminLayout.tsx (sidebar + topbar)
+   - client/src/admin/pages/Dashboard.tsx
+   - client/src/admin/pages/Users.tsx
+   - client/src/admin/pages/Operations.tsx
+   - client/src/admin/pages/Inbox.tsx
+
+6) Общие UI компоненты (минимальный набор, но качественно):
+   - client/src/admin/components/DataTable.tsx:
+       * отображение rows
+       * simple toolbar: search input (q), limit selector
+       * next page button (использует meta.nextCursor)
+       * row click -> onRowClick
+   - client/src/admin/components/EntityDrawer.tsx:
+       * shadcn Drawer/Sheet справа
+       * показывает детали сущности
+   - client/src/admin/components/StatusPill.tsx (легкий бейдж статуса)
+   - client/src/admin/components/EmptyState.tsx
+
+7) Реализация страниц:
+   A) Dashboard:
+      - 4 KPI cards (можно пока из простых запросов: counts users, operations last 24h, pending inbox, kyc applicants count если есть endpoint; если нет — показывай placeholders)
+      - последние 10 operations (таблица компактная)
+   B) Users:
+      - таблица: id/email/createdAt + quick stats если доступны
+      - drawer: детали пользователя (данные из /api/admin/users/:id)
+   C) Operations:
+      - таблица: createdAt/type/amount/currency/status/userId/operationId
+      - drawer: деталь операции из /api/admin/operations/:id
+   D) Inbox:
+      - таблица: createdAt/type/priority/status/nextAction/entity link
+      - empty state если пусто
+
+8) UX требования:
+   - Быстро и чисто: липкий header таблицы, аккуратные отступы, без “дисклеймеров”.
+   - Все страницы должны обрабатывать loading/error states.
+
+9) В конце:
+   - Перечисли Files changed.
+   - Дай ручной чеклист: как зайти под админом и увидеть /admin.

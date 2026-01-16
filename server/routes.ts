@@ -149,13 +149,32 @@ export async function registerRoutes(
       // Ensure user data is initialized
       await storage.ensureUserData(userId);
 
-      const balances = await storage.getBalances(userId);
-      const vaults = await storage.getVaults(userId);
-      const positions = await storage.getPositions(userId);
-      const portfolioSeries = await storage.getPortfolioSeries(userId, 90);
-      const security = await storage.getSecuritySettings(userId);
-      const latestConsent = await storage.getLatestConsent(userId, "combined");
-      const kycApplicant = await storage.getKycApplicant(userId);
+      // Parallel fetch all independent data
+      const [
+        balances,
+        vaults,
+        positions,
+        portfolioSeries,
+        security,
+        latestConsent,
+        kycApplicant,
+        btcQuotes,
+        ethQuotes,
+        rubQuotes,
+        whitelistAddresses,
+      ] = await Promise.all([
+        storage.getBalances(userId),
+        storage.getVaults(userId),
+        storage.getPositions(userId),
+        storage.getPortfolioSeries(userId, 90),
+        storage.getSecuritySettings(userId),
+        storage.getLatestConsent(userId, "combined"),
+        storage.getKycApplicant(userId),
+        storage.getQuotes("BTC/USDT", 90),
+        storage.getQuotes("ETH/USDT", 90),
+        storage.getQuotes("USDT/RUB", 90),
+        storage.getWhitelistAddresses(userId),
+      ]);
 
       // Consent version (should match the constants in consent routes)
       const REQUIRED_CONSENT_VERSION = "1.0";
@@ -174,11 +193,6 @@ export async function registerRoutes(
         }),
         { current: "0", principal: "0" }
       );
-
-      // Get quotes
-      const btcQuotes = await storage.getQuotes("BTC/USDT", 90);
-      const ethQuotes = await storage.getQuotes("ETH/USDT", 90);
-      const rubQuotes = await storage.getQuotes("USDT/RUB", 90);
 
       const latestBtc = btcQuotes[btcQuotes.length - 1];
       const latestEth = ethQuotes[ethQuotes.length - 1];
@@ -205,8 +219,7 @@ export async function registerRoutes(
       const kycRequired = !isKycApproved;
       const twoFactorRequired = !security?.twoFactorEnabled;
       
-      // Check whitelist requirement
-      const whitelistAddresses = await storage.getWhitelistAddresses(userId);
+      // Check whitelist requirement (whitelistAddresses already fetched in parallel)
       const hasActiveWhitelistAddress = whitelistAddresses.some((a) => a.status === "active");
       const whitelistRequired = security?.whitelistEnabled && !hasActiveWhitelistAddress;
 
@@ -346,12 +359,16 @@ export async function registerRoutes(
   app.get("/api/strategies/performance-all", async (req, res) => {
     try {
       const strategies = await storage.getStrategies();
-      const result: Record<string, StrategyPerformance[]> = {};
       
-      for (const strategy of strategies) {
-        const perf = await storage.getStrategyPerformance(strategy.id, 30);
-        result[strategy.id] = perf;
-      }
+      // Parallel fetch performance for all strategies
+      const perfList = await Promise.all(
+        strategies.map(s => storage.getStrategyPerformance(s.id, 30))
+      );
+      
+      const result: Record<string, StrategyPerformance[]> = {};
+      strategies.forEach((strategy, i) => {
+        result[strategy.id] = perfList[i];
+      });
       
       res.json(result);
     } catch (error) {
