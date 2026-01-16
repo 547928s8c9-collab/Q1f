@@ -67,6 +67,16 @@ Preferred communication style: Simple, everyday language.
 - **Functionality**: Allows users to set saving goals with `goalName`, `goalAmount`, `autoSweepPct`, and `autoSweepEnabled`.
 - **Progress Tracking**: Calculates progress percentage based on current balance and goal amount.
 
+### Live Session Simulation System
+- **Tables**: `sim_sessions` (session metadata, status, config) and `sim_events` (streaming events with seq numbers)
+- **SessionRunner**: Singleton manager (`server/sim/runner.ts`) with tick loop, event emission via EventEmitter
+- **Status Flow**: CREATED → RUNNING → (PAUSED ↔ RUNNING) → FINISHED/STOPPED/FAILED
+- **SSE Streaming**: Real-time event delivery via `/api/sim/sessions/:id/stream` with heartbeat keepalive
+- **Control API**: Start/pause/resume/stop via `/api/sim/sessions/:id/control`
+- **Persistence**: Events persisted to `sim_events` table with lastSeq tracking for replay
+- **Strategy Profiles**: 8 profiles (btc_squeeze_breakout, eth_ema_revert, etc.) with configurable parameters
+- **Deterministic Execution**: No Date.now()/Math.random(), sorted outputs, stable sequence numbers
+
 ### Key Design Decisions
 - **Multi-User Architecture**: All data is user-scoped and initialized upon first login.
 - **Money Handling**: All monetary amounts stored as string minor units to prevent precision errors (e.g., USDT 6 decimals, RUB 2 decimals).
