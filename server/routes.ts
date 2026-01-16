@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { formatMoney, type StrategyPerformance } from "@shared/schema";
+import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe } from "@shared/schema";
+import { loadCandles } from "./marketData/loadCandles";
 
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -382,6 +383,126 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Seed strategies error:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MARKET DATA
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const MAX_CANDLES_PER_REQUEST = 35040; // ~1 year of 15m candles
+
+  const TIMEFRAME_MS: Record<Timeframe, number> = {
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "1d": 24 * 60 * 60 * 1000,
+  };
+
+  // GET /api/market/candles
+  app.get("/api/market/candles", async (req, res) => {
+    try {
+      const { symbol, timeframe, start, end, exchange } = req.query;
+
+      // Required params
+      if (!symbol || typeof symbol !== "string") {
+        return res.status(400).json({
+          error: { code: "MISSING_SYMBOL", message: "Query param 'symbol' is required" },
+        });
+      }
+      if (!timeframe || typeof timeframe !== "string") {
+        return res.status(400).json({
+          error: { code: "MISSING_TIMEFRAME", message: "Query param 'timeframe' is required" },
+        });
+      }
+      if (!start || typeof start !== "string") {
+        return res.status(400).json({
+          error: { code: "MISSING_START", message: "Query param 'start' (epoch ms) is required" },
+        });
+      }
+      if (!end || typeof end !== "string") {
+        return res.status(400).json({
+          error: { code: "MISSING_END", message: "Query param 'end' (epoch ms) is required" },
+        });
+      }
+
+      // Validate timeframe
+      if (!VALID_TIMEFRAMES.includes(timeframe as Timeframe)) {
+        return res.status(400).json({
+          error: {
+            code: "INVALID_TIMEFRAME",
+            message: `Invalid timeframe. Allowed: ${VALID_TIMEFRAMES.join(", ")}`,
+          },
+        });
+      }
+      const tf = timeframe as Timeframe;
+      const tfMs = TIMEFRAME_MS[tf];
+
+      // Parse start/end as integers
+      const startMs = parseInt(start, 10);
+      const endMs = parseInt(end, 10);
+      if (isNaN(startMs) || isNaN(endMs)) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIMESTAMPS", message: "start and end must be valid integers (epoch ms)" },
+        });
+      }
+
+      // Validate start < end
+      if (startMs >= endMs) {
+        return res.status(400).json({
+          error: { code: "INVALID_RANGE", message: "start must be less than end" },
+        });
+      }
+
+      // Validate grid alignment
+      if (startMs % tfMs !== 0) {
+        return res.status(400).json({
+          error: {
+            code: "START_NOT_ALIGNED",
+            message: `start must be aligned to timeframe grid (start % ${tfMs} === 0)`,
+          },
+        });
+      }
+      if (endMs % tfMs !== 0) {
+        return res.status(400).json({
+          error: {
+            code: "END_NOT_ALIGNED",
+            message: `end must be aligned to timeframe grid (end % ${tfMs} === 0)`,
+          },
+        });
+      }
+
+      // Validate max candles
+      const candleCount = (endMs - startMs) / tfMs;
+      if (candleCount > MAX_CANDLES_PER_REQUEST) {
+        return res.status(413).json({
+          error: {
+            code: "TOO_MANY_CANDLES",
+            message: `Requested ${candleCount} candles exceeds limit of ${MAX_CANDLES_PER_REQUEST}`,
+            details: { requested: candleCount, limit: MAX_CANDLES_PER_REQUEST },
+          },
+        });
+      }
+
+      // Exchange default
+      const exchangeParam = typeof exchange === "string" ? exchange : "binance_spot";
+
+      // Call Market Data Layer
+      const result = await loadCandles({
+        exchange: exchangeParam,
+        symbol: symbol.toUpperCase(),
+        timeframe: tf,
+        startMs,
+        endMs,
+      });
+
+      res.json({
+        candles: result.candles,
+        gaps: result.gaps,
+        source: result.source,
+      });
+    } catch (error) {
+      console.error("Market candles error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
 
