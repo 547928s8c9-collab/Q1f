@@ -122,6 +122,20 @@
 
 ---
 
+## Recent Fixes
+
+### ITER-1: KYC Source Consistency (DONE - Jan 2026)
+- **Issue:** `complete-kyc` route only updated `securitySettings.kycStatus`, but bootstrap read from `kycApplicants` table
+- **Fix:** Unified KYC status tracking to use `kycApplicants` table as single source of truth
+- **Changes:**
+  - Added `upsertKycApplicant()` method in storage for create-or-update pattern
+  - Updated `start-kyc` route to upsert kycApplicant with status = "IN_REVIEW"
+  - Updated `complete-kyc` route to upsert kycApplicant with status = "APPROVED"
+  - Removed `securitySettings.kycStatus` fallback from bootstrap calculation
+- **Files:** `server/storage.ts`, `server/routes.ts`
+
+---
+
 ## Next Iteration Recommendations
 
 | Priority | Feature | Effort | Impact |
