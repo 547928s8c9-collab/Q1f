@@ -109,6 +109,22 @@ CSV export functionality for transaction history:
 - Endpoint: `GET /api/activity/export?filter=...&q=...`
 - Returns CSV with headers: Date, Type, Status, Asset, Amount, Fee, etc.
 
+### Monthly Statements
+PDF statement generation with monthly summaries:
+- `/statements` page with month picker (last 12 months)
+- Summary preview card showing Total In, Total Out, Fees, Net Change
+- Download PDF button with loading state
+
+**Statement API Endpoints**:
+- `GET /api/statements/summary?year=YYYY&month=MM` - Returns summary JSON (totals, counts)
+- `GET /api/statements/monthly?year=YYYY&month=MM` - Returns PDF download
+
+**PDF Contents**:
+- Header with ZEON branding and statement period
+- Summary box with Total In, Total Out, Fees, Net Change
+- Operations table with Date, Type, Status, Asset, Amount columns
+- Footer with generation timestamp
+
 ### Observability
 Production-ready observability features:
 - **Request ID Middleware**: UUID added to every request for tracing
