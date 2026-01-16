@@ -70,11 +70,11 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
   };
 }
 
-function alignToGrid(ts: number, stepMs: number): number {
+export function alignToGrid(ts: number, stepMs: number): number {
   return Math.floor(ts / stepMs) * stepMs;
 }
 
-function findMissingRanges(
+export function findMissingRanges(
   candles: Candle[],
   startMs: number,
   endMs: number,
@@ -124,7 +124,7 @@ async function fetchAndStoreRanges(
   }
 }
 
-function buildGaps(
+export function buildGaps(
   candles: Candle[],
   startMs: number,
   endMs: number,
