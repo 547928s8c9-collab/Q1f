@@ -1225,6 +1225,9 @@ export const SEED_PERMISSIONS = [
   { key: "exports.generate", name: "Generate Exports", description: "Generate CSV/PDF exports" },
   // Audit
   { key: "audit.read", name: "View Audit Logs", description: "View audit logs" },
+  // Inbox
+  { key: "inbox.read", name: "View Inbox", description: "View admin inbox items" },
+  { key: "inbox.manage", name: "Manage Inbox", description: "Assign/resolve inbox items" },
   // Access
   { key: "access.read", name: "View Access", description: "View roles and permissions" },
   { key: "access.manage", name: "Manage Access", description: "Modify roles and permissions" },
@@ -1244,6 +1247,7 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "incidents.read", "incidents.publish", "incidents.resolve",
     "exports.generate",
     "audit.read",
+    "inbox.read", "inbox.manage",
     "access.read", "access.manage",
     "config.read", "config.write",
   ],
@@ -1256,6 +1260,7 @@ export const SEED_ROLE_PERMISSIONS: Record<string, string[]> = {
     "incidents.read", "incidents.publish", "incidents.resolve",
     "exports.generate",
     "audit.read",
+    "inbox.read", "inbox.manage",
     "config.read",
   ],
   compliance: [

@@ -1,0 +1,64 @@
+import type { Request, Response, NextFunction } from "express";
+import { fail, ErrorCodes } from "../http";
+import { db } from "../../db";
+import { adminUsers, users } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+
+export interface AdminLocals {
+  requestId: string;
+  adminUserId: string;
+  userId: string;
+  email: string;
+}
+
+declare global {
+  namespace Express {
+    interface Locals extends Partial<AdminLocals> {}
+  }
+}
+
+export async function adminAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const oidcUserId = req.headers["x-replit-user-id"] as string | undefined;
+
+    if (!oidcUserId) {
+      fail(res, ErrorCodes.ADMIN_REQUIRED, "Authentication required", 401);
+      return;
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, oidcUserId))
+      .limit(1);
+
+    if (!user) {
+      fail(res, ErrorCodes.ADMIN_REQUIRED, "User not found", 401);
+      return;
+    }
+
+    const [admin] = await db
+      .select()
+      .from(adminUsers)
+      .where(and(eq(adminUsers.userId, oidcUserId), eq(adminUsers.isActive, true)))
+      .limit(1);
+
+    if (!admin) {
+      fail(res, ErrorCodes.RBAC_DENIED, "Admin access required", 403);
+      return;
+    }
+
+    res.locals.adminUserId = admin.id;
+    res.locals.userId = oidcUserId;
+    res.locals.email = admin.email || user.email || "";
+
+    next();
+  } catch (error) {
+    console.error("[adminAuth] Error:", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Authentication failed", 500);
+  }
+}

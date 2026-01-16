@@ -77,6 +77,17 @@ Preferred communication style: Simple, everyday language.
 - **Strategy Profiles**: 8 profiles (btc_squeeze_breakout, eth_ema_revert, etc.) with configurable parameters
 - **Deterministic Execution**: No Date.now()/Math.random(), sorted outputs, stable sequence numbers
 
+### Admin Console (Backend API)
+- **Architecture**: Separate overlay at `/api/admin/*`, doesn't modify existing user-facing routes
+- **RBAC System**: 5 roles (SuperAdmin, Ops, Compliance, Support, ReadOnly) with 26 granular permissions
+- **Admin Tables**: `admin_users`, `roles`, `permissions`, `role_permissions`, `admin_user_roles`, `admin_audit_logs`, `admin_idempotency_keys`, `pending_admin_actions`, `outbox_events`, `admin_inbox_items`, `incidents`
+- **Envelope Pattern**: All admin endpoints return `{ok, data, meta?, requestId}`
+- **Pagination**: Cursor-based (createdAt+id) with `meta.nextCursor`
+- **Error Codes**: `RBAC_DENIED` (403), `NOT_FOUND` (404), `VALIDATION_ERROR` (400), `ADMIN_REQUIRED` (401)
+- **Middleware Stack**: `ensureRequestId` → `adminAuth` → `loadPermissions` → `requirePermission()`
+- **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`
+- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`
+
 ### Key Design Decisions
 - **Multi-User Architecture**: All data is user-scoped and initialized upon first login.
 - **Money Handling**: All monetary amounts stored as string minor units to prevent precision errors (e.g., USDT 6 decimals, RUB 2 decimals).

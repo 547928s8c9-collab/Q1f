@@ -18,6 +18,7 @@ function assertNonNegative(value: bigint, label: string): void {
   }
 }
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
+import { adminRouter } from "./admin/router";
 
 // Helper to get userId from authenticated request
 function getUserId(req: Request): string {
@@ -100,6 +101,9 @@ export async function registerRoutes(
   // Setup authentication first
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  // Mount Admin API router
+  app.use("/api/admin", adminRouter);
 
   // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {
