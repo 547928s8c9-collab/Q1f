@@ -91,10 +91,13 @@ Preferred communication style: Simple, everyday language.
 - **Idempotency**: Mutations require `Idempotency-Key` header (min 8 chars), enforced via `requireIdempotencyKey` middleware
 - **wrapMutation Helper**: Handles idempotency checks, audit logging, and error handling for all admin mutations
 - **SuperAdmin Seeding**: Set `ADMIN_SUPER_EMAIL` env var; user must exist in DB, then `npm run db:seed` assigns super_admin role
-- **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`, `/api/admin/incidents`, `/api/admin/incidents/:id`
-- **Mutation Endpoints**: `POST /api/admin/incidents` (create), `PATCH /api/admin/incidents/:id` (update with state transitions)
+- **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`, `/api/admin/incidents`, `/api/admin/incidents/:id`, `/api/admin/kyc/applicants`, `/api/admin/kyc/applicants/:id`
+- **Mutation Endpoints**: `POST /api/admin/incidents` (create), `PATCH /api/admin/incidents/:id` (update with state transitions), `POST /api/admin/kyc/applicants/:id/decision` (approve/reject/needs-action/on-hold)
 - **Incident State Machine**: DRAFT → [SCHEDULED, ACTIVE, CANCELLED], SCHEDULED → [ACTIVE, CANCELLED], ACTIVE → [RESOLVED]
-- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/audit.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`
+- **KYC Queue Management**: Admin UI at `/admin/kyc` with list view, detail sheet, and decision dialog. Supports filtering by status, search by email/userId.
+- **KYC Admin Transitions**: IN_REVIEW → [APPROVED, NEEDS_ACTION, REJECTED, ON_HOLD], ON_HOLD → [APPROVED, REJECTED]. All decisions require a reason and create audit logs.
+- **KYC Permissions**: `kyc.read` (view applications), `kyc.review` (make decisions)
+- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/audit.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`, `client/src/pages/admin/kyc.tsx`
 
 ### Key Design Decisions
 - **Multi-User Architecture**: All data is user-scoped and initialized upon first login.
