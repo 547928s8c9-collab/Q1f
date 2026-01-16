@@ -85,8 +85,16 @@ Preferred communication style: Simple, everyday language.
 - **Pagination**: Cursor-based (createdAt+id) with `meta.nextCursor`
 - **Error Codes**: `RBAC_DENIED` (403), `NOT_FOUND` (404), `VALIDATION_ERROR` (400), `ADMIN_REQUIRED` (401)
 - **Middleware Stack**: `ensureRequestId` → `adminAuth` → `loadPermissions` → `requirePermission()`
-- **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`
-- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`
+- **Auth Hardening**: Uses OIDC claims in production (`req.user.claims.sub`), dev fallback via `x-replit-user-id` header
+- **RBAC Cache**: 60-second TTL in-memory cache for permissions, invalidated via `invalidatePermissionsCache(adminUserId?)`
+- **Audit Logging**: All mutations logged to `admin_audit_logs` with before/after JSON snapshots
+- **Idempotency**: Mutations require `Idempotency-Key` header (min 8 chars), enforced via `requireIdempotencyKey` middleware
+- **wrapMutation Helper**: Handles idempotency checks, audit logging, and error handling for all admin mutations
+- **SuperAdmin Seeding**: Set `ADMIN_SUPER_EMAIL` env var; user must exist in DB, then `npm run db:seed` assigns super_admin role
+- **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`, `/api/admin/incidents`, `/api/admin/incidents/:id`
+- **Mutation Endpoints**: `POST /api/admin/incidents` (create), `PATCH /api/admin/incidents/:id` (update with state transitions)
+- **Incident State Machine**: DRAFT → [SCHEDULED, ACTIVE, CANCELLED], SCHEDULED → [ACTIVE, CANCELLED], ACTIVE → [RESOLVED]
+- **Files**: `server/admin/http.ts`, `server/admin/router.ts`, `server/admin/audit.ts`, `server/admin/middleware/*`, `shared/admin/dto.ts`
 
 ### Key Design Decisions
 - **Multi-User Architecture**: All data is user-scoped and initialized upon first login.
