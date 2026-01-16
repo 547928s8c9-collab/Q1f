@@ -1399,9 +1399,20 @@ export async function registerRoutes(
                 throw new Error("INSUFFICIENT_BALANCE_FOR_AUTO_SWEEP");
               }
 
-              // Calculate new balance with invariant check
+              // Re-fetch vault within transaction - MUST exist (auto-sweep only enabled on existing vaults)
+              const [currentVault] = await tx.select().from(vaults)
+                .where(and(eq(vaults.userId, userId), eq(vaults.type, vaultType)));
+              
+              if (!currentVault) {
+                throw new Error("VAULT_NOT_FOUND_FOR_AUTO_SWEEP");
+              }
+
+              // Calculate new balances with invariant checks
               const afterSweep = BigInt(currentBalance.available) - sweepAmount;
               assertNonNegative(afterSweep, "wallet balance (auto-sweep)");
+
+              const newVaultBalance = BigInt(currentVault.balance || "0") + sweepAmount;
+              assertNonNegative(newVaultBalance, "vault balance (auto-sweep)");
 
               // Deduct from wallet
               await tx.update(balances)
@@ -1409,17 +1420,9 @@ export async function registerRoutes(
                 .where(eq(balances.id, currentBalance.id));
 
               // Credit to vault
-              const [currentVault] = await tx.select().from(vaults)
-                .where(and(eq(vaults.userId, userId), eq(vaults.type, vaultType)));
-              
-              const newVaultBalance = (BigInt(currentVault?.balance || "0") + sweepAmount).toString();
-              if (currentVault) {
-                await tx.update(vaults)
-                  .set({ balance: newVaultBalance, updatedAt: new Date() })
-                  .where(eq(vaults.id, currentVault.id));
-              } else {
-                await tx.insert(vaults).values({ userId, type: vaultType, asset: "USDT", balance: newVaultBalance });
-              }
+              await tx.update(vaults)
+                .set({ balance: newVaultBalance.toString(), updatedAt: new Date() })
+                .where(eq(vaults.id, currentVault.id));
 
               // Create sweep operation
               const [op] = await tx.insert(operations).values({
