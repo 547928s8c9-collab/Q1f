@@ -42,7 +42,7 @@ export async function adminAuth(
     const oidcUserId = extractUserId(req);
 
     if (!oidcUserId) {
-      fail(res, ErrorCodes.ADMIN_REQUIRED, "Authentication required", 401);
+      fail(res, ErrorCodes.AUTH_REQUIRED, "Authentication required", 401);
       return;
     }
 
@@ -53,7 +53,7 @@ export async function adminAuth(
       .limit(1);
 
     if (!user) {
-      fail(res, ErrorCodes.ADMIN_REQUIRED, "User not found", 401);
+      fail(res, ErrorCodes.AUTH_REQUIRED, "Authentication required", 401);
       return;
     }
 
@@ -64,7 +64,7 @@ export async function adminAuth(
       .limit(1);
 
     if (!admin) {
-      fail(res, ErrorCodes.RBAC_DENIED, "Admin access required", 403);
+      fail(res, ErrorCodes.ADMIN_REQUIRED, "Admin access required", 403);
       return;
     }
 

@@ -1,0 +1,77 @@
+Сделай “Patch Pack 01” без рефакторинга архитектуры: исправь 401/403 семантику, добавь db:seed алиас, зафиксируй incident transition policy, убери a11y warning Dialog.
+
+0) Принципы
+- Не меняй envelope формат.
+- Не ломай существующие эндпоинты/права.
+- Только точечные патчи + обновление docs/manual-test.
+
+1) 401 vs 403 семантика (adminAuth)
+Файл: server/admin/middleware/adminAuth.ts
+Требование:
+- 401 (code AUTH_REQUIRED): если нет валидной аутентификации (нет req.user / нет OIDC claims)
+- 403 (code ADMIN_REQUIRED): если пользователь аутентифицирован, но не найден в admin_users или isActive=false
+Сообщения:
+- 401: "Authentication required"
+- 403: "Admin access required"
+Также:
+- Убери текст "User not found" для non-admin (это шум/утечка).
+- Убедись что dev fallback x-replit-user-id сохраняется, но если он не маппится в users -> это 401 или 403?
+  Правило: если header есть, но user не найден -> 401 AUTH_REQUIRED (как будто нет валидной auth identity).
+
+Обнови adminRouter и любые места, где сейчас возвращается ADMIN_REQUIRED на unauth — чтобы соответствовало выше.
+
+2) package.json: db:seed алиас
+Файл: package.json
+Добавь в scripts:
+- "db:seed": "npx tsx server/seed.ts"
+Проверь, что npm run db:seed работает.
+
+3) Incident transition policy (минимально)
+Сейчас DRAFT → ACTIVE разрешено, и это ок, но зафиксируй правило:
+- DRAFT → ACTIVE разрешено только если:
+  a) severity === "critical"
+  ИЛИ
+  b) передан header "x-admin-step-up: true" (как лёгкий step-up на время)
+Иначе DRAFT → ACTIVE блокируй: STATE_TRANSITION_INVALID
+
+Где править:
+- server/admin/router.ts (PATCH /api/admin/incidents/:id)
+или где реализована валидация переходов.
+Добавь/обнови state machine validator так, чтобы:
+- DRAFT → SCHEDULED/ACTIVE/CANCELLED
+- SCHEDULED → ACTIVE/CANCELLED
+- ACTIVE → RESOLVED
+НО переход DRAFT→ACTIVE требует policy из условия выше.
+
+Важно:
+- Не добавляй новые таблицы.
+- Не ломай существующие allowedTransitions в ответах, просто делай реальную проверку.
+
+4) UI a11y: aria-describedby warning
+Найди, где в админке используется Dialog/AlertDialog (например Decision dialog, ConfirmDialog).
+Исправь предупреждение:
+- Добавь DialogDescription с id и привяжи aria-describedby к DialogContent.
+- Если текст не нужен — используй "Action confirmation" / "Provide a reason to proceed" как нейтральный.
+
+5) Docs updates
+Файлы: docs/admin/manual-test.md и/или replit.md
+- Добавь проверки 401/403:
+  * unauth -> 401 AUTH_REQUIRED
+  * non-admin -> 403 ADMIN_REQUIRED
+- Добавь тест incident policy:
+  * DRAFT->ACTIVE severity=warning без step-up -> 400/409 STATE_TRANSITION_INVALID
+  * DRAFT->ACTIVE severity=critical -> PASS
+- Добавь команду: npm run db:seed
+
+6) Verification
+Дай команды (curl) и ожидаемые результаты:
+- /api/admin/me без auth -> 401 AUTH_REQUIRED
+- /api/admin/me non-admin -> 403 ADMIN_REQUIRED
+- Incident PATCH DRAFT->ACTIVE:
+  * severity warning, no step-up -> blocked
+  * severity critical -> allowed
+- Browser: убедись warning исчез.
+
+В конце выведи:
+- Files changed
+- Короткое summary “что изменилось”

@@ -83,7 +83,7 @@ Preferred communication style: Simple, everyday language.
 - **Admin Tables**: `admin_users`, `roles`, `permissions`, `role_permissions`, `admin_user_roles`, `admin_audit_logs`, `admin_idempotency_keys`, `pending_admin_actions`, `outbox_events`, `admin_inbox_items`, `incidents`
 - **Envelope Pattern**: All admin endpoints return `{ok, data, meta?, requestId}`
 - **Pagination**: Cursor-based (createdAt+id) with `meta.nextCursor`
-- **Error Codes**: `RBAC_DENIED` (403), `NOT_FOUND` (404), `VALIDATION_ERROR` (400), `ADMIN_REQUIRED` (401)
+- **Error Codes**: `AUTH_REQUIRED` (401 - no valid auth), `ADMIN_REQUIRED` (403 - authenticated but not admin), `RBAC_DENIED` (403 - missing permission), `NOT_FOUND` (404), `VALIDATION_ERROR` (400), `STATE_TRANSITION_INVALID` (400 - invalid state transition)
 - **Middleware Stack**: `ensureRequestId` → `adminAuth` → `loadPermissions` → `requirePermission()`
 - **Auth Hardening**: Uses OIDC claims in production (`req.user.claims.sub`), dev fallback via `x-replit-user-id` header
 - **RBAC Cache**: 60-second TTL in-memory cache for permissions, invalidated via `invalidatePermissionsCache(adminUserId?)`
@@ -93,7 +93,7 @@ Preferred communication style: Simple, everyday language.
 - **SuperAdmin Seeding**: Set `ADMIN_SUPER_EMAIL` env var; user must exist in DB, then `npm run db:seed` assigns super_admin role
 - **Read-only Endpoints**: `/api/admin/me`, `/api/admin/users`, `/api/admin/users/:id`, `/api/admin/operations`, `/api/admin/operations/:id`, `/api/admin/inbox`, `/api/admin/incidents`, `/api/admin/incidents/:id`, `/api/admin/kyc/applicants`, `/api/admin/kyc/applicants/:id`
 - **Mutation Endpoints**: `POST /api/admin/incidents` (create), `PATCH /api/admin/incidents/:id` (update with state transitions), `POST /api/admin/kyc/applicants/:id/decision` (approve/reject/needs-action/on-hold)
-- **Incident State Machine**: DRAFT → [SCHEDULED, ACTIVE, CANCELLED], SCHEDULED → [ACTIVE, CANCELLED], ACTIVE → [RESOLVED]
+- **Incident State Machine**: DRAFT → [SCHEDULED, ACTIVE, CANCELLED], SCHEDULED → [ACTIVE, CANCELLED], ACTIVE → [RESOLVED]. Note: DRAFT → ACTIVE requires severity=critical OR `x-admin-step-up: true` header to prevent accidental activation.
 - **KYC Queue Management**: Admin UI at `/admin/kyc` with list view, detail sheet, and decision dialog. Supports filtering by status, search by email/userId.
 - **KYC Admin Transitions**: IN_REVIEW → [APPROVED, NEEDS_ACTION, REJECTED, ON_HOLD], ON_HOLD → [APPROVED, REJECTED]. All decisions require a reason and create audit logs.
 - **KYC Permissions**: `kyc.read` (view applications), `kyc.review` (make decisions)

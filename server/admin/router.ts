@@ -556,13 +556,34 @@ adminRouter.patch(
           body: {
             ok: false,
             error: {
-              code: "INVALID_TRANSITION",
+              code: ErrorCodes.STATE_TRANSITION_INVALID,
               message: `Cannot transition from ${existing.status} to ${input.status}`,
               allowedTransitions,
             },
             requestId: ctx.requestId,
           },
         };
+      }
+
+      if (existing.status === "DRAFT" && input.status === "ACTIVE") {
+        const stepUpHeader = req.headers["x-admin-step-up"] as string | undefined;
+        const effectiveSeverity = input.severity || existing.severity;
+        const isCritical = effectiveSeverity === "critical";
+        const hasStepUp = stepUpHeader === "true";
+
+        if (!isCritical && !hasStepUp) {
+          return {
+            status: 400,
+            body: {
+              ok: false,
+              error: {
+                code: ErrorCodes.STATE_TRANSITION_INVALID,
+                message: "DRAFT to ACTIVE requires severity=critical or x-admin-step-up:true header",
+              },
+              requestId: ctx.requestId,
+            },
+          };
+        }
       }
     }
 
