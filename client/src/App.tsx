@@ -30,6 +30,8 @@ import OnboardingVerify from "@/pages/onboarding/verify";
 import OnboardingConsent from "@/pages/onboarding/consent";
 import OnboardingKyc from "@/pages/onboarding/kyc";
 import OnboardingDone from "@/pages/onboarding/done";
+import SmartStart from "@/pages/onboarding/smart-start";
+import SmartStartResults from "@/pages/onboarding/smart-start-results";
 import Inbox from "@/pages/inbox";
 import { Loader2 } from "lucide-react";
 
@@ -69,6 +71,8 @@ function OnboardingRouter() {
       <Route path="/onboarding/verify" component={OnboardingVerify} />
       <Route path="/onboarding/consent" component={OnboardingConsent} />
       <Route path="/onboarding/kyc" component={OnboardingKyc} />
+      <Route path="/onboarding/smart-start" component={SmartStart} />
+      <Route path="/onboarding/smart-start/results" component={SmartStartResults} />
       <Route path="/onboarding/done" component={OnboardingDone} />
     </Switch>
   );
@@ -91,6 +95,8 @@ function AuthenticatedApp() {
 
   return (
     <Switch>
+      <Route path="/onboarding/smart-start/results" component={SmartStartResults} />
+      <Route path="/onboarding/smart-start" component={SmartStart} />
       <Route path="/onboarding/:rest*" component={OnboardingRouter} />
       <Route component={ProtectedRouter} />
     </Switch>

@@ -1,0 +1,82 @@
+Сделай “Prompt Compliance + Working Correctness Audit” по всему проекту.
+Работай в режиме: VERIFY-FIRST (минимум изменений). 
+НЕ делай рефакторинг. Исправления делай ТОЛЬКО если найдёшь критический баг (P0), и обязательно маленьким патчем.
+Если можешь — сначала сделай audit без изменений, затем предложи итерации фиксов.
+
+=== ВАЖНОЕ ТРЕБОВАНИЕ К ФОРМАТУ ОТВЕТА ===
+В конце верни ОДИН ЕДИНЫЙ ТЕКСТОВЫЙ БЛОК “COPY-PASTE REPORT” (внутри одного code block), который включает ВСЁ: таблицы, walkthrough, команды, issues, рекомендации. 
+Никаких разрозненных частей, никаких “ссылок на выше” — всё должно быть внутри этого одного блока, чтобы я мог целиком скопировать и отправить в ChatGPT.
+Перед этим блоком можешь дать 2–3 строки краткого резюме, но ВСЯ основная информация должна быть только внутри “COPY-PASTE REPORT”.
+
+=== Что нужно проверить (наши промпты / обещанные фичи) ===
+A) Process / Iteration discipline:
+- агент работает итерациями: Iteration Goal, Plan, Verify, DIFF, Screenshot Walkthrough
+
+B) WOW Pack (6 фич):
+1) Inbox/Notifications 2.0 (Revolut-like): /inbox, карточки, next-step CTA, bell preview, mark read/read-all
+2) Statements: monthly PDF statement + CSV export операций + summary fee/P&L (если заявлено)
+3) Vault Goals: цель, прогресс, milestones, (если заявлено) auto-sweep настройка
+4) Risk Controls: Pause, DD limit, auto-pause on breach, audit_logs + notification
+5) Status Page: /status + глобальный баннер при degraded/maintenance
+6) Smart Start: 3 вопроса -> рекомендации стратегий/лимит суммы, интеграция в onboarding
+
+C) Core money flows (чтобы wow не “косметика”):
+- onboarding (OTP/Consent/KYC)
+- deposit (usdt/card simulate)
+- invest
+- withdraw
+- vault transfer
+- receipts: /activity/:operationId
+- экспорт операций
+
+D) Safety & correctness (минимальные гарантии):
+- понятные UI states: loading/empty/error+retry на ключевых страницах
+- API ошибки имеют единый формат (code/message), статусы корректные
+- нет дублей операций при повторной отправке (если заявлялась идемпотентность) — проверить
+- audit_logs пишется для важных действий (kyc/security/risk/payout)
+
+=== Формат результата (обязателен) ===
+1) “Feature Compliance Table” (markdown) колонки:
+- Item (из A/B/C/D)
+- Claimed Status (DONE/PARTIAL) — как по коду выглядит
+- Working Status: PASS / PARTIAL / FAIL / NOT FOUND
+- Evidence: routes + endpoints + key files + db tables/fields
+- Test Performed: какие команды/шаги
+- Observed: что реально произошло
+- Fix Proposal: 1–3 пункта (если нужно)
+
+2) “UI Walkthrough Evidence”:
+Для каждого WOW пункта (1–6) сделай пошаговый walkthrough (как скриншоты):
+- Screen: URL/route
+- Preconditions: данные/роль/состояние
+- Actions
+- Expected UI
+- Expected API/DB side-effects
+Если реальные скриншоты возможны — сгенерируй и сохрани в /artifacts/verify/* и перечисли пути.
+Если нет — сделай pseudo-screenshots, но максимально конкретно (тексты/бейджи/кнопки).
+
+3) “Command Log”:
+Список команд которые ты реально запускал (dev, curl, tsc, tests), и краткий результат.
+
+4) “Critical Issues (P0/P1)”:
+- P0: ломает деньги/данные/невозможность пройти флоу
+- P1: UX/статусы/не работает часть wow
+
+5) “Recommended Next Iterations”:
+- 3 итерации фикса в формате Iteration Goal + почему
+- соблюдай правило маленьких диффов
+
+=== Как тестировать (обязательные проверки) ===
+- Запусти dev server
+- Пройди UI маршруты по списку
+- Для API: сделай curl запросы к ключевым endpoints (health/bootstrap/notifications/statements/vault goals/risk/status)
+- Для негативных кейсов: 
+  - открыть /inbox когда пусто
+  - попытаться скачать statement без операций (должен быть понятный empty)
+  - включить pause и попытаться инвестировать (если реализовано) -> корректная ошибка + UI
+  - status=maintenance -> появляется баннер
+  - smart start: пропуск/повтор -> поведение определено
+- Если используется DB seed — убедись что сиды создают данные для всех wow экранов (или явно напиши где данных не хватает)
+
+=== Правило строгой валидации ===
+PASS можно поставить только если выполнены реальный тест + есть evidence (route+file+API/DB). Иначе PARTIAL/FAIL/NOT FOUND.

@@ -114,7 +114,7 @@ export default function OnboardingKyc() {
     if (status === "APPROVED") {
       const timeout = setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-        setLocation("/onboarding/done");
+        setLocation("/onboarding/smart-start");
       }, 1500);
       return () => clearTimeout(timeout);
     }
