@@ -1,10 +1,34 @@
+import { useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt, Target, Settings, Check } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Lock, TrendingUp, Receipt, Target, Settings, Check, PartyPopper } from "lucide-react";
 import { formatMoney } from "@shared/schema";
 import type { VaultData } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 const MILESTONES = [25, 50, 75, 100] as const;
+
+function getMilestoneStorageKey(vaultType: string): string {
+  return `zeon_vault_milestone_${vaultType}`;
+}
+
+function getLastCelebratedMilestone(vaultType: string): number {
+  const stored = localStorage.getItem(getMilestoneStorageKey(vaultType));
+  return stored ? parseInt(stored, 10) : 0;
+}
+
+function setLastCelebratedMilestone(vaultType: string, milestone: number): void {
+  localStorage.setItem(getMilestoneStorageKey(vaultType), milestone.toString());
+}
+
+function getHighestReachedMilestone(progress: number): number {
+  for (let i = MILESTONES.length - 1; i >= 0; i--) {
+    if (progress >= MILESTONES[i]) {
+      return MILESTONES[i];
+    }
+  }
+  return 0;
+}
 
 interface VaultCardProps {
   type: "principal" | "profit" | "taxes";
@@ -36,10 +60,44 @@ const vaultConfig = {
   },
 };
 
+const milestoneMessages: Record<number, { title: string; description: string }> = {
+  25: { title: "25% Milestone!", description: "Great start! You're a quarter of the way there." },
+  50: { title: "Halfway There!", description: "Amazing progress! You've reached 50% of your goal." },
+  75: { title: "75% Complete!", description: "Almost there! Just a little more to go." },
+  100: { title: "Goal Achieved!", description: "Congratulations! You've reached your savings goal!" },
+};
+
 export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEditGoal }: VaultCardProps) {
   const config = vaultConfig[type];
   const Icon = config.icon;
   const hasGoal = data.goalAmount && BigInt(data.goalAmount) > 0;
+  const { toast } = useToast();
+  const initialRenderRef = useRef(true);
+
+  useEffect(() => {
+    if (!hasGoal) return;
+    
+    const cappedProgress = Math.max(0, Math.min(data.progress, 100));
+    const currentMilestone = getHighestReachedMilestone(cappedProgress);
+    const lastCelebrated = getLastCelebratedMilestone(type);
+    
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false;
+      if (currentMilestone > lastCelebrated) {
+        setLastCelebratedMilestone(type, currentMilestone);
+      }
+      return;
+    }
+    
+    if (currentMilestone > lastCelebrated && currentMilestone > 0) {
+      const message = milestoneMessages[currentMilestone];
+      toast({
+        title: message.title,
+        description: message.description,
+      });
+      setLastCelebratedMilestone(type, currentMilestone);
+    }
+  }, [data.progress, hasGoal, type, toast]);
 
   return (
     <Card className="p-5" data-testid={`vault-card-${type}`}>
