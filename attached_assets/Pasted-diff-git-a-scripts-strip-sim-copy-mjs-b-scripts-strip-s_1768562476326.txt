@@ -1,0 +1,281 @@
+diff --git a/scripts/strip-sim-copy.mjs b/scripts/strip-sim-copy.mjs
+new file mode 100755
+index 0000000..b8e4d3f
+--- /dev/null
++++ b/scripts/strip-sim-copy.mjs
+@@ -0,0 +1,260 @@
++#!/usr/bin/env node
++/**
++ * strip-sim-copy.mjs
++ *
++ * Purpose:
++ *  Remove UI-facing copy that mentions replay/demo/simulation/backtest/no-guarantee etc.
++ *  Designed for private mode: keep the product voice "live" and clean.
++ *
++ * Usage:
++ *  node scripts/strip-sim-copy.mjs            # applies changes (creates .bak)
++ *  node scripts/strip-sim-copy.mjs --dry-run  # prints what would change
++ *  node scripts/strip-sim-copy.mjs --apply    # explicit apply
++ *
++ * Notes:
++ *  - Only processes UI-ish files: .tsx/.jsx/.md/.html
++ *  - Skips server routes intentionally.
++ *  - Creates a .bak backup for every modified file.
++ */
++
++import fs from "node:fs";
++import path from "node:path";
++import process from "node:process";
++
++const args = new Set(process.argv.slice(2));
++const dryRun = args.has("--dry-run") || args.has("--dry");
++const apply = args.has("--apply") || !dryRun; // default: apply
++
++const ROOT = process.cwd();
++
++const SKIP_DIRS = new Set([
++  "node_modules",
++  "dist",
++  "build",
++  ".next",
++  ".git",
++  "coverage",
++  ".turbo",
++  ".cache",
++  ".vercel",
++]);
++
++const EXTENSIONS = new Set([".tsx", ".jsx", ".md", ".html"]);
++
++// UI copy patterns to remove (line-level removal if a line contains any of these)
++const LINE_KILL_PATTERNS = [
++  /backtest[-\s]*only/i,
++  /\bbacktest\b/i,
++  /\breplay\b/i,
++  /historical\s+(data|candles|prices)/i,
++  /not\s+live/i,
++  /not\s+a\s+prediction/i,
++  /no\s+guarantee/i,
++  /guarantee(d)?\s+profit/i,
++  /simulation[-\s]*only/i,
++  /\bsimulation\b/i,
++  /\bdemo\b/i,
++  /paper\s*trading/i,
++  /testnet/i,
++  /не\s+явля(ется|ются)\s+(прогнозом|предсказанием)/i,
++  /не\s+гарант/i,
++  /нет\s+гарант/i,
++  /историческ/i,
++  /симуляц/i,
++  /репле(й|и)/i,
++  /демо/i,
++  /прошл(ые|ых)\s+данн/i,
++  /на\s+историч/i,
++];
++
++// Inline replacements to keep titles clean without deleting whole line.
++const INLINE_REPLACEMENTS = [
++  // Common label cleanup
++  { re: /Invest\s*\(\s*Simulation\s*\)/gi, to: "Invest" },
++  { re: /Invest\s*\(\s*Demo\s*\)/gi, to: "Invest" },
++  { re: /Live[-\s]*like/gi, to: "Live" },
++  // Remove bracketed disclaimers if they survived
++  { re: /\(\s*simulation[^)]*\)/gi, to: "" },
++  { re: /\(\s*demo[^)]*\)/gi, to: "" },
++  { re: /\(\s*replay[^)]*\)/gi, to: "" },
++];
++
++function existsDir(p) {
++  try {
++    return fs.statSync(p).isDirectory();
++  } catch {
++    return false;
++  }
++}
++
++function walk(dir, out) {
++  const entries = fs.readdirSync(dir, { withFileTypes: true });
++  for (const ent of entries) {
++    if (ent.name.startsWith(".")) {
++      // still allow .well-known? ignore for now
++    }
++    const full = path.join(dir, ent.name);
++    if (ent.isDirectory()) {
++      if (SKIP_DIRS.has(ent.name)) continue;
++      walk(full, out);
++    } else if (ent.isFile()) {
++      const ext = path.extname(ent.name);
++      if (EXTENSIONS.has(ext)) out.push(full);
++    }
++  }
++}
++
++function discoverUIRoots() {
++  // Prefer common repo layouts; process only what exists.
++  const candidates = [
++    "client",
++    "frontend",
++    "web",
++    "apps/web",
++    "src/client",
++    "src/frontend",
++    "ui",
++  ].map((p) => path.join(ROOT, p));
++
++  const roots = candidates.filter(existsDir);
++  // If none found, fall back to scanning ROOT but still only UI-ish file extensions
++  return roots.length ? roots : [ROOT];
++}
++
++function looksLikeUILine(line) {
++  // reduce accidental deletion in import/route code
++  const trimmed = line.trim();
++  if (!trimmed) return false;
++  if (trimmed.startsWith("import ")) return false;
++  if (trimmed.startsWith("export ")) return false;
++  if (trimmed.startsWith("//")) return false;
++  if (trimmed.includes("from '") || trimmed.includes('from "')) return false;
++  if (trimmed.includes("require(")) return false;
++  // likely UI text (JSX text node / string literal / markdown)
++  return true;
++}
++
++function shouldKillLine(line) {
++  if (!looksLikeUILine(line)) return false;
++  return LINE_KILL_PATTERNS.some((re) => re.test(line));
++}
++
++function applyInlineReplacements(text) {
++  let out = text;
++  for (const { re, to } of INLINE_REPLACEMENTS) {
++    out = out.replace(re, to);
++  }
++  return out;
++}
++
++function transformFileContent(content) {
++  // First, do safe inline replacements.
++  let text = applyInlineReplacements(content);
++
++  // Then remove lines that carry disclaimers.
++  const lines = text.split(/\r?\n/);
++  let changed = false;
++  const kept = [];
++
++  for (const line of lines) {
++    if (shouldKillLine(line)) {
++      changed = true;
++      continue;
++    }
++    kept.push(line);
++  }
++
++  const next = kept.join("\n");
++  if (next !== content) changed = true;
++  return { next, changed };
++}
++
++function backupPath(filePath) {
++  return filePath + ".bak";
++}
++
++function fileSizeOk(filePath) {
++  try {
++    const st = fs.statSync(filePath);
++    // skip huge files
++    return st.size <= 2 * 1024 * 1024;
++  } catch {
++    return false;
++  }
++}
++
++function main() {
++  const roots = discoverUIRoots();
++  const files = [];
++  for (const r of roots) walk(r, files);
++
++  // De-dupe in case roots overlap
++  const uniq = Array.from(new Set(files));
++
++  const modified = [];
++  for (const filePath of uniq) {
++    if (!fileSizeOk(filePath)) continue;
++    let content;
++    try {
++      content = fs.readFileSync(filePath, "utf8");
++    } catch {
++      continue;
++    }
++    const { next, changed } = transformFileContent(content);
++    if (!changed) continue;
++
++    modified.push(filePath);
++    if (apply) {
++      // create backup once
++      const bak = backupPath(filePath);
++      if (!fs.existsSync(bak)) fs.writeFileSync(bak, content, "utf8");
++      fs.writeFileSync(filePath, next, "utf8");
++    }
++  }
++
++  const mode = dryRun ? "DRY RUN" : "APPLIED";
++  console.log(`strip-sim-copy: ${mode}`);
++  console.log(`Roots: ${roots.map((r) => path.relative(ROOT, r)).join(", ")}`);
++  console.log(`Scanned files: ${uniq.length}`);
++  console.log(`Modified files: ${modified.length}`);
++  if (modified.length) {
++    console.log("Changed:");
++    for (const f of modified) console.log(`- ${path.relative(ROOT, f)}`);
++    if (!dryRun) {
++      console.log("\nBackups created with .bak extension next to each modified file.");
++      console.log("If you want to restore, delete the modified file and rename .bak back.");
++    }
++  }
++  if (!modified.length) {
++    console.log("No matching UI copy found.");
++  }
++}
++
++main();
+diff --git a/scripts/strip-sim-copy.README.md b/scripts/strip-sim-copy.README.md
+new file mode 100644
+index 0000000..f3ef6b2
+--- /dev/null
++++ b/scripts/strip-sim-copy.README.md
+@@ -0,0 +1,40 @@
++# strip-sim-copy
++
++This repo contains UI copy in some places that mentions:
++replay / demo / simulation / backtest / "no guarantee" / "not live" / historical data, etc.
++
++For a private, "live-feel" experience, this script removes those UI-facing lines across the frontend.
++
++## Run
++
++Dry run (recommended first):
++
++```bash
++node scripts/strip-sim-copy.mjs --dry-run
++```
++
++Apply changes (creates `.bak` backups next to each changed file):
++
++```bash
++node scripts/strip-sim-copy.mjs --apply
++```
++
++## What it touches
++
++- Only UI-ish files:
++  - `.tsx`, `.jsx`, `.md`, `.html`
++- Skips `node_modules`, build outputs, etc.
++- Prefers typical UI roots (`client/`, `frontend/`, etc.). If none found, scans the repo root.
++
++## Restore
++
++Each modified file gets a `.bak` backup next to it.
++To restore a single file:
++
++```bash
++mv path/to/File.tsx.bak path/to/File.tsx
++```
