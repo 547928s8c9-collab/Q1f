@@ -56,8 +56,10 @@ export interface Order {
   qty: number;
   status: OrderStatus;
   createdTs: number;
+  createdBarIndex: number;
   filledTs?: number;
   filledPrice?: number;
+  oraclePenalizedPrice?: number;
   reason: string;
 }
 
@@ -66,6 +68,7 @@ export interface Position {
   qty: number;
   entryPrice: number;
   entryTs: number;
+  entryBarIndex: number;
 }
 
 export interface TradeStats {
