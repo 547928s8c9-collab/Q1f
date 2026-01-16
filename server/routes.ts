@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import type { StrategyPerformance } from "@shared/schema";
+import { formatMoney, type StrategyPerformance } from "@shared/schema";
 
 import { db } from "./db";
 import { sql } from "drizzle-orm";
@@ -2603,12 +2603,8 @@ export async function registerRoutes(
               type: "security",
               title: "Strategy Auto-Paused",
               message: `Your ${strategy.name} position was automatically paused due to a ${drawdownPct.toFixed(1)}% drawdown (limit: ${position.ddLimitPct}%).`,
-              metadata: { 
-                strategyId: position.strategyId,
-                positionId: position.id,
-                drawdownPct,
-                ddLimitPct: position.ddLimitPct,
-              },
+              resourceType: "position",
+              resourceId: position.id,
             });
 
             results.push({ 
@@ -2721,6 +2717,81 @@ export async function registerRoutes(
         await storage.updatePosition(position.id, {
           accruedProfitPayableMinor: "0", // Reset after payout
         });
+
+        // =================== AUTO-SWEEP LOGIC ===================
+        // Only sweep if net payout is positive
+        if (net > 0n) {
+          const userSecurity = await storage.getSecuritySettings(instruction.userId);
+          if (userSecurity?.autoSweepEnabled) {
+            const userVaults = await storage.getVaults(instruction.userId);
+            const sweepVaults = userVaults.filter(v => v.autoSweepEnabled && (v.autoSweepPct ?? 0) > 0);
+            
+            // Track remaining amount to prevent over-sweeping
+            let remainingToSweep = net;
+            
+            for (const vault of sweepVaults) {
+              if (remainingToSweep <= 0n) break;
+              
+              const pct = vault.autoSweepPct ?? 0;
+              // Calculate sweep amount, capped at remaining
+              const calculated = (net * BigInt(pct)) / 100n;
+              const sweepAmount = calculated < remainingToSweep ? calculated : remainingToSweep;
+              if (sweepAmount <= 0n) continue;
+              
+              remainingToSweep -= sweepAmount;
+              
+              // Create operation FIRST for auditability
+              const sweepOp = await storage.createOperation({
+                userId: instruction.userId,
+                type: "VAULT_TRANSFER",
+                status: "completed",
+                asset: "USDT",
+                amount: sweepAmount.toString(),
+                fee: "0",
+                fromVault: "wallet",
+                toVault: vault.type,
+                metadata: { 
+                  trigger: "auto_sweep", 
+                  sourceOperation: "PROFIT_PAYOUT",
+                  percentage: pct,
+                  sourceAmount: net.toString(),
+                },
+                reason: `Auto-sweep ${pct}% of profit to ${vault.type} vault`,
+              });
+              
+              // Update vault balance
+              const newBalance = (BigInt(vault.balance) + sweepAmount).toString();
+              await storage.updateVault(instruction.userId, vault.type, newBalance);
+              
+              // Create audit log
+              await storage.createAuditLog({
+                userId: instruction.userId,
+                event: "AUTO_SWEEP_EXECUTED",
+                resourceType: "vault",
+                resourceId: vault.id,
+                details: {
+                  vaultType: vault.type,
+                  percentage: pct,
+                  sweepAmount: sweepAmount.toString(),
+                  profitAmount: net.toString(),
+                  newVaultBalance: newBalance,
+                  operationId: sweepOp.id,
+                },
+              });
+              
+              // Create notification
+              await storage.createNotification({
+                userId: instruction.userId,
+                type: "system",
+                title: "Auto-Sweep Executed",
+                message: `${pct}% of your profit (${formatMoney(sweepAmount.toString(), "USDT")} USDT) was swept to ${vault.type} vault`,
+                resourceType: "vault",
+                resourceId: vault.id,
+              });
+            }
+          }
+        }
+        // ========================================================
 
         results.push({ instructionId: instruction.id, status: "paid", netPayout: net.toString() });
       }
