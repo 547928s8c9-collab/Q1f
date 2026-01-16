@@ -138,6 +138,7 @@ export interface IStorage {
   getKycApplicantByProviderRef(providerRef: string): Promise<KycApplicant | undefined>;
   createKycApplicant(applicant: InsertKycApplicant): Promise<KycApplicant>;
   updateKycApplicant(userId: string, updates: Partial<KycApplicant>): Promise<KycApplicant | undefined>;
+  upsertKycApplicant(userId: string, data: Partial<InsertKycApplicant>): Promise<KycApplicant>;
 
   // Notifications
   getNotifications(userId: string, unreadOnly?: boolean, limit?: number): Promise<Notification[]>;
@@ -769,6 +770,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(kycApplicants.userId, userId))
       .returning();
     return updated;
+  }
+
+  async upsertKycApplicant(userId: string, data: Partial<InsertKycApplicant>): Promise<KycApplicant> {
+    const existing = await this.getKycApplicant(userId);
+    if (existing) {
+      const updated = await this.updateKycApplicant(userId, data);
+      return updated!;
+    } else {
+      return this.createKycApplicant({ userId, ...data } as InsertKycApplicant);
+    }
   }
 
   // Notifications

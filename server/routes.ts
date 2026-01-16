@@ -141,9 +141,9 @@ export async function registerRoutes(
       const hasAcceptedConsent = !!latestConsent;
       const needsReaccept = latestConsent ? latestConsent.version !== REQUIRED_CONSENT_VERSION : false;
 
-      // KYC status from applicant table (primary) or security settings (fallback)
+      // KYC status from kycApplicants table (single source of truth)
       const kycApplicantStatus = kycApplicant?.status || "NOT_STARTED";
-      const isKycApproved = kycApplicantStatus === "APPROVED" || security?.kycStatus === "approved";
+      const isKycApproved = kycApplicantStatus === "APPROVED";
 
       // Calculate invested amounts
       const invested = positions.reduce(
@@ -1728,12 +1728,18 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/onboarding/start-kyc (protected) - Demo: marks KYC as processing
+  // POST /api/onboarding/start-kyc (protected) - Demo: marks KYC as IN_REVIEW
   app.post("/api/onboarding/start-kyc", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      await storage.updateSecuritySettings(userId, { kycStatus: "processing" });
-      res.json({ success: true, status: "processing" });
+      // Update kycApplicants table (single source of truth)
+      await storage.upsertKycApplicant(userId, {
+        status: "IN_REVIEW",
+        level: "basic",
+        providerRef: `demo-${userId}`,
+        submittedAt: new Date(),
+      });
+      res.json({ success: true, status: "IN_REVIEW" });
     } catch (error) {
       console.error("Start KYC error:", error);
       res.status(500).json({ error: "Internal server error" });
@@ -1744,8 +1750,14 @@ export async function registerRoutes(
   app.post("/api/onboarding/complete-kyc", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
-      res.json({ success: true, status: "approved" });
+      // Update kycApplicants table (single source of truth)
+      await storage.upsertKycApplicant(userId, {
+        status: "APPROVED",
+        level: "basic",
+        providerRef: `demo-${userId}`,
+        reviewedAt: new Date(),
+      });
+      res.json({ success: true, status: "APPROVED" });
     } catch (error) {
       console.error("Complete KYC error:", error);
       res.status(500).json({ error: "Internal server error" });
