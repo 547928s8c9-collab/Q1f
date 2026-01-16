@@ -151,12 +151,26 @@
 - **Privacy:** Wallet addresses excluded from audit details
 - **Files:** `server/routes.ts`
 
+### ITER-3: Vault Goals Milestones (DONE - Jan 2026)
+- **Goal:** Add milestone markers (25/50/75/100%) on vault progress bar with celebration toasts
+- **Implementation:**
+  - Progress bar already shows milestone markers with checkmarks for reached milestones
+  - Added celebration toast on milestone crossing (25%, 50%, 75%, 100%)
+  - localStorage-based deduplication prevents toast spam (tracks last celebrated milestone per vault)
+  - SSR-safe localStorage access with `typeof window` guard and try-catch
+  - Initial render skips toast to prevent celebration on page load
+- **Milestone Messages:**
+  - 25%: "Great start! You're a quarter of the way there."
+  - 50%: "Amazing progress! You've reached 50% of your goal."
+  - 75%: "Almost there! Just a little more to go."
+  - 100%: "Congratulations! You've reached your savings goal!"
+- **Files:** `client/src/components/vault/vault-card.tsx`
+
 ---
 
 ## Next Iteration Recommendations
 
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
-| 1 | Vault Goals: Milestones visualization (25/50/75/100%) | Small | High |
-| 2 | Inbox 2.0: Grouping + polish | Small | Medium |
-| 3 | Smart Start: One-click invest from results | Medium | Medium |
+| 1 | Inbox 2.0: Grouping + polish | Small | Medium |
+| 2 | Smart Start: One-click invest from results | Medium | Medium |
