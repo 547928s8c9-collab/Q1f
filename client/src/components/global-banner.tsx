@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Shield, X, UserCheck, Clock, AlertCircle } from "lucide-react";
+import { AlertTriangle, Shield, X, UserCheck, Clock, AlertCircle, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useState } from "react";
 
-type BannerType = "warning" | "info" | "danger" | "kyc";
+type BannerType = "warning" | "info" | "danger" | "kyc" | "maintenance";
 
 interface Banner {
   id: string;
@@ -19,11 +19,17 @@ interface Banner {
   priority?: number;
 }
 
+interface SystemStatus {
+  overall: "operational" | "degraded" | "maintenance";
+  message: string | null;
+}
+
 const bannerStyles: Record<BannerType, string> = {
   warning: "bg-warning/10 text-warning border-warning/20",
   info: "bg-primary/10 text-primary border-primary/20",
   danger: "bg-danger/10 text-danger border-danger/20",
   kyc: "bg-gradient-to-r from-warning/15 to-primary/10 text-foreground border-warning/30",
+  maintenance: "bg-primary/10 text-primary border-primary/20",
 };
 
 const bannerIcons: Record<BannerType, typeof AlertTriangle> = {
@@ -31,6 +37,7 @@ const bannerIcons: Record<BannerType, typeof AlertTriangle> = {
   info: Shield,
   danger: AlertCircle,
   kyc: UserCheck,
+  maintenance: Wrench,
 };
 
 export function GlobalBanner() {
@@ -43,6 +50,11 @@ export function GlobalBanner() {
     };
   }>({
     queryKey: ["/api/bootstrap"],
+  });
+
+  const { data: systemStatus } = useQuery<SystemStatus>({
+    queryKey: ["/api/status"],
+    refetchInterval: 60000,
   });
 
   const banners: Banner[] = [];
@@ -98,6 +110,24 @@ export function GlobalBanner() {
       action: { label: "Enable 2FA", href: "/settings/security" },
       dismissible: true,
       priority: 3,
+    });
+  }
+
+  if (systemStatus?.overall === "degraded") {
+    banners.push({
+      id: "system-degraded",
+      type: "warning",
+      message: systemStatus.message || "Some services are experiencing degraded performance",
+      action: { label: "View Status", href: "/status" },
+      priority: 0,
+    });
+  } else if (systemStatus?.overall === "maintenance") {
+    banners.push({
+      id: "system-maintenance",
+      type: "maintenance",
+      message: systemStatus.message || "Scheduled maintenance in progress. Some features may be unavailable.",
+      action: { label: "View Status", href: "/status" },
+      priority: 0,
     });
   }
 

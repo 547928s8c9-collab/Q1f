@@ -2680,5 +2680,54 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== STATUS PAGE ====================
+  
+  // System status configuration (can be overridden via env vars)
+  const getSystemStatus = () => {
+    const overall = (process.env.SYSTEM_STATUS || "operational") as "operational" | "degraded" | "maintenance";
+    const message = process.env.SYSTEM_STATUS_MESSAGE || null;
+    
+    // Component statuses (can be extended with real health checks)
+    const components = [
+      { 
+        id: "deposits",
+        name: "Deposits", 
+        status: (process.env.STATUS_DEPOSITS || "operational") as "operational" | "degraded" | "outage",
+        description: "USDT and card deposits"
+      },
+      { 
+        id: "withdrawals",
+        name: "Withdrawals", 
+        status: (process.env.STATUS_WITHDRAWALS || "operational") as "operational" | "degraded" | "outage",
+        description: "USDT withdrawals to external wallets"
+      },
+      { 
+        id: "strategies",
+        name: "Investment Strategies", 
+        status: (process.env.STATUS_STRATEGIES || "operational") as "operational" | "degraded" | "outage",
+        description: "Strategy investments and profit accrual"
+      },
+      { 
+        id: "api",
+        name: "API Services", 
+        status: (process.env.STATUS_API || "operational") as "operational" | "degraded" | "outage",
+        description: "Core platform services"
+      },
+    ];
+    
+    return {
+      overall,
+      message,
+      components,
+      updatedAt: new Date().toISOString(),
+    };
+  };
+
+  // GET /api/status - Public system status endpoint
+  app.get("/api/status", (_req, res) => {
+    const status = getSystemStatus();
+    res.json(status);
+  });
+
   return httpServer;
 }
