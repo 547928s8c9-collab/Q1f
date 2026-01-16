@@ -13,12 +13,22 @@ function getMilestoneStorageKey(vaultType: string): string {
 }
 
 function getLastCelebratedMilestone(vaultType: string): number {
-  const stored = localStorage.getItem(getMilestoneStorageKey(vaultType));
-  return stored ? parseInt(stored, 10) : 0;
+  if (typeof window === "undefined") return 0;
+  try {
+    const stored = localStorage.getItem(getMilestoneStorageKey(vaultType));
+    return stored ? parseInt(stored, 10) : 0;
+  } catch {
+    return 0;
+  }
 }
 
 function setLastCelebratedMilestone(vaultType: string, milestone: number): void {
-  localStorage.setItem(getMilestoneStorageKey(vaultType), milestone.toString());
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getMilestoneStorageKey(vaultType), milestone.toString());
+  } catch {
+    // Ignore storage errors (private browsing, etc.)
+  }
 }
 
 function getHighestReachedMilestone(progress: number): number {
