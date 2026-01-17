@@ -3719,7 +3719,7 @@ export async function registerRoutes(
   // GET /api/market/candles - Get candles for a symbol (with backfill if needed)
   app.get("/api/market/candles", isAuthenticated, async (req, res) => {
     try {
-      const { symbol, timeframe, startMs, endMs, limit, exchange = "cryptocompare" } = req.query;
+      const { symbol, timeframe, startMs, endMs, limit, exchange = "binance_spot" } = req.query;
       
       if (!symbol || typeof symbol !== "string") {
         return res.status(400).json({ error: "symbol is required" });

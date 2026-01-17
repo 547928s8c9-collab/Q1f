@@ -1,7 +1,8 @@
 import type { Candle, GapInfo, LoadCandlesResult, Timeframe } from "@shared/schema";
 import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
-import { cryptoCompare, CryptoCompareDataSource } from "../data/cryptoCompare";
+import { cryptoCompare } from "../data/cryptoCompare";
+import { binanceSpot } from "../data/binanceSpot";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
 
 function log(msg: string, category?: string, meta?: object) {
@@ -39,10 +40,12 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
     timeframe: rawTimeframe,
     startMs,
     endMs,
-    dataSource = cryptoCompare,
+    dataSource,
     maxBars = DEFAULT_MAX_BARS,
     allowLargeRange = false,
   } = params;
+  const resolvedDataSource =
+    dataSource ?? (exchange === "binance_spot" ? binanceSpot : cryptoCompare);
 
   const symbol = normalizeSymbol(rawSymbol);
   const timeframe = normalizeTimeframe(rawTimeframe as string);
@@ -69,7 +72,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   if (missingRanges.length > 0) {
     usedNetwork = true;
-    await fetchAndStoreRanges(exchange, symbol, timeframe, missingRanges, dataSource);
+    await fetchAndStoreRanges(exchange, symbol, timeframe, missingRanges, resolvedDataSource);
   }
 
   let allCandles = await storage.getCandlesFromCache(exchange, symbol, timeframe, alignedStart, alignedEnd);
@@ -78,7 +81,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   if (stillMissing.length > 0) {
     usedNetwork = true;
-    await fetchAndStoreRanges(exchange, symbol, timeframe, stillMissing, dataSource);
+    await fetchAndStoreRanges(exchange, symbol, timeframe, stillMissing, resolvedDataSource);
     allCandles = await storage.getCandlesFromCache(exchange, symbol, timeframe, alignedStart, alignedEnd);
   }
 

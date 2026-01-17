@@ -21,6 +21,7 @@ const ONE_MINUTE_MS = 60_000;
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "TRXUSDT"];
 const PERSIST_INTERVAL_MS = 5_000;
 const DEFAULT_NOISE_SEED = process.env.SIM_MARKET_SEED || "0";
+const DEFAULT_MARKET_EXCHANGE = process.env.SIM_MARKET_EXCHANGE || "binance_spot";
 
 class MarketSimService extends EventEmitter {
   private started = false;
@@ -130,7 +131,7 @@ class MarketSimService extends EventEmitter {
     }
 
     const result = await loadCandles({
-      exchange: "cryptocompare",
+      exchange: DEFAULT_MARKET_EXCHANGE,
       symbol,
       timeframe: "1m",
       startMs: candleStart,
