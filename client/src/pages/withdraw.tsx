@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatMoney, parseMoney, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
+import { formatMoney, parseMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import {
   Select,
@@ -63,7 +63,7 @@ export default function Withdraw() {
   const finalAddress = selectedWhitelist || address;
   const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
 
-  const activeWhitelist = whitelist?.filter((w) => w.status === "active") || [];
+  const activeWhitelist = whitelist?.filter((w) => w.status === AddressStatus.ACTIVE) || [];
   const whitelistEnabled = bootstrap?.security.whitelistEnabled;
 
   const handleWithdraw = () => {

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { formatMoney, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus } from "@shared/schema";
+import { formatMoney, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus, AddressStatus } from "@shared/schema";
 import { registerExtractedRoutes } from "./routes/index";
 import { loadCandles } from "./marketData/loadCandles";
 import { sessionRunner } from "./sim/runner";
@@ -452,7 +452,7 @@ export async function registerRoutes(
       const twoFactorRequired = !security?.twoFactorEnabled;
       
       // Check whitelist requirement (whitelistAddresses already fetched in parallel)
-      const hasActiveWhitelistAddress = whitelistAddresses.some((a) => a.status === "active");
+      const hasActiveWhitelistAddress = whitelistAddresses.some((a) => a.status === AddressStatus.ACTIVE);
       const whitelistRequired = security?.whitelistEnabled && !hasActiveWhitelistAddress;
 
       const reasons: string[] = [];
@@ -1378,7 +1378,7 @@ export async function registerRoutes(
       // Check whitelist and activation delay
       if (security?.whitelistEnabled) {
         const whitelist = await storage.getWhitelistAddresses(userId);
-        const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
+        const whitelisted = whitelist.find((w) => w.address === address && w.status === AddressStatus.ACTIVE);
         if (!whitelisted) {
           const errorBody = { 
             error: "Whitelist required",
@@ -2235,7 +2235,7 @@ export async function registerRoutes(
         
         // Check address is ACTIVE
         const address = await storage.getWhitelistAddress(addressId);
-        if (!address || address.status !== "active") {
+        if (!address || address.status !== AddressStatus.ACTIVE) {
           return res.status(400).json({ 
             error: "Address not active",
             code: "ADDRESS_NOT_ACTIVE",
@@ -2700,7 +2700,7 @@ export async function registerRoutes(
         }
 
         const address = await storage.getWhitelistAddress(instruction.addressId);
-        if (!address || address.status !== "active") {
+        if (!address || address.status !== AddressStatus.ACTIVE) {
           results.push({ instructionId: instruction.id, status: "address_not_active" });
           continue;
         }
