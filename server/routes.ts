@@ -2893,9 +2893,16 @@ export async function registerRoutes(
           });
         }
         
-        // Check address is ACTIVE
+        // Check address exists, belongs to user, and is ACTIVE
         const address = await storage.getWhitelistAddress(addressId);
-        if (!address || address.status !== "active") {
+        if (!address || address.userId !== userId) {
+          return res.status(404).json({ 
+            error: "Address not found",
+            code: "ADDRESS_NOT_FOUND",
+            message: "Selected address was not found"
+          });
+        }
+        if (address.status !== "active") {
           return res.status(400).json({ 
             error: "Address not active",
             code: "ADDRESS_NOT_ACTIVE",
