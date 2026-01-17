@@ -932,7 +932,7 @@ export type SimSessionModeType = typeof SimSessionMode[keyof typeof SimSessionMo
 
 export const simSessions = pgTable("sim_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   profileSlug: text("profile_slug").notNull(),
   symbol: text("symbol").notNull(),
   timeframe: text("timeframe").notNull(),
@@ -962,7 +962,7 @@ export type SimSession = typeof simSessions.$inferSelect;
 // ==================== SIM EVENTS ====================
 export const simEvents = pgTable("sim_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sessionId: varchar("session_id").notNull(),
+  sessionId: varchar("session_id").notNull().references(() => simSessions.id),
   seq: bigint("seq", { mode: "number" }).notNull(),
   ts: bigint("ts", { mode: "number" }).notNull(),
   type: text("type").notNull(),
@@ -1004,7 +1004,7 @@ export type SimTrade = typeof simTrades.$inferSelect;
 // Admin Users - links to users table via userId
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(), // FK to users.id
+  userId: varchar("user_id").notNull().references(() => users.id), // FK to users.id
   email: text("email"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1047,8 +1047,8 @@ export type Permission = typeof permissions.$inferSelect;
 // Role <-> Permission mapping
 export const rolePermissions = pgTable("role_permissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  roleId: varchar("role_id").notNull(), // FK to roles.id
-  permissionId: varchar("permission_id").notNull(), // FK to permissions.id
+  roleId: varchar("role_id").notNull().references(() => roles.id), // FK to roles.id
+  permissionId: varchar("permission_id").notNull().references(() => permissions.id), // FK to permissions.id
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("role_permissions_unique_idx").on(table.roleId, table.permissionId),
@@ -1060,8 +1060,8 @@ export type RolePermission = typeof rolePermissions.$inferSelect;
 // Admin User <-> Role mapping
 export const adminUserRoles = pgTable("admin_user_roles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  adminUserId: varchar("admin_user_id").notNull(), // FK to admin_users.id
-  roleId: varchar("role_id").notNull(), // FK to roles.id
+  adminUserId: varchar("admin_user_id").notNull().references(() => adminUsers.id), // FK to admin_users.id
+  roleId: varchar("role_id").notNull().references(() => roles.id), // FK to roles.id
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("admin_user_roles_unique_idx").on(table.adminUserId, table.roleId),
@@ -1083,7 +1083,7 @@ export type AdminAuditOutcomeType = typeof AdminAuditOutcome[keyof typeof AdminA
 export const adminAuditLogs = pgTable("admin_audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   createdAt: timestamp("created_at").defaultNow(),
-  actorAdminUserId: varchar("actor_admin_user_id").notNull(), // FK to admin_users.id
+  actorAdminUserId: varchar("actor_admin_user_id").notNull().references(() => adminUsers.id), // FK to admin_users.id
   requestId: varchar("request_id"),
   ip: text("ip"),
   userAgent: text("user_agent"),
@@ -1118,7 +1118,7 @@ export type AdminIdempotencyStatusType = typeof AdminIdempotencyStatus[keyof typ
 export const adminIdempotencyKeys = pgTable("admin_idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   createdAt: timestamp("created_at").defaultNow(),
-  actorAdminUserId: varchar("actor_admin_user_id").notNull(), // FK to admin_users.id
+  actorAdminUserId: varchar("actor_admin_user_id").notNull().references(() => adminUsers.id), // FK to admin_users.id
   endpoint: text("endpoint").notNull(),
   idempotencyKey: varchar("idempotency_key", { length: 64 }).notNull(),
   payloadHash: text("payload_hash"),
@@ -1151,8 +1151,8 @@ export const pendingAdminActions = pgTable("pending_admin_actions", {
   actionType: text("action_type").notNull(), // e.g., "APPROVE_WITHDRAWAL", "CREATE_CORRECTION"
   targetType: text("target_type").notNull(), // e.g., "operation", "user"
   targetId: varchar("target_id").notNull(),
-  makerAdminUserId: varchar("maker_admin_user_id").notNull(), // FK to admin_users.id
-  checkerAdminUserId: varchar("checker_admin_user_id"), // FK to admin_users.id (who approved/rejected)
+  makerAdminUserId: varchar("maker_admin_user_id").notNull().references(() => adminUsers.id), // FK to admin_users.id
+  checkerAdminUserId: varchar("checker_admin_user_id").references(() => adminUsers.id), // FK to admin_users.id (who approved/rejected)
   payloadJson: jsonb("payload_json").notNull(),
   reason: text("reason"),
   decisionAt: timestamp("decision_at"),
@@ -1227,14 +1227,14 @@ export const adminInboxItems = pgTable("admin_inbox_items", {
   type: text("type").notNull(), // AdminInboxType values
   priority: text("priority").notNull().default("medium"), // critical, high, medium, low
   status: text("status").notNull().default("OPEN"), // OPEN, IN_PROGRESS, DONE, DISMISSED
-  ownerAdminUserId: varchar("owner_admin_user_id"), // FK to admin_users.id (assigned owner)
+  ownerAdminUserId: varchar("owner_admin_user_id").references(() => adminUsers.id), // FK to admin_users.id (assigned owner)
   nextAction: text("next_action"), // e.g., "Review withdrawal", "Approve KYC"
   entityType: text("entity_type"), // e.g., "operation", "kyc_applicant"
   entityId: varchar("entity_id"),
-  userId: varchar("user_id"), // Affected user (for filtering)
+  userId: varchar("user_id").references(() => users.id), // Affected user (for filtering)
   payloadJson: jsonb("payload_json"),
   resolvedAt: timestamp("resolved_at"),
-  resolvedByAdminUserId: varchar("resolved_by_admin_user_id"),
+  resolvedByAdminUserId: varchar("resolved_by_admin_user_id").references(() => adminUsers.id),
 }, (table) => [
   index("admin_inbox_status_priority_created_idx").on(table.status, table.priority, table.createdAt),
   index("admin_inbox_owner_status_idx").on(table.ownerAdminUserId, table.status),
@@ -1276,8 +1276,8 @@ export const incidents = pgTable("incidents", {
   severity: text("severity").notNull().default("info"), // info, warning, critical, maintenance
   startsAt: timestamp("starts_at"),
   endsAt: timestamp("ends_at"),
-  createdByAdminUserId: varchar("created_by_admin_user_id").notNull(), // FK to admin_users.id
-  resolvedByAdminUserId: varchar("resolved_by_admin_user_id"),
+  createdByAdminUserId: varchar("created_by_admin_user_id").notNull().references(() => adminUsers.id), // FK to admin_users.id
+  resolvedByAdminUserId: varchar("resolved_by_admin_user_id").references(() => adminUsers.id),
   resolvedAt: timestamp("resolved_at"),
 }, (table) => [
   index("incidents_status_starts_at_idx").on(table.status, table.startsAt),
