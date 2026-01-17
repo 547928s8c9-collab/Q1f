@@ -57,6 +57,12 @@ Preferred communication style: Simple, everyday language.
 - **Monthly Statements**: PDF generation of monthly summaries (Total In, Total Out, Fees, Net Change) viewable and downloadable.
 - **Status Page**: System health monitoring (`/status`) with component-level status (Deposits, Withdrawals, Investment Strategies, API Services) and configurable banners.
 - **Observability**: Request ID middleware, structured logging, and in-memory metrics counters with an exposed metrics endpoint.
+- **Security Headers**: Helmet middleware with secure defaults (Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, etc.).
+- **Rate Limiting**: express-rate-limit with tiered protection:
+  - `/api/*` general: 120 req/min
+  - `/api/login`, `/api/callback`: 20 req/min (auth protection)
+  - `/api/metrics`: 10 req/min (admin endpoint)
+  - `/api/market`, `/api/strategies`: 60 req/min (anti-scraping)
 
 ### Investment & Payout System
 - **Strategy Catalog**: 8 investment strategies with risk tiers, demo performance data, and comparison charts.

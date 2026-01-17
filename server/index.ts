@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import crypto from "crypto";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 
 const app = express();
@@ -27,6 +29,62 @@ app.use((req, _res, next) => {
   req.requestId = req.headers["x-request-id"] as string || crypto.randomUUID().slice(0, 8);
   next();
 });
+
+// Security headers via helmet
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Rate limiting configuration
+const strictPaths = ["/api/login", "/api/callback", "/api/metrics", "/api/market", "/api/strategies"];
+
+const generalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+  validate: { xForwardedForHeader: false },
+  skip: (req) => strictPaths.some(p => req.path.startsWith(p.replace("/api", ""))),
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many authentication attempts, please try again later" },
+  validate: { xForwardedForHeader: false },
+});
+
+const metricsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many metrics requests" },
+  validate: { xForwardedForHeader: false },
+});
+
+const marketLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many market data requests, please slow down" },
+  validate: { xForwardedForHeader: false },
+});
+
+// Apply strict limiters to specific routes first
+app.use("/api/login", authLimiter);
+app.use("/api/callback", authLimiter);
+app.use("/api/metrics", metricsLimiter);
+app.use("/api/market", marketLimiter);
+app.use("/api/strategies", marketLimiter);
+
+// General API limiter for remaining /api routes
+app.use("/api", generalApiLimiter);
 
 app.use(
   express.json({
