@@ -107,6 +107,7 @@ export interface IStorage {
   updatePosition(id: string, updates: Partial<Position>): Promise<Position | undefined>;
 
   getOperations(userId: string, filter?: string, q?: string, cursor?: string, limit?: number): Promise<{ operations: Operation[]; nextCursor?: string }>;
+  getOperationsByDate(userId: string, start: Date, end: Date): Promise<Operation[]>;
   getOperation(id: string): Promise<Operation | undefined>;
   createOperation(operation: InsertOperation): Promise<Operation>;
   updateOperation(id: string, updates: Partial<Operation>): Promise<Operation | undefined>;
@@ -599,29 +600,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOperations(userId: string, filter?: string, q?: string, cursor?: string, limit: number = 50): Promise<{ operations: Operation[]; nextCursor?: string }> {
-    let query = db.select().from(operations).where(eq(operations.userId, userId)).orderBy(desc(operations.createdAt)).limit(limit);
+    // Build WHERE conditions at DB level
+    const conditions: ReturnType<typeof eq>[] = [eq(operations.userId, userId)];
     
-    const results = await query;
-    
-    let filtered = results;
+    // Filter by types
     if (filter && filter !== "all") {
       const types = filter.split(",");
-      filtered = filtered.filter((o) => types.includes(o.type));
+      conditions.push(inArray(operations.type, types));
     }
     
+    // Search query - use ilike for text matching
     if (q) {
-      const query = q.toLowerCase();
-      filtered = filtered.filter((o) =>
-        o.type.toLowerCase().includes(query) ||
-        o.status.toLowerCase().includes(query) ||
-        o.amount?.includes(query) ||
-        o.txHash?.toLowerCase().includes(query) ||
-        o.providerRef?.toLowerCase().includes(query) ||
-        o.strategyName?.toLowerCase().includes(query)
+      const pattern = `%${q}%`;
+      conditions.push(
+        or(
+          ilike(operations.type, pattern),
+          ilike(operations.status, pattern),
+          ilike(operations.txHash, pattern),
+          ilike(operations.providerRef, pattern),
+          ilike(operations.strategyName, pattern)
+        )!
       );
     }
+    
+    const results = await db.select()
+      .from(operations)
+      .where(and(...conditions))
+      .orderBy(desc(operations.createdAt))
+      .limit(limit);
 
-    return { operations: filtered };
+    return { operations: results };
+  }
+
+  async getOperationsByDate(userId: string, start: Date, end: Date): Promise<Operation[]> {
+    return db.select()
+      .from(operations)
+      .where(and(
+        eq(operations.userId, userId),
+        gte(operations.createdAt, start),
+        lte(operations.createdAt, end)
+      ))
+      .orderBy(desc(operations.createdAt));
   }
 
   async getOperation(id: string): Promise<Operation | undefined> {

@@ -157,7 +157,10 @@ export const operations = pgTable("operations", {
   reason: text("reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("operations_user_created_idx").on(table.userId, table.createdAt),
+  index("operations_user_type_created_idx").on(table.userId, table.type, table.createdAt),
+]);
 
 export const insertOperationSchema = createInsertSchema(operations).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertOperation = z.infer<typeof insertOperationSchema>;
@@ -283,7 +286,9 @@ export const whitelistAddresses = pgTable("whitelist_addresses", {
   status: text("status").default("PENDING_ACTIVATION"), // PENDING_ACTIVATION, ACTIVE, DISABLED
   activatesAt: timestamp("activates_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("whitelist_user_created_idx").on(table.userId, table.createdAt),
+]);
 
 export const insertWhitelistAddressSchema = createInsertSchema(whitelistAddresses).omit({ id: true, createdAt: true });
 export type InsertWhitelistAddress = z.infer<typeof insertWhitelistAddressSchema>;
@@ -414,7 +419,9 @@ export const notifications = pgTable("notifications", {
   resourceId: varchar("resource_id"),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("notifications_user_created_idx").on(table.userId, table.createdAt),
+]);
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
