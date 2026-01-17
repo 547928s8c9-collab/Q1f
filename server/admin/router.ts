@@ -1449,45 +1449,50 @@ adminRouter.post(
         };
       }
 
-      await db.update(pendingAdminActions)
-        .set({
-          status: PendingActionStatus.APPROVED,
-          checkerAdminUserId,
-          decisionAt: new Date(),
-        })
-        .where(eq(pendingAdminActions.id, actionId));
-
-      const [updated] = await db.update(withdrawals)
-        .set({
-          status: "APPROVED",
-          approvedBy: checkerAdminUserId,
-          approvedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(withdrawals.id, action.targetId))
-        .returning();
-
-      // Sync operation status to approved (ready for processing)
-      if (withdrawal.operationId) {
-        await db.update(operations)
+      // Use transaction for atomicity
+      const updated = await withTransaction(async (tx) => {
+        await tx.update(pendingAdminActions)
           .set({
-            status: "approved",
+            status: PendingActionStatus.APPROVED,
+            checkerAdminUserId,
+            decisionAt: new Date(),
+          })
+          .where(eq(pendingAdminActions.id, actionId));
+
+        const [updatedWithdrawal] = await tx.update(withdrawals)
+          .set({
+            status: "APPROVED",
+            approvedBy: checkerAdminUserId,
+            approvedAt: new Date(),
             updatedAt: new Date(),
           })
-          .where(eq(operations.id, withdrawal.operationId));
-      }
+          .where(eq(withdrawals.id, action.targetId))
+          .returning();
 
-      await db.update(adminInboxItems)
-        .set({
-          status: "DONE",
-          resolvedAt: new Date(),
-          resolvedByAdminUserId: checkerAdminUserId,
-        })
-        .where(and(
-          eq(adminInboxItems.entityType, "withdrawal"),
-          eq(adminInboxItems.entityId, action.targetId),
-          eq(adminInboxItems.status, "OPEN")
-        ));
+        // Sync operation status to approved (ready for processing)
+        if (withdrawal.operationId) {
+          await tx.update(operations)
+            .set({
+              status: "approved",
+              updatedAt: new Date(),
+            })
+            .where(eq(operations.id, withdrawal.operationId));
+        }
+
+        await tx.update(adminInboxItems)
+          .set({
+            status: "DONE",
+            resolvedAt: new Date(),
+            resolvedByAdminUserId: checkerAdminUserId,
+          })
+          .where(and(
+            eq(adminInboxItems.entityType, "withdrawal"),
+            eq(adminInboxItems.entityId, action.targetId),
+            eq(adminInboxItems.status, "OPEN")
+          ));
+
+        return updatedWithdrawal;
+      });
 
       return {
         status: 200,
@@ -1633,20 +1638,21 @@ adminRouter.post(
         },
       });
 
+      // Update admin inbox items within transaction
+      await tx.update(adminInboxItems)
+        .set({
+          status: "DONE",
+          resolvedAt: new Date(),
+          resolvedByAdminUserId: adminUserId,
+        })
+        .where(and(
+          eq(adminInboxItems.entityType, "withdrawal"),
+          eq(adminInboxItems.entityId, withdrawalId),
+          eq(adminInboxItems.status, "OPEN")
+        ));
+
       return updatedWithdrawal;
     });
-
-    await db.update(adminInboxItems)
-      .set({
-        status: "DONE",
-        resolvedAt: new Date(),
-        resolvedByAdminUserId: adminUserId,
-      })
-      .where(and(
-        eq(adminInboxItems.entityType, "withdrawal"),
-        eq(adminInboxItems.entityId, withdrawalId),
-        eq(adminInboxItems.status, "OPEN")
-      ));
 
     return {
       status: 200,
@@ -1714,6 +1720,7 @@ adminRouter.post(
       newStatus = "PROCESSING";
       updates.status = newStatus;
       updates.processedAt = new Date();
+      if (txHash) updates.txHash = txHash;
     } else if (action === "MARK_COMPLETED") {
       if (withdrawal.status !== "PROCESSING") {
         return {
@@ -1754,22 +1761,47 @@ adminRouter.post(
       };
     }
 
-    const [updated] = await db.update(withdrawals)
-      .set(updates)
-      .where(eq(withdrawals.id, withdrawalId))
-      .returning();
+    // Use transaction for atomicity
+    const updated = await withTransaction(async (tx) => {
+      const [updatedWithdrawal] = await tx.update(withdrawals)
+        .set(updates)
+        .where(eq(withdrawals.id, withdrawalId))
+        .returning();
+
+      // Sync operation status with withdrawal status
+      if (withdrawal.operationId) {
+        let opUpdates: Record<string, any> = { updatedAt: new Date() };
+        
+        if (action === "MARK_PROCESSING") {
+          opUpdates.status = "processing";
+          if (txHash) opUpdates.txHash = txHash;
+        } else if (action === "MARK_COMPLETED") {
+          opUpdates.status = "completed";
+          if (txHash) opUpdates.txHash = txHash;
+        } else if (action === "MARK_FAILED") {
+          opUpdates.status = "failed";
+          opUpdates.reason = error || reason || "Withdrawal processing failed";
+        }
+        
+        await tx.update(operations)
+          .set(opUpdates)
+          .where(eq(operations.id, withdrawal.operationId));
+      }
+
+      return updatedWithdrawal;
+    });
 
     return {
       status: 200,
       body: {
         ok: true,
-        data: { withdrawalId: updated.id, status: updated.status },
+        data: { withdrawalId: updated.id, status: updated.status, txHash: updated.txHash },
         requestId: ctx.requestId,
       },
       targetType: "withdrawal",
       targetId: updated.id,
       beforeJson: { status: withdrawal.status },
-      afterJson: { status: newStatus, action, reason },
+      afterJson: { status: newStatus, action, reason, txHash },
     };
   })
 );
