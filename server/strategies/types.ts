@@ -160,6 +160,7 @@ export interface StrategyEvent {
 export interface Strategy {
   onCandle(candle: BaseCandle, futureCandles?: BaseCandle[]): StrategyEvent[];
   getState(): StrategyState;
+  setState(state: StrategyState): void;
   reset(): void;
 }
 

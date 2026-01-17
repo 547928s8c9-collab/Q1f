@@ -1,0 +1,1 @@
+ALTER TABLE "sim_sessions" ADD COLUMN "state_json" jsonb;

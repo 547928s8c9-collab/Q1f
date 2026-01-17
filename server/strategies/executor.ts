@@ -374,6 +374,18 @@ export function createBaseStrategy(
     return { ...state };
   }
 
+  function setState(nextState: StrategyState): void {
+    state = {
+      ...nextState,
+      position: { ...nextState.position },
+      openOrders: nextState.openOrders.map((o) => ({ ...o })),
+      stats: { ...nextState.stats },
+      rollingWins: [...nextState.rollingWins],
+      rollingPnls: [...nextState.rollingPnls],
+    };
+    peakEquity = state.equity;
+  }
+
   function reset(): void {
     seq = 0;
     state = createInitialState();
@@ -381,5 +393,5 @@ export function createBaseStrategy(
     signalGenerator.reset();
   }
 
-  return { onCandle, getState, reset };
+  return { onCandle, getState, setState, reset };
 }

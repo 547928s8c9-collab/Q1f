@@ -950,6 +950,45 @@ export const SimSessionMode = {
 
 export type SimSessionModeType = typeof SimSessionMode[keyof typeof SimSessionMode];
 
+export interface SimSessionStateSnapshot {
+  version: 1;
+  barIndex: number;
+  cash: number;
+  equity: number;
+  position: {
+    side: "LONG" | "FLAT";
+    qty: number;
+    entryPrice: number;
+    entryTs: number;
+    entryBarIndex: number;
+  };
+  openOrders: Array<{
+    id: string;
+    side: "BUY" | "SELL";
+    type: "MARKET";
+    qty: number;
+    status: "PENDING" | "FILLED" | "CANCELLED";
+    createdTs: number;
+    createdBarIndex: number;
+    filledTs?: number;
+    filledPrice?: number;
+    oraclePenalizedPrice?: number;
+    reason: string;
+  }>;
+  stats: {
+    totalTrades: number;
+    wins: number;
+    losses: number;
+    grossPnl: number;
+    fees: number;
+    netPnl: number;
+  };
+  rollingWins: number[];
+  rollingPnls: number[];
+  cursorMs: number;
+  lastSeq: number;
+}
+
 export const simSessions = pgTable("sim_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
@@ -968,6 +1007,7 @@ export const simSessions = pgTable("sim_sessions", {
   replayMsPerCandle: integer("replay_ms_per_candle").notNull().default(15000),
   mode: text("mode").notNull().default("replay"),
   idempotencyKey: varchar("idempotency_key"),
+  stateJson: jsonb("state_json").$type<SimSessionStateSnapshot>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

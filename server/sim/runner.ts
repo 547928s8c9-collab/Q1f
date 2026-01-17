@@ -1,6 +1,6 @@
-import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig, SimSessionModeType } from "@shared/schema";
+import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig, SimSessionModeType, SimSessionStateSnapshot } from "@shared/schema";
 import { SimSessionStatus, SimSessionMode } from "@shared/schema";
-import type { StrategyEvent, StrategyConfig, Timeframe } from "../strategies/types";
+import type { StrategyEvent, StrategyConfig, StrategyState, Timeframe } from "../strategies/types";
 import { createStrategy } from "../strategies/factory";
 import { loadCandles } from "../marketData/loadCandles";
 import { EventEmitter } from "events";
@@ -35,6 +35,78 @@ interface RunnerState {
 }
 
 const CANDLE_BATCH_SIZE = 100;
+const STATE_VERSION = 1;
+
+function isStateSnapshot(value: unknown): value is SimSessionStateSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as SimSessionStateSnapshot;
+  return snapshot.version === 1
+    && typeof snapshot.barIndex === "number"
+    && typeof snapshot.cash === "number"
+    && typeof snapshot.equity === "number"
+    && typeof snapshot.cursorMs === "number"
+    && typeof snapshot.lastSeq === "number"
+    && snapshot.position !== undefined
+    && typeof snapshot.position.qty === "number"
+    && typeof snapshot.position.entryPrice === "number"
+    && typeof snapshot.position.entryBarIndex === "number";
+}
+
+function buildStateSnapshot(
+  strategyState: StrategyState,
+  cursorMs: number,
+  lastSeq: number
+): SimSessionStateSnapshot {
+  return {
+    version: STATE_VERSION,
+    barIndex: strategyState.barIndex,
+    cash: strategyState.cash,
+    equity: strategyState.equity,
+    position: {
+      side: strategyState.position.side,
+      qty: strategyState.position.qty,
+      entryPrice: strategyState.position.entryPrice,
+      entryTs: strategyState.position.entryTs,
+      entryBarIndex: strategyState.position.entryBarIndex,
+    },
+    openOrders: strategyState.openOrders.map((order) => ({ ...order })),
+    stats: { ...strategyState.stats },
+    rollingWins: [...strategyState.rollingWins],
+    rollingPnls: [...strategyState.rollingPnls],
+    cursorMs,
+    lastSeq,
+  };
+}
+
+function coerceStrategyState(snapshot: SimSessionStateSnapshot) {
+  const openOrders = Array.isArray(snapshot.openOrders) ? snapshot.openOrders : [];
+  const rollingWins = Array.isArray(snapshot.rollingWins) ? snapshot.rollingWins : [];
+  const rollingPnls = Array.isArray(snapshot.rollingPnls) ? snapshot.rollingPnls : [];
+  const stats = snapshot.stats ?? {
+    totalTrades: 0,
+    wins: 0,
+    losses: 0,
+    grossPnl: 0,
+    fees: 0,
+    netPnl: 0,
+  };
+  return {
+    barIndex: snapshot.barIndex,
+    cash: snapshot.cash,
+    equity: snapshot.equity,
+    position: {
+      side: snapshot.position.side,
+      qty: snapshot.position.qty,
+      entryPrice: snapshot.position.entryPrice,
+      entryTs: snapshot.position.entryTs,
+      entryBarIndex: snapshot.position.entryBarIndex,
+    },
+    openOrders: openOrders.map((order) => ({ ...order })),
+    stats: { ...stats },
+    rollingWins: [...rollingWins],
+    rollingPnls: [...rollingPnls],
+  };
+}
 
 function timeframeToMs(tf: Timeframe): number {
   const map: Record<Timeframe, number> = {
@@ -82,7 +154,8 @@ class SessionRunnerManager extends EventEmitter {
       config.oracleExit = { ...config.oracleExit, enabled: false };
     }
 
-    const initialCursorMs = session.cursorMs ?? session.startMs;
+    const persistedSnapshot = isStateSnapshot(session.stateJson) ? session.stateJson : null;
+    const initialCursorMs = session.cursorMs ?? persistedSnapshot?.cursorMs ?? session.startMs;
 
     let fetchEndMs: number;
     if (mode === SimSessionMode.LAGGED_LIVE) {
@@ -129,7 +202,16 @@ class SessionRunnerManager extends EventEmitter {
       { symbol: session.symbol, timeframe }
     );
 
-    const lastSeq = await storage.getLastSimEventSeq(session.id);
+    const lastSeqFromEvents = await storage.getLastSimEventSeq(session.id);
+    const lastSeq = Math.max(
+      lastSeqFromEvents,
+      session.lastSeq || 0,
+      persistedSnapshot?.lastSeq || 0
+    );
+
+    if (persistedSnapshot) {
+      strategy.setState(coerceStrategyState(persistedSnapshot));
+    }
 
     const state: RunnerState = {
       session,
@@ -221,9 +303,12 @@ class SessionRunnerManager extends EventEmitter {
     state.candleIndex++;
     state.cursorMs = candle.ts + tfMs;
 
-    await storage.updateSimSession(sessionId, { 
+    const strategyState = state.strategy!.getState();
+    const stateJson = buildStateSnapshot(strategyState, state.cursorMs, state.seq);
+    await storage.updateSimSession(sessionId, {
       cursorMs: state.cursorMs,
       lastSeq: state.seq,
+      stateJson,
     });
 
     this.scheduleTick(sessionId);

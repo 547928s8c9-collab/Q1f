@@ -22,6 +22,13 @@
       "when": 1768661608575,
       "tag": "0002_tense_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1768663233242,
+      "tag": "0003_lush_maestro",
+      "breakpoints": true
     }
   ]
 }

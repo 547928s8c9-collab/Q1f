@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import type { SimSession, StrategyProfileConfig } from "../../shared/schema";
-import { SimSessionStatus } from "../../shared/schema";
+import { SimSessionMode, SimSessionStatus } from "../../shared/schema";
 import { describeWithDb } from "../test/utils/requireDb";
 
 vi.mock("../marketData/loadCandles", () => ({
@@ -11,6 +11,7 @@ vi.mock("../strategies/factory", () => ({
   createStrategy: vi.fn(() => ({
     onCandle: vi.fn(() => []),
     getState: vi.fn(() => ({ barIndex: 0, equity: 10000, cash: 10000, position: { side: "FLAT" } })),
+    setState: vi.fn(),
     reset: vi.fn(),
   })),
 }));
@@ -18,6 +19,7 @@ vi.mock("../strategies/factory", () => ({
 import type { sessionRunner as sessionRunnerInstance } from "./runner";
 import type { loadCandles as loadCandlesFn } from "../marketData/loadCandles";
 import type { createStrategy as createStrategyFn } from "../strategies/factory";
+import type { storage as storageInstance } from "../storage";
 
 interface Candle {
   ts: number;
@@ -53,6 +55,7 @@ function makeSession(overrides: Partial<SimSession> = {}): SimSession {
     lastSeq: 0,
     configOverrides: null,
     idempotencyKey: null,
+    stateJson: null,
     errorMessage: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -83,12 +86,14 @@ const defaultConfig: StrategyProfileConfig = {
 let sessionRunner!: typeof sessionRunnerInstance;
 let loadCandles!: typeof loadCandlesFn;
 let createStrategy!: typeof createStrategyFn;
+let storage!: typeof storageInstance;
 
 describeWithDb("SessionRunner db suites", () => {
   beforeAll(async () => {
     ({ sessionRunner } = await import("./runner"));
     ({ loadCandles } = await import("../marketData/loadCandles"));
     ({ createStrategy } = await import("../strategies/factory"));
+    ({ storage } = await import("../storage"));
   });
 describe("SessionRunner seq uniqueness", () => {
   let collectedSeqs: number[] = [];
@@ -237,6 +242,116 @@ describe("SessionRunner control flow", () => {
     const stopped = sessionRunner.stop(session.id);
     expect(stopped).toBe(true);
     expect(sessionRunner.isRunning(session.id)).toBe(false);
+  });
+});
+
+describe("SessionRunner state persistence", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const candles = Array.from({ length: 20 }, (_, i) => makeCandle(i * 900000, 100 + i));
+    (loadCandles as any).mockResolvedValue({ candles, gaps: [] });
+    sessionRunner.setEventCallback(async () => {});
+    sessionRunner.setStatusChangeCallback(async () => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("persists and restores strategy state without seq drift", async () => {
+    const barIndexHistory: number[] = [];
+    const setStateCalls: number[] = [];
+
+    (createStrategy as any).mockImplementation(() => {
+      let state = {
+        barIndex: 0,
+        cash: 10000,
+        equity: 10000,
+        position: { side: "FLAT", qty: 0, entryPrice: 0, entryTs: 0, entryBarIndex: 0 },
+        openOrders: [],
+        stats: { totalTrades: 0, wins: 0, losses: 0, grossPnl: 0, fees: 0, netPnl: 0 },
+        rollingWins: [],
+        rollingPnls: [],
+      };
+
+      return {
+        onCandle: vi.fn((candle: Candle) => {
+          state.barIndex += 1;
+          state.cash += 1;
+          state.equity = state.cash;
+          barIndexHistory.push(state.barIndex);
+          return [
+            {
+              ts: candle.ts,
+              seq: state.barIndex,
+              payload: { type: "candle", data: { candle, barIndex: state.barIndex } },
+            },
+          ];
+        }),
+        getState: vi.fn(() => ({
+          ...state,
+          position: { ...state.position },
+          openOrders: [...state.openOrders],
+          stats: { ...state.stats },
+          rollingWins: [...state.rollingWins],
+          rollingPnls: [...state.rollingPnls],
+        })),
+        setState: vi.fn((nextState: typeof state) => {
+          setStateCalls.push(nextState.barIndex);
+          state = {
+            ...nextState,
+            position: { ...nextState.position },
+            openOrders: [...nextState.openOrders],
+            stats: { ...nextState.stats },
+            rollingWins: [...nextState.rollingWins],
+            rollingPnls: [...nextState.rollingPnls],
+          };
+        }),
+        reset: vi.fn(),
+      };
+    });
+
+    const created = await storage.createSimSession({
+      userId: "test-user",
+      profileSlug: "btc_squeeze_breakout",
+      symbol: "BTCUSDT",
+      timeframe: "15m",
+      startMs: 0,
+      endMs: 10 * 900000,
+      speed: 100,
+      status: SimSessionStatus.CREATED,
+      mode: SimSessionMode.REPLAY,
+      lagMs: 900000,
+      replayMsPerCandle: 1000,
+      configOverrides: null,
+      idempotencyKey: null,
+      cursorMs: null,
+    });
+
+    const startResult = await sessionRunner.startSession(created, defaultConfig);
+    expect(startResult.success).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const persisted = await storage.getSimSession(created.id);
+    expect(persisted?.stateJson).toBeTruthy();
+    const persistedState = persisted?.stateJson as { barIndex: number; lastSeq: number };
+    expect(persistedState.barIndex).toBeGreaterThan(0);
+
+    sessionRunner.stop(created.id);
+
+    const restartSession = await storage.getSimSession(created.id);
+    const restartResult = await sessionRunner.startSession(restartSession!, defaultConfig);
+    expect(restartResult.success).toBe(true);
+
+    barIndexHistory.length = 0;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    sessionRunner.stop(created.id);
+
+    const resumed = await storage.getSimSession(created.id);
+    expect(resumed?.lastSeq ?? 0).toBeGreaterThan(persistedState.lastSeq);
+    expect(setStateCalls.length).toBeGreaterThan(0);
+    expect(barIndexHistory[0]).toBe(persistedState.barIndex + 1);
   });
 });
 
