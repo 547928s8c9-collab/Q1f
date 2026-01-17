@@ -15,6 +15,7 @@ import rateLimit from "express-rate-limit";
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { balances, vaults, positions, operations, auditLogs } from "@shared/schema";
+import { applyInvestmentToExistingPosition, buildNewPositionInvestment } from "./invest/positionMath";
 
 // Invariant check: no negative balance
 function assertNonNegative(value: bigint, label: string): void {
@@ -1458,19 +1459,27 @@ export async function registerRoutes(
           .where(and(eq(positions.userId, userId), eq(positions.strategyId, strategyId)));
         
         if (existingPos) {
+          const updated = applyInvestmentToExistingPosition(
+            {
+              principal: existingPos.principal,
+              currentValue: existingPos.currentValue,
+              principalMinor: existingPos.principalMinor,
+              investedCurrentMinor: existingPos.investedCurrentMinor,
+            },
+            amount
+          );
           await tx.update(positions)
             .set({
-              principal: (BigInt(existingPos.principal) + BigInt(amount)).toString(),
-              currentValue: (BigInt(existingPos.currentValue) + BigInt(amount)).toString(),
+              ...updated,
               updatedAt: new Date(),
             })
             .where(eq(positions.id, existingPos.id));
         } else {
+          const initial = buildNewPositionInvestment(amount);
           await tx.insert(positions).values({
             userId,
             strategyId,
-            principal: amount,
-            currentValue: amount,
+            ...initial,
           });
         }
 
