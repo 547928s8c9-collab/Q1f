@@ -88,13 +88,14 @@ app.use("/api/strategies", marketLimiter);
 // General API limiter for remaining /api routes
 app.use("/api", generalApiLimiter);
 
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+app.use("/api/sumsub/webhook", express.raw({ type: "application/json" }));
+
+app.use((req, res, next) => {
+  if (req.path === "/api/sumsub/webhook") {
+    return next();
+  }
+  return express.json()(req, res, next);
+});
 
 app.use(express.urlencoded({ extended: false }));
 

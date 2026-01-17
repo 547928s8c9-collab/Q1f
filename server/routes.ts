@@ -9,6 +9,7 @@ import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./marketData
 import { marketSimService } from "./market/marketSimService";
 import { ensureReplayClock, getDecisionNow, getSimLagMs, getSimNow, isSimEnabled } from "./market/replayClock";
 import { sessionRunner } from "./sim/runner";
+import { verifySumsubSignature } from "./security/sumsub";
 import rateLimit from "express-rate-limit";
 
 import { db, withTransaction, type DbTransaction } from "./db";
@@ -2367,7 +2368,6 @@ export async function registerRoutes(
   });
 
   // POST /api/sumsub/webhook - Handle Sumsub callbacks (demo mode)
-  // In production, this would verify HMAC signature from Sumsub
   const IS_PRODUCTION = process.env.NODE_ENV === "production";
   const SUMSUB_WEBHOOK_SECRET = process.env.SUMSUB_WEBHOOK_SECRET;
   
@@ -2379,13 +2379,38 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Service not configured" });
       }
 
+      const effectiveSecret = SUMSUB_WEBHOOK_SECRET || "demo-webhook-secret";
+
       // Verify webhook secret
       const webhookSecret = req.headers["x-sumsub-secret"] || req.headers["x-webhook-secret"];
-      const expectedSecret = SUMSUB_WEBHOOK_SECRET || "demo-webhook-secret";
+      const expectedSecret = effectiveSecret;
       
       if (webhookSecret !== expectedSecret) {
         console.warn("Sumsub webhook: invalid or missing secret");
         return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const rawBody = req.body;
+      if (!Buffer.isBuffer(rawBody)) {
+        return res.status(400).json({ error: "Invalid raw body" });
+      }
+
+      const digestHeader = req.headers["x-payload-digest"];
+      const algHeader = req.headers["x-payload-digest-alg"];
+      const digestValue = Array.isArray(digestHeader) ? digestHeader[0] : digestHeader;
+      const algValue = Array.isArray(algHeader) ? algHeader[0] : algHeader;
+
+      const signatureOk = verifySumsubSignature(rawBody, algValue, digestValue, effectiveSecret);
+      if (!signatureOk) {
+        console.warn("Sumsub webhook: invalid signature");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(rawBody.toString("utf8"));
+      } catch {
+        return res.status(400).json({ error: "Invalid JSON payload" });
       }
 
       // Validate request body with Zod
@@ -2399,7 +2424,7 @@ export async function registerRoutes(
         }).optional(),
       });
 
-      const parseResult = webhookSchema.safeParse(req.body);
+      const parseResult = webhookSchema.safeParse(parsedBody);
       if (!parseResult.success) {
         return res.status(400).json({ error: "Invalid payload", details: parseResult.error.issues });
       }
