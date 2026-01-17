@@ -3701,8 +3701,11 @@ export async function registerRoutes(
       const schema = z.object({
         profileSlug: z.string().min(1),
         startMs: z.number().int().positive(),
-        endMs: z.number().int().positive(),
+        endMs: z.number().int().positive().optional(),
         speed: z.number().int().min(MIN_SPEED).max(MAX_SPEED).optional().default(1),
+        mode: z.enum(["replay", "lagged_live"]).optional().default("replay"),
+        lagMs: z.number().int().min(60000).max(3600000).optional().default(900000),
+        replayMsPerCandle: z.number().int().min(100).max(60000).optional().default(15000),
         configOverride: z.record(z.unknown()).optional(),
       });
       
@@ -3717,7 +3720,7 @@ export async function registerRoutes(
         });
       }
       
-      const { profileSlug, startMs, endMs, speed, configOverride } = parsed.data;
+      const { profileSlug, startMs, endMs, speed, mode, lagMs, replayMsPerCandle, configOverride } = parsed.data;
       
       // Get profile by slug
       const profile = await storage.getStrategyProfile(profileSlug);
@@ -3732,11 +3735,18 @@ export async function registerRoutes(
         });
       }
       
-      // Validate startMs < endMs
-      if (startMs >= endMs) {
-        return res.status(400).json({
-          error: { code: "INVALID_TIME_RANGE", message: "startMs must be less than endMs" },
-        });
+      // For replay mode, endMs is required and must be > startMs
+      if (mode === "replay") {
+        if (!endMs) {
+          return res.status(400).json({
+            error: { code: "MISSING_END_MS", message: "endMs is required for replay mode" },
+          });
+        }
+        if (startMs >= endMs) {
+          return res.status(400).json({
+            error: { code: "INVALID_TIME_RANGE", message: "startMs must be less than endMs" },
+          });
+        }
       }
       
       // Get timeframe ms
@@ -3756,7 +3766,7 @@ export async function registerRoutes(
           },
         });
       }
-      if (endMs % tfMs !== 0) {
+      if (endMs && endMs % tfMs !== 0) {
         return res.status(400).json({
           error: {
             code: "END_NOT_ALIGNED",
@@ -3765,33 +3775,37 @@ export async function registerRoutes(
         });
       }
       
-      // Validate max candles
-      const candleCount = (endMs - startMs) / tfMs;
-      if (candleCount > MAX_CANDLES) {
-        return res.status(400).json({
-          error: {
-            code: "RANGE_TOO_LARGE",
-            message: `Range exceeds maximum ${MAX_CANDLES} candles (requested: ${candleCount})`,
-          },
-        });
+      // Validate max candles (only for replay mode with defined endMs)
+      if (endMs) {
+        const candleCount = (endMs - startMs) / tfMs;
+        if (candleCount > MAX_CANDLES) {
+          return res.status(400).json({
+            error: {
+              code: "RANGE_TOO_LARGE",
+              message: `Range exceeds maximum ${MAX_CANDLES} candles (requested: ${candleCount})`,
+            },
+          });
+        }
       }
       
-      // Load candles and check for gaps before creating session
-      const candleResult = await loadCandles({
-        symbol: profile.symbol,
-        timeframe: profile.timeframe as Timeframe,
-        startMs,
-        endMs,
-      });
-      
-      if (candleResult.gaps && candleResult.gaps.length > 0) {
-        return res.status(422).json({
-          error: {
-            code: "MARKET_DATA_GAPS",
-            message: "Market data has gaps in the requested range",
-            gaps: candleResult.gaps,
-          },
+      // For replay mode, pre-load candles and check for gaps
+      if (mode === "replay" && endMs) {
+        const candleResult = await loadCandles({
+          symbol: profile.symbol,
+          timeframe: profile.timeframe as Timeframe,
+          startMs,
+          endMs,
         });
+        
+        if (candleResult.gaps && candleResult.gaps.length > 0) {
+          return res.status(422).json({
+            error: {
+              code: "MARKET_DATA_GAPS",
+              message: "Market data has gaps in the requested range",
+              gaps: candleResult.gaps,
+            },
+          });
+        }
       }
       
       // Create session
@@ -3801,8 +3815,11 @@ export async function registerRoutes(
         symbol: profile.symbol,
         timeframe: profile.timeframe,
         startMs,
-        endMs,
+        endMs: endMs ?? null,
         speed,
+        mode,
+        lagMs,
+        replayMsPerCandle,
         configOverrides: configOverride as any,
         status: SimSessionStatus.CREATED,
         idempotencyKey,

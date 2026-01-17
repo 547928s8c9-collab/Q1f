@@ -1302,10 +1302,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLastSimEventSeq(sessionId: string): Promise<number> {
-    const [result] = await db.select({ maxSeq: sql<number>`COALESCE(MAX(${simEvents.seq}), 0)` })
+    const [result] = await db.select({ maxSeq: sql<string>`COALESCE(MAX(${simEvents.seq}), 0)` })
       .from(simEvents)
       .where(eq(simEvents.sessionId, sessionId));
-    return result?.maxSeq ?? 0;
+    return parseInt(result?.maxSeq ?? "0", 10);
   }
 
   // ==================== ADMIN RBAC SEED ====================
