@@ -78,6 +78,34 @@ async function checkOrphans(): Promise<void> {
       name: "strategy_performance (missing strategy)",
       query: sql`SELECT COUNT(*) as count FROM strategy_performance sp WHERE NOT EXISTS (SELECT 1 FROM strategies s WHERE s.id = sp.strategy_id)`,
     },
+    {
+      name: "portfolio_series (missing user)",
+      query: sql`SELECT COUNT(*) as count FROM portfolio_series ps WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ps.user_id)`,
+    },
+    {
+      name: "strategy_series (missing strategy)",
+      query: sql`SELECT COUNT(*) as count FROM strategy_series ss WHERE NOT EXISTS (SELECT 1 FROM strategies s WHERE s.id = ss.strategy_id)`,
+    },
+    {
+      name: "payout_instructions (missing user)",
+      query: sql`SELECT COUNT(*) as count FROM payout_instructions pi WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = pi.user_id)`,
+    },
+    {
+      name: "payout_instructions (missing strategy)",
+      query: sql`SELECT COUNT(*) as count FROM payout_instructions pi WHERE NOT EXISTS (SELECT 1 FROM strategies s WHERE s.id = pi.strategy_id)`,
+    },
+    {
+      name: "payout_instructions (missing address)",
+      query: sql`SELECT COUNT(*) as count FROM payout_instructions pi WHERE pi.address_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM whitelist_addresses w WHERE w.id = pi.address_id)`,
+    },
+    {
+      name: "idempotency_keys (missing user)",
+      query: sql`SELECT COUNT(*) as count FROM idempotency_keys ik WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ik.user_id)`,
+    },
+    {
+      name: "idempotency_keys (missing operation)",
+      query: sql`SELECT COUNT(*) as count FROM idempotency_keys ik WHERE ik.operation_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.id = ik.operation_id)`,
+    },
   ];
 
   const results: OrphanResult[] = [];

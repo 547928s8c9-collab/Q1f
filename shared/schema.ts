@@ -217,7 +217,7 @@ export type Withdrawal = typeof withdrawals.$inferSelect;
 // ==================== PORTFOLIO SERIES ====================
 export const portfolioSeries = pgTable("portfolio_series", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   date: text("date").notNull(), // RFC3339 date
   value: text("value").notNull(), // USDT minor units
 });
@@ -229,7 +229,7 @@ export type PortfolioSeries = typeof portfolioSeries.$inferSelect;
 // ==================== STRATEGY SERIES ====================
 export const strategySeries = pgTable("strategy_series", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  strategyId: varchar("strategy_id").notNull(),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   date: text("date").notNull(),
   value: text("value").notNull(), // normalized to 100
 });
@@ -306,10 +306,10 @@ export type PayoutFrequencyType = typeof PayoutFrequency[keyof typeof PayoutFreq
 
 export const payoutInstructions = pgTable("payout_instructions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  strategyId: varchar("strategy_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   frequency: text("frequency").notNull().default("MONTHLY"), // DAILY or MONTHLY
-  addressId: varchar("address_id"), // references whitelist address
+  addressId: varchar("address_id").references(() => whitelistAddresses.id), // references whitelist address
   minPayoutMinor: text("min_payout_minor").notNull().default("10000000"), // 10 USDT in minor units
   active: boolean("active").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -432,10 +432,10 @@ export type Notification = typeof notifications.$inferSelect;
 // ==================== IDEMPOTENCY KEYS ====================
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   idempotencyKey: varchar("idempotency_key", { length: 64 }).notNull(),
   endpoint: text("endpoint").notNull(),
-  operationId: varchar("operation_id"),
+  operationId: varchar("operation_id").references(() => operations.id),
   responseStatus: integer("response_status"), // null = pending/in-progress
   responseBody: jsonb("response_body"),
   createdAt: timestamp("created_at").defaultNow(),
