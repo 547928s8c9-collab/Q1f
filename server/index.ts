@@ -6,6 +6,8 @@ import crypto from "crypto";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
+import { errorHandler } from "./middleware/errorHandler";
+import { normalizePath } from "./metrics/normalizePath";
 
 const app = express();
 const httpServer = createServer(app);
@@ -122,25 +124,6 @@ const metrics = {
 
 const METRICS_ENDPOINT_CAP = 500;
 
-// Normalize path by replacing dynamic segments with :id
-function normalizePath(path: string): string {
-  return path.split("/").map(segment => {
-    // UUID pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) {
-      return ":id";
-    }
-    // Pure numeric
-    if (/^\d+$/.test(segment)) {
-      return ":id";
-    }
-    // Long hex strings (txhash, etc.) >= 24 chars
-    if (/^[0-9a-f]{24,}$/i.test(segment)) {
-      return ":id";
-    }
-    return segment;
-  }).join("/");
-}
-
 export function getMetrics() {
   return { ...metrics };
 }
@@ -217,15 +200,7 @@ app.get("/api/metrics", (req, res) => {
     log(`Reset ${resetCount} running simulation sessions to paused state`, "sim");
   }
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    console.error("[error-handler]", err);
-    if (res.headersSent) {
-      return next(err);
-    }
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    res.status(status).json({ message });
-  });
+  app.use(errorHandler);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
