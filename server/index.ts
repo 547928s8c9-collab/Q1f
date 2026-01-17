@@ -196,6 +196,15 @@ app.get("/api/metrics", (req, res) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  const autoSeedEnabled = process.env.AUTO_SEED !== "false";
+  if (autoSeedEnabled) {
+    const profileStats = await storage.seedStrategyProfiles();
+    await storage.seedStrategies();
+    if (profileStats.inserted > 0 || profileStats.updated > 0) {
+      log(`Seeded strategy profiles (inserted=${profileStats.inserted}, updated=${profileStats.updated})`, "seed");
+    }
+  }
+
   const resetCount = await storage.resetRunningSessions();
   if (resetCount > 0) {
     log(`Reset ${resetCount} running simulation sessions to paused state`, "sim");

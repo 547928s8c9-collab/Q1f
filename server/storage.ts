@@ -102,7 +102,7 @@ export interface IStorage {
   
   getStrategyPerformance(strategyId: string, days?: number): Promise<StrategyPerformance[]>;
   createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance>;
-  seedStrategies(): Promise<void>;
+  seedStrategies(options?: { force?: boolean }): Promise<void>;
 
   getPositions(userId: string): Promise<Position[]>;
   getPosition(userId: string, strategyId: string): Promise<Position | undefined>;
@@ -192,7 +192,7 @@ export interface IStorage {
   getStrategyProfiles(): Promise<StrategyProfile[]>;
   getStrategyProfile(slug: string): Promise<StrategyProfile | undefined>;
   getStrategyProfileById(id: string): Promise<StrategyProfile | undefined>;
-  seedStrategyProfiles(): Promise<void>;
+  seedStrategyProfiles(): Promise<{ inserted: number; updated: number }>;
 
   // Sim Sessions
   getSimSession(id: string): Promise<SimSession | undefined>;
@@ -515,12 +515,13 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async seedStrategies(): Promise<void> {
+  async seedStrategies(options: { force?: boolean } = {}): Promise<void> {
+    const { force = false } = options;
     const existingStrategies = await this.getStrategies();
-    if (existingStrategies.length >= 8) return;
+    if (!force && existingStrategies.length >= 8) return;
 
-    await db.delete(strategies);
     await db.delete(strategyPerformance);
+    await db.delete(strategies);
 
     const strategyData = [
       { name: "Stable Yield", tier: "LOW", desc: "Conservative stablecoin farming with minimal risk", pairs: ["USDT/USDC", "DAI/USDT"], minBps: 200, maxBps: 300, worst: "-0.8%", dd: "-1.2%" },
@@ -1119,12 +1120,9 @@ export class DatabaseStorage implements IStorage {
     return profile;
   }
 
-  async seedStrategyProfiles(): Promise<void> {
-    const existing = await db.select().from(strategyProfiles);
-    if (existing.length > 0) {
-      console.log(`Strategy profiles already seeded (${existing.length} profiles)`);
-      return;
-    }
+  async seedStrategyProfiles(): Promise<{ inserted: number; updated: number }> {
+    const existing = await db.select({ slug: strategyProfiles.slug }).from(strategyProfiles);
+    const existingSlugs = new Set(existing.map((row) => row.slug));
 
     const baseConfigSchema: StrategyProfileConfigSchema = {
       feesBps: { type: "number", label: "Fees (bps)", min: 0, max: 100, step: 1, default: 15 },
@@ -1294,23 +1292,53 @@ export class DatabaseStorage implements IStorage {
       },
     ];
 
+    let inserted = 0;
+    let updated = 0;
+    const now = new Date();
+
     for (const p of profiles) {
-      await db.insert(strategyProfiles).values({
-        slug: p.slug,
-        displayName: p.displayName,
-        symbol: p.symbol,
-        timeframe: p.timeframe,
-        description: p.description,
-        profileKey: p.slug,
-        tags: p.tags,
-        riskLevel: p.riskLevel,
-        defaultConfig: p.defaultConfig,
-        configSchema: baseConfigSchema,
-        isEnabled: true,
-      });
+      if (existingSlugs.has(p.slug)) {
+        updated += 1;
+      } else {
+        inserted += 1;
+      }
+
+      await db
+        .insert(strategyProfiles)
+        .values({
+          slug: p.slug,
+          displayName: p.displayName,
+          symbol: p.symbol,
+          timeframe: p.timeframe,
+          description: p.description,
+          profileKey: p.slug,
+          tags: p.tags,
+          riskLevel: p.riskLevel,
+          defaultConfig: p.defaultConfig,
+          configSchema: baseConfigSchema,
+          isEnabled: true,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: strategyProfiles.slug,
+          set: {
+            displayName: p.displayName,
+            symbol: p.symbol,
+            timeframe: p.timeframe,
+            description: p.description,
+            profileKey: p.slug,
+            tags: p.tags,
+            riskLevel: p.riskLevel,
+            defaultConfig: p.defaultConfig,
+            configSchema: baseConfigSchema,
+            isEnabled: true,
+            updatedAt: now,
+          },
+        });
     }
 
-    console.log(`Seeded ${profiles.length} strategy profiles`);
+    console.log(`Seeded strategy profiles (inserted=${inserted}, updated=${updated})`);
+    return { inserted, updated };
   }
 
   // Sim Sessions

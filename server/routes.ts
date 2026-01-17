@@ -688,10 +688,21 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/strategy-profiles/seed - Seed strategy profiles (dev only)
+  app.post("/api/strategy-profiles/seed", devOnlyGuard, isAuthenticated, async (req, res) => {
+    try {
+      const result = await storage.seedStrategyProfiles();
+      res.json(result);
+    } catch (error) {
+      console.error("Seed strategy profiles error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // POST /api/strategies/seed - Seed strategies (dev only)
   app.post("/api/strategies/seed", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
-      await storage.seedStrategies();
+      await storage.seedStrategies({ force: true });
       res.json({ success: true, message: "Strategies seeded" });
     } catch (error) {
       console.error("Seed strategies error:", error);
