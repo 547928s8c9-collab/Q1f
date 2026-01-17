@@ -216,6 +216,8 @@ export const AdminWithdrawalDetail = AdminWithdrawalListItem.extend({
   address: z.string(),
   riskFlags: z.array(z.string()).nullable(),
   lastError: z.string().nullable(),
+  reviewedByAdminId: z.string().nullable(),
+  reviewedAt: z.string().nullable(),
   approvedBy: z.string().nullable(),
   approvedAt: z.string().nullable(),
   rejectedBy: z.string().nullable(),
@@ -269,7 +271,9 @@ export const AdminWithdrawalProcessBody = z.object({
 export type AdminWithdrawalProcessBody = z.infer<typeof AdminWithdrawalProcessBody>;
 
 export const WITHDRAWAL_ADMIN_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ["APPROVED", "REJECTED", "CANCELLED"],
+  PENDING_REVIEW: ["PENDING_APPROVAL", "REJECTED", "CANCELLED"], // review moves to pending_approval
+  PENDING_APPROVAL: ["APPROVED", "REJECTED", "CANCELLED"], // approve moves to approved
+  PENDING: ["APPROVED", "REJECTED", "CANCELLED"], // legacy support
   APPROVED: ["PROCESSING", "CANCELLED"],
   PROCESSING: ["COMPLETED", "FAILED"],
   COMPLETED: [],

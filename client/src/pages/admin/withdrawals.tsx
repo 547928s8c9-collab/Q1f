@@ -58,6 +58,8 @@ interface AdminMeResponse {
 }
 
 const STATUS_COLORS: Record<string, string> = {
+  PENDING_REVIEW: "bg-warning/10 text-warning",
+  PENDING_APPROVAL: "bg-accent/10 text-accent-foreground",
   PENDING: "bg-warning/10 text-warning",
   APPROVED: "bg-positive/10 text-positive",
   PROCESSING: "bg-primary/10 text-primary",
@@ -68,6 +70,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUS_ICONS: Record<string, typeof CheckCircle> = {
+  PENDING_REVIEW: Clock,
+  PENDING_APPROVAL: AlertTriangle,
   PENDING: Clock,
   APPROVED: CheckCircle,
   PROCESSING: RefreshCw,
@@ -77,7 +81,7 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
   CANCELLED: X,
 };
 
-type ActionType = "REQUEST_APPROVAL" | "APPROVE" | "REJECT" | "MARK_PROCESSING" | "MARK_COMPLETED" | "MARK_FAILED";
+type ActionType = "REVIEW" | "REQUEST_APPROVAL" | "APPROVE" | "REJECT" | "MARK_PROCESSING" | "MARK_COMPLETED" | "MARK_FAILED";
 
 function formatAmount(amountMinor: string, currency: string): string {
   const decimals = currency === "USDT" ? 6 : 2;
@@ -114,6 +118,37 @@ export default function AdminWithdrawals() {
   const { data: detailData, isLoading: detailLoading } = useQuery<{ ok: boolean; data: AdminWithdrawalDetail }>({
     queryKey: ["/api/admin/withdrawals", selectedWithdrawalId],
     enabled: !!selectedWithdrawalId,
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: async ({ withdrawalId }: { withdrawalId: string }) => {
+      const idempotencyKey = crypto.randomUUID();
+      const res = await fetch(`/api/admin/withdrawals/${withdrawalId}/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error?.message || "Request failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Review completed", description: "Withdrawal is now pending approval by another admin" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
+      setActionDialog({ open: false, action: null });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to review withdrawal", 
+        description: error.message || "Something went wrong",
+        variant: "destructive",
+      });
+    },
   });
 
   const requestApprovalMutation = useMutation({
@@ -280,6 +315,9 @@ export default function AdminWithdrawals() {
     if (!selectedWithdrawalId) return;
     
     switch (actionDialog.action) {
+      case "REVIEW":
+        reviewMutation.mutate({ withdrawalId: selectedWithdrawalId });
+        break;
       case "REQUEST_APPROVAL":
         requestApprovalMutation.mutate({ withdrawalId: selectedWithdrawalId });
         break;
@@ -321,8 +359,8 @@ export default function AdminWithdrawals() {
     }
   };
 
-  const isPending = requestApprovalMutation.isPending || approveMutation.isPending || 
-                    rejectMutation.isPending || processMutation.isPending;
+  const isPending = reviewMutation.isPending || requestApprovalMutation.isPending || 
+                    approveMutation.isPending || rejectMutation.isPending || processMutation.isPending;
 
   const needsReason = actionDialog.action && ["REJECT", "MARK_PROCESSING", "MARK_COMPLETED", "MARK_FAILED"].includes(actionDialog.action);
 
@@ -601,7 +639,16 @@ export default function AdminWithdrawals() {
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Actions</h3>
                   <div className="flex flex-wrap gap-2">
-                    {permissions.canApprove && detail.status === "PENDING" && !detail.pendingAction && (
+                    {permissions.canApprove && (detail.status === "PENDING_REVIEW" || detail.status === "PENDING") && !detail.reviewedByAdminId && (
+                      <Button 
+                        onClick={() => handleActionClick("REVIEW")} 
+                        data-testid="button-review"
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        Review
+                      </Button>
+                    )}
+                    {permissions.canApprove && (detail.status === "PENDING_APPROVAL" || detail.status === "PENDING") && !detail.pendingAction && detail.reviewedByAdminId && (
                       <Button 
                         onClick={() => handleActionClick("REQUEST_APPROVAL")} 
                         data-testid="button-request-approval"
@@ -610,7 +657,7 @@ export default function AdminWithdrawals() {
                         Request Approval
                       </Button>
                     )}
-                    {permissions.canApprove && detail.pendingAction && detail.status === "PENDING" && (
+                    {permissions.canApprove && detail.pendingAction && (detail.status === "PENDING_APPROVAL" || detail.status === "PENDING") && (
                       <Button 
                         onClick={() => handleActionClick("APPROVE")} 
                         data-testid="button-approve"
@@ -669,6 +716,7 @@ export default function AdminWithdrawals() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
+              {actionDialog.action === "REVIEW" && "Review Withdrawal"}
               {actionDialog.action === "REQUEST_APPROVAL" && "Request Approval"}
               {actionDialog.action === "APPROVE" && "Approve Withdrawal"}
               {actionDialog.action === "REJECT" && "Reject Withdrawal"}
@@ -677,6 +725,7 @@ export default function AdminWithdrawals() {
               {actionDialog.action === "MARK_FAILED" && "Mark as Failed"}
             </DialogTitle>
             <DialogDescription>
+              {actionDialog.action === "REVIEW" && "This will mark the withdrawal as reviewed. Another admin must then approve it (4-eyes principle)."}
               {actionDialog.action === "REQUEST_APPROVAL" && "This will create a pending approval request that must be approved by another admin (4-eyes principle)."}
               {actionDialog.action === "APPROVE" && "You are approving this withdrawal as the second reviewer. The withdrawal will be ready for processing."}
               {actionDialog.action === "REJECT" && "This will reject the withdrawal request. Please provide a reason."}

@@ -1175,6 +1175,8 @@ adminRouter.get("/withdrawals/:id", requirePermission("withdrawals.read"), async
       riskScore: withdrawal.riskScore,
       riskFlags: Array.isArray(withdrawal.riskFlags) ? withdrawal.riskFlags as string[] : null,
       lastError: withdrawal.lastError,
+      reviewedByAdminId: withdrawal.reviewedByAdminId,
+      reviewedAt: withdrawal.reviewedAt?.toISOString() || null,
       approvedBy: withdrawal.approvedBy,
       approvedAt: withdrawal.approvedAt?.toISOString() || null,
       rejectedBy: withdrawal.rejectedBy,
@@ -1208,6 +1210,68 @@ adminRouter.get("/withdrawals/:id", requirePermission("withdrawals.read"), async
 });
 
 adminRouter.post(
+  "/withdrawals/:id/review",
+  requirePermission("withdrawals.approve"),
+  requireIdempotencyKey,
+  wrapMutation("WITHDRAWAL_REVIEW", async (req, _res, ctx) => {
+    const withdrawalId = req.params.id;
+    const adminUserId = ctx.adminUserId;
+
+    const [withdrawal] = await db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.id, withdrawalId))
+      .limit(1);
+
+    if (!withdrawal) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: ErrorCodes.NOT_FOUND, message: "Withdrawal not found" }, requestId: ctx.requestId },
+      };
+    }
+
+    if (withdrawal.status !== "PENDING_REVIEW" && withdrawal.status !== "PENDING") {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: "INVALID_STATUS", message: `Cannot review withdrawal in status: ${withdrawal.status}` },
+          requestId: ctx.requestId,
+        },
+      };
+    }
+
+    const beforeJson = { status: withdrawal.status, reviewedByAdminId: null, reviewedAt: null };
+    const now = new Date();
+
+    const [updated] = await db.update(withdrawals)
+      .set({
+        status: "PENDING_APPROVAL",
+        reviewedByAdminId: adminUserId,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(withdrawals.id, withdrawalId))
+      .returning();
+
+    const afterJson = { status: "PENDING_APPROVAL", reviewedByAdminId: adminUserId, reviewedAt: now.toISOString() };
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        data: { withdrawalId: updated.id, status: updated.status, reviewedByAdminId: adminUserId },
+        requestId: ctx.requestId,
+      },
+      targetType: "withdrawal",
+      targetId: withdrawalId,
+      beforeJson,
+      afterJson,
+    };
+  })
+);
+
+adminRouter.post(
   "/withdrawals/:id/request-approval",
   requirePermission("withdrawals.approve"),
   requireIdempotencyKey,
@@ -1228,12 +1292,12 @@ adminRouter.post(
       };
     }
 
-    if (withdrawal.status !== "PENDING") {
+    if (withdrawal.status !== "PENDING_APPROVAL" && withdrawal.status !== "PENDING") {
       return {
         status: 400,
         body: {
           ok: false,
-          error: { code: "INVALID_STATUS", message: `Withdrawal is not pending, current status: ${withdrawal.status}` },
+          error: { code: "INVALID_STATUS", message: `Withdrawal must be in PENDING_APPROVAL or PENDING status, current: ${withdrawal.status}` },
           requestId: ctx.requestId,
         },
       };
@@ -1363,12 +1427,23 @@ adminRouter.post(
         };
       }
 
-      if (withdrawal.status !== "PENDING") {
+      if (withdrawal.status !== "PENDING_APPROVAL" && withdrawal.status !== "PENDING") {
         return {
           status: 400,
           body: {
             ok: false,
-            error: { code: "INVALID_STATUS", message: `Withdrawal status changed, current: ${withdrawal.status}` },
+            error: { code: "INVALID_STATUS", message: `Withdrawal must be in PENDING_APPROVAL or PENDING status, current: ${withdrawal.status}` },
+            requestId: ctx.requestId,
+          },
+        };
+      }
+
+      if (withdrawal.reviewedByAdminId && withdrawal.reviewedByAdminId === checkerAdminUserId) {
+        return {
+          status: 403,
+          body: {
+            ok: false,
+            error: { code: "SAME_USER_FORBIDDEN", message: "Reviewer and approver must be different users (4-eyes principle)" },
             requestId: ctx.requestId,
           },
         };
@@ -1464,7 +1539,7 @@ adminRouter.post(
       };
     }
 
-    const allowedFrom = ["PENDING"];
+    const allowedFrom = ["PENDING_REVIEW", "PENDING_APPROVAL", "PENDING"];
     if (!allowedFrom.includes(withdrawal.status)) {
       return {
         status: 400,

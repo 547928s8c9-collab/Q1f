@@ -171,7 +171,9 @@ export type Operation = typeof operations.$inferSelect;
 // ==================== WITHDRAWALS ====================
 // Withdrawal requests with admin approval workflow
 export const WithdrawalStatus = {
-  PENDING: "PENDING",
+  PENDING_REVIEW: "PENDING_REVIEW",
+  PENDING_APPROVAL: "PENDING_APPROVAL",
+  PENDING: "PENDING", // legacy, kept for compatibility
   APPROVED: "APPROVED",
   PROCESSING: "PROCESSING",
   COMPLETED: "COMPLETED",
@@ -191,12 +193,14 @@ export const withdrawals = pgTable("withdrawals", {
   feeMinor: text("fee_minor").notNull().default("0"),
   currency: text("currency").notNull().default("USDT"),
   address: text("address").notNull(),
-  status: text("status").notNull().default("PENDING"),
+  status: text("status").notNull().default("PENDING_REVIEW"),
   operationId: varchar("operation_id").references(() => operations.id), // FK to operations.id (created when user submits)
   riskScore: integer("risk_score"),
   riskFlags: jsonb("risk_flags"), // e.g., ["high_amount", "new_address"]
   lastError: text("last_error"),
-  approvedBy: varchar("approved_by"), // admin user id who approved
+  reviewedByAdminId: varchar("reviewed_by_admin_id"), // admin user id who reviewed
+  reviewedAt: timestamp("reviewed_at"),
+  approvedBy: varchar("approved_by"), // admin user id who approved (must be different from reviewer)
   approvedAt: timestamp("approved_at"),
   rejectedBy: varchar("rejected_by"),
   rejectedAt: timestamp("rejected_at"),
