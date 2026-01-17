@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
+import { type BootstrapResponse, type WhitelistAddress, type NotificationPreferences } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet } from "lucide-react";
+import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet, Bell, Mail, MessageCircle, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function SecuritySettings() {
@@ -45,6 +45,62 @@ export default function SecuritySettings() {
   const { data: whitelist, isLoading: whitelistLoading } = useQuery<WhitelistAddress[]>({
     queryKey: ["/api/security/whitelist"],
   });
+
+  const { data: notifPrefs, isLoading: notifPrefsLoading } = useQuery<NotificationPreferences>({
+    queryKey: ["/api/notification-preferences"],
+  });
+
+  // Local state for optimistic UI updates
+  const [localNotifPrefs, setLocalNotifPrefs] = useState<Partial<NotificationPreferences>>({});
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isSavingNotifs, setIsSavingNotifs] = useState(false);
+
+  // Sync local state with server data
+  useEffect(() => {
+    if (notifPrefs) {
+      setLocalNotifPrefs({
+        inAppEnabled: notifPrefs.inAppEnabled,
+        emailEnabled: notifPrefs.emailEnabled,
+        telegramEnabled: notifPrefs.telegramEnabled,
+      });
+    }
+  }, [notifPrefs]);
+
+  const updateNotifPrefsMutation = useMutation({
+    mutationFn: async (patch: Partial<NotificationPreferences>) => {
+      return apiRequest("PUT", "/api/notification-preferences", patch);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notification-preferences"] });
+      setIsSavingNotifs(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Не удалось сохранить", description: error.message, variant: "destructive" });
+      setIsSavingNotifs(false);
+      // Revert to server state
+      if (notifPrefs) {
+        setLocalNotifPrefs({
+          inAppEnabled: notifPrefs.inAppEnabled,
+          emailEnabled: notifPrefs.emailEnabled,
+          telegramEnabled: notifPrefs.telegramEnabled,
+        });
+      }
+    },
+  });
+
+  const handleNotifToggle = useCallback((key: keyof NotificationPreferences, value: boolean) => {
+    // Optimistic update
+    setLocalNotifPrefs((prev) => ({ ...prev, [key]: value }));
+    setIsSavingNotifs(true);
+
+    // Debounce the API call
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      updateNotifPrefsMutation.mutate({ [key]: value });
+    }, 400);
+  }, [updateNotifPrefsMutation]);
 
   const toggle2FAMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -113,7 +169,7 @@ export default function SecuritySettings() {
     },
   });
 
-  const isLoading = bootstrapLoading || whitelistLoading;
+  const isLoading = bootstrapLoading || whitelistLoading || notifPrefsLoading;
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -241,6 +297,46 @@ export default function SecuritySettings() {
                 <p className="text-xs text-muted-foreground mt-1">Add addresses to enable secure withdrawals</p>
               </div>
             )}
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader 
+              title="Уведомления"
+              action={
+                isSavingNotifs ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Сохранение...</span>
+                  </div>
+                ) : null
+              }
+            />
+            <Card className="divide-y divide-border">
+              <SecuritySettingRow
+                icon={<Bell className="w-5 h-5 text-muted-foreground" />}
+                label="In-app уведомления"
+                description="Уведомления внутри приложения"
+                type="toggle"
+                value={localNotifPrefs.inAppEnabled ?? true}
+                onChange={(enabled) => handleNotifToggle("inAppEnabled", enabled)}
+              />
+              <SecuritySettingRow
+                icon={<Mail className="w-5 h-5 text-muted-foreground" />}
+                label="Email уведомления"
+                description="Получать уведомления на почту"
+                type="toggle"
+                value={localNotifPrefs.emailEnabled ?? false}
+                onChange={(enabled) => handleNotifToggle("emailEnabled", enabled)}
+              />
+              <SecuritySettingRow
+                icon={<MessageCircle className="w-5 h-5 text-muted-foreground" />}
+                label="Telegram уведомления"
+                description="Получать уведомления в Telegram"
+                type="toggle"
+                value={localNotifPrefs.telegramEnabled ?? false}
+                onChange={(enabled) => handleNotifToggle("telegramEnabled", enabled)}
+              />
             </Card>
           </section>
         </div>
