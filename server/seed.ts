@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { db } from "./db";
 import { users, adminUsers, adminUserRoles, roles } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 
 const ADMIN_SUPER_EMAIL = process.env.ADMIN_SUPER_EMAIL;
 const ADMIN_SUPER_ENABLED = process.env.ADMIN_SUPER_ENABLED !== "false";
@@ -12,46 +12,71 @@ async function ensureSuperAdmin(): Promise<void> {
     return;
   }
 
-  if (!ADMIN_SUPER_EMAIL) {
-    console.log("SuperAdmin seeding skipped: ADMIN_SUPER_EMAIL not set");
-    return;
-  }
+  let admin: (typeof adminUsers.$inferSelect) | undefined;
+  let user: (typeof users.$inferSelect) | undefined;
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, ADMIN_SUPER_EMAIL))
-    .limit(1);
+  if (ADMIN_SUPER_EMAIL) {
+    [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, ADMIN_SUPER_EMAIL))
+      .limit(1);
 
-  if (!user) {
-    console.log(`SuperAdmin seeding skipped: User with email ${ADMIN_SUPER_EMAIL} not found in users table`);
-    console.log("  → User must log in first to create their account");
-    return;
-  }
+    if (!user) {
+      console.log(`SuperAdmin seeding skipped: User with email ${ADMIN_SUPER_EMAIL} not found in users table`);
+      console.log("  → User must log in first to create their account");
+      return;
+    }
 
-  let [admin] = await db
-    .select()
-    .from(adminUsers)
-    .where(eq(adminUsers.userId, user.id))
-    .limit(1);
+    [admin] = await db
+      .select()
+      .from(adminUsers)
+      .where(eq(adminUsers.userId, user.id))
+      .limit(1);
 
-  if (!admin) {
-    const [created] = await db
-      .insert(adminUsers)
-      .values({
-        userId: user.id,
-        email: user.email,
-        isActive: true,
-      })
-      .returning();
-    admin = created;
-    console.log(`SuperAdmin created: adminUserId=${admin.id}`);
-  } else if (!admin.isActive) {
-    await db
-      .update(adminUsers)
-      .set({ isActive: true, email: user.email })
-      .where(eq(adminUsers.id, admin.id));
-    console.log(`SuperAdmin reactivated: adminUserId=${admin.id}`);
+    if (!admin) {
+      const [created] = await db
+        .insert(adminUsers)
+        .values({
+          userId: user.id,
+          email: user.email,
+          isActive: true,
+        })
+        .returning();
+      admin = created;
+      console.log(`SuperAdmin created: adminUserId=${admin.id}`);
+    } else if (!admin.isActive) {
+      await db
+        .update(adminUsers)
+        .set({ isActive: true, email: user.email })
+        .where(eq(adminUsers.id, admin.id));
+      console.log(`SuperAdmin reactivated: adminUserId=${admin.id}`);
+    }
+  } else {
+    [admin] = await db
+      .select()
+      .from(adminUsers)
+      .where(eq(adminUsers.isActive, true))
+      .orderBy(asc(adminUsers.createdAt))
+      .limit(1);
+
+    if (!admin) {
+      console.log("SuperAdmin seeding skipped: no active admin users found");
+      return;
+    }
+
+    [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, admin.userId))
+      .limit(1);
+
+    if (user && !admin.email) {
+      await db
+        .update(adminUsers)
+        .set({ email: user.email })
+        .where(eq(adminUsers.id, admin.id));
+    }
   }
 
   const [superAdminRole] = await db
@@ -84,7 +109,7 @@ async function ensureSuperAdmin(): Promise<void> {
     console.log(`SuperAdmin role assigned to adminUserId=${admin.id}`);
   }
 
-  console.log(`SuperAdmin ensured: adminUserId=${admin.id}, email=${ADMIN_SUPER_EMAIL}`);
+  console.log(`SuperAdmin ensured: adminUserId=${admin.id}, email=${ADMIN_SUPER_EMAIL || admin.email || "unknown"}`);
 }
 
 async function seed() {
