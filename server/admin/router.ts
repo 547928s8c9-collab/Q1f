@@ -1,7 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { ensureRequestId } from "./middleware/requestId";
-import { adminAuth } from "./middleware/adminAuth";
-import { loadPermissions, requirePermission } from "./middleware/rbac";
+import { requirePermission } from "./middleware/rbac";
 import { ok, fail, ErrorCodes } from "./http";
 import { db } from "../db";
 import {
@@ -54,10 +52,6 @@ function getReadAuditContext(req: Request, res: Response) {
   const reason = typeof reasonHeader === "string" ? reasonHeader : undefined;
   return { actorAdminUserId, requestId, ip, userAgent, reason };
 }
-
-adminRouter.use(ensureRequestId);
-adminRouter.use(adminAuth);
-adminRouter.use(loadPermissions);
 
 adminRouter.get("/me", async (req, res) => {
   try {

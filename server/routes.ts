@@ -24,6 +24,10 @@ function assertNonNegative(value: bigint, label: string): void {
 }
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 import { adminRouter } from "./admin/router";
+import { adminAuthRouter } from "./admin/authRouter";
+import { adminAuth } from "./admin/middleware/adminAuth";
+import { loadPermissions } from "./admin/middleware/rbac";
+import { ensureRequestId } from "./admin/middleware/requestId";
 
 // Production guard for dev/test endpoints
 const isProduction = process.env.NODE_ENV === "production";
@@ -354,7 +358,8 @@ export async function registerRoutes(
   }
 
   // Mount Admin API router
-  app.use("/api/admin", adminRouter);
+  app.use("/api/admin/auth", adminAuthRouter);
+  app.use("/api/admin", ensureRequestId, adminAuth, loadPermissions, adminRouter);
 
   // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {
