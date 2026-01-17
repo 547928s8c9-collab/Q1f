@@ -301,6 +301,7 @@ adminRouter.post(
       targetId: userId,
       beforeJson,
       afterJson,
+      reason: reason.trim(),
     };
   })
 );

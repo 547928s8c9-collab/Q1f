@@ -150,7 +150,7 @@ export function wrapMutation<T>(
       ip: string;
       userAgent: string;
     }
-  ) => Promise<{ status: number; body: T; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown }>
+  ) => Promise<{ status: number; body: T; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown; reason?: string }>
 ) {
   return async (req: Request, res: Response): Promise<void> => {
     const adminUserId = res.locals.adminUserId!;
@@ -186,6 +186,7 @@ export function wrapMutation<T>(
         targetId: result.targetId,
         beforeJson: result.beforeJson,
         afterJson: result.afterJson,
+        reason: result.reason,
         outcome: "success",
         ip,
         userAgent,
