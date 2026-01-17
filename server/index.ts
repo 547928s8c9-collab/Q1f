@@ -65,7 +65,7 @@ const metricsLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many metrics requests" },
+  message: { error: "RATE_LIMITED" },
   validate: { xForwardedForHeader: false },
 });
 

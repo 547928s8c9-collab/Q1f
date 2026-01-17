@@ -347,6 +347,29 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const adminAuthLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "RATE_LIMITED" },
+  });
+
+  const adminWriteRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "RATE_LIMITED" },
+  });
+
+  const adminWriteLimiter = (req: Request, res: Response, next: NextFunction): void => {
+    if (req.method !== "POST" && req.method !== "PATCH") {
+      next();
+      return;
+    }
+    adminWriteRateLimiter(req, res, next);
+  };
 
   // Setup authentication first
   await setupAuth(app);
@@ -361,8 +384,9 @@ export async function registerRoutes(
   }
 
   // Mount Admin API router
+  app.use("/api/admin/auth/login", adminAuthLimiter);
   app.use("/api/admin/auth", adminAuthRouter);
-  app.use("/api/admin", ensureRequestId, adminAuth, loadPermissions, adminRouter);
+  app.use("/api/admin", adminWriteLimiter, ensureRequestId, adminAuth, loadPermissions, adminRouter);
 
   // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {
@@ -687,7 +711,7 @@ export async function registerRoutes(
     max: 60,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many requests" },
+    message: { error: "RATE_LIMITED" },
   });
 
   const TIMEFRAME_MS: Record<Timeframe, number> = {
