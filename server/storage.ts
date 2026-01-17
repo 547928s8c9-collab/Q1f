@@ -117,6 +117,7 @@ export interface IStorage {
 
   getPortfolioSeries(userId: string, days?: number): Promise<PortfolioSeries[]>;
   createPortfolioSeries(series: InsertPortfolioSeries): Promise<PortfolioSeries>;
+  upsertPortfolioSeriesPoint(userId: string, date: string, value: string): Promise<void>;
 
   getStrategySeries(strategyId: string, days?: number): Promise<StrategySeries[]>;
   createStrategySeries(series: InsertStrategySeries): Promise<StrategySeries>;
@@ -685,6 +686,17 @@ export class DatabaseStorage implements IStorage {
   async createPortfolioSeries(series: InsertPortfolioSeries): Promise<PortfolioSeries> {
     const [created] = await db.insert(portfolioSeries).values(series).returning();
     return created;
+  }
+
+  async upsertPortfolioSeriesPoint(userId: string, date: string, value: string): Promise<void> {
+    const updated = await db.update(portfolioSeries)
+      .set({ value })
+      .where(and(eq(portfolioSeries.userId, userId), eq(portfolioSeries.date, date)))
+      .returning({ id: portfolioSeries.id });
+
+    if (updated.length === 0) {
+      await db.insert(portfolioSeries).values({ userId, date, value });
+    }
   }
 
   async getStrategySeries(strategyId: string, days: number = 90): Promise<StrategySeries[]> {

@@ -48,6 +48,30 @@ const MIN_WITHDRAWAL_MINOR = process.env.MIN_WITHDRAWAL_MINOR || "10000000"; // 
 const MIN_DEPOSIT_MINOR = process.env.MIN_DEPOSIT_MINOR || "10000000"; // 10 USDT
 const DEFAULT_RUB_RATE = parseFloat(process.env.DEFAULT_RUB_RATE || "92.5");
 
+function getTodayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function computePortfolioValue(available: string | undefined, currentPositions: Array<{ currentValue: string }>): string {
+  const positionsTotal = currentPositions.reduce(
+    (sum, position) => sum + BigInt(position.currentValue || "0"),
+    0n
+  );
+  const total = BigInt(available || "0") + positionsTotal;
+  return total.toString();
+}
+
+async function upsertTodayPortfolioSeries(userId: string): Promise<{ date: string; value: string }> {
+  const [balance, currentPositions] = await Promise.all([
+    storage.getBalance(userId, "USDT"),
+    storage.getPositions(userId),
+  ]);
+  const value = computePortfolioValue(balance?.available, currentPositions);
+  const date = getTodayDate();
+  await storage.upsertPortfolioSeriesPoint(userId, date, value);
+  return { date, value };
+}
+
 // Consent constants (canonical source)
 const CURRENT_CONSENT_VERSION = "1.0";
 const CURRENT_DOC_HASH = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -450,6 +474,16 @@ export async function registerRoutes(
         storage.getWhitelistAddresses(userId),
       ]);
 
+      const usdtBalance = balances.find((b) => b.asset === "USDT");
+      const rubBalance = balances.find((b) => b.asset === "RUB");
+      let portfolioSeriesPoints = portfolioSeries;
+      if (portfolioSeriesPoints.length === 0) {
+        const value = computePortfolioValue(usdtBalance?.available, positions);
+        const today = getTodayDate();
+        await storage.upsertPortfolioSeriesPoint(userId, today, value);
+        portfolioSeriesPoints = [{ date: today, value }];
+      }
+
       // Consent version (should match the constants in consent routes)
       const REQUIRED_CONSENT_VERSION = "1.0";
       const hasAcceptedConsent = !!latestConsent;
@@ -503,9 +537,6 @@ export async function registerRoutes(
       if (kycRequired) reasons.push("Complete identity verification");
       if (twoFactorRequired) reasons.push("Enable two-factor authentication");
       if (whitelistRequired) reasons.push("Add at least one active whitelist address");
-
-      const usdtBalance = balances.find((b) => b.asset === "USDT");
-      const rubBalance = balances.find((b) => b.asset === "RUB");
 
       // Build vault data with goals
       const buildVaultData = (vault: typeof vaults[0] | undefined) => {
@@ -577,7 +608,7 @@ export async function registerRoutes(
           profit: buildVaultData(vaultMap.profit),
           taxes: buildVaultData(vaultMap.taxes),
         },
-        portfolioSeries: portfolioSeries.map((s) => ({ date: s.date, value: s.value })),
+        portfolioSeries: portfolioSeriesPoints.map((s) => ({ date: s.date, value: s.value })),
         quotes: {
           "BTC/USDT": {
             price: latestBtc?.price || "67500",
@@ -1311,6 +1342,8 @@ export async function registerRoutes(
         userAgent: req.headers["user-agent"] || null,
       });
 
+      await upsertTodayPortfolioSeries(userId);
+
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
@@ -1389,6 +1422,8 @@ export async function registerRoutes(
         ip: req.ip || null,
         userAgent: req.headers["user-agent"] || null,
       });
+
+      await upsertTodayPortfolioSeries(userId);
 
       const responseBody = { success: true, usdtAmount, operation: { id: operation.id } };
       if (lock.acquired) {
@@ -1556,6 +1591,8 @@ export async function registerRoutes(
 
         return op;
       });
+
+      await upsertTodayPortfolioSeries(userId);
 
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
@@ -1874,6 +1911,8 @@ export async function registerRoutes(
 
         return op;
       });
+
+      await upsertTodayPortfolioSeries(userId);
 
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
