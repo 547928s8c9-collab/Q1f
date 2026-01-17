@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, User, Zap } from "lucide-react";
+import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, User, Zap, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,6 +29,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/invest", label: "Invest", icon: TrendingUp },
   { href: "/live-sessions", label: "Live Sessions", icon: Zap },

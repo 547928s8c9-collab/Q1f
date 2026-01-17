@@ -33,6 +33,7 @@ import OnboardingDone from "@/pages/onboarding/done";
 import SmartStart from "@/pages/onboarding/smart-start";
 import SmartStartResults from "@/pages/onboarding/smart-start-results";
 import Inbox from "@/pages/inbox";
+import Dashboard from "@/pages/dashboard";
 import LiveSessions from "@/pages/live-sessions/index";
 import LiveSessionDetail from "@/pages/live-sessions/detail";
 import LiveSessionView from "@/pages/live-sessions/session";
@@ -46,6 +47,7 @@ function ProtectedRouter() {
       <AppShell>
         <Switch>
           <Route path="/" component={Home} />
+          <Route path="/dashboard" component={Dashboard} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/invest" component={Invest} />
           <Route path="/invest/:id" component={StrategyDetail} />
