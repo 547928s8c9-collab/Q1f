@@ -64,9 +64,9 @@ export async function requireTwoFactor(
       return;
     }
 
-    const result = await verify({ secret, token: code });
+    const isValid = verify({ secret, token: code });
 
-    if (!result.valid) {
+    if (!isValid) {
       res.status(403).json({ 
         code: "TWO_FACTOR_INVALID",
         error: "Invalid 2FA code" 

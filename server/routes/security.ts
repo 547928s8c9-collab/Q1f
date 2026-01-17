@@ -128,10 +128,10 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
         return res.status(500).json({ error: "Failed to verify 2FA" });
       }
 
-      // Verify code using v13 async API
-      const result = await verify({ secret, token: code });
+      // Verify code using otplib
+      const isValid = verify({ secret, token: code });
       
-      if (!result.valid) {
+      if (!isValid) {
         incrementRateLimitOnFailure(userId);
         return res.status(400).json({ error: "Invalid code. Please try again." });
       }
@@ -184,10 +184,10 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
         return res.status(500).json({ error: "Failed to verify 2FA" });
       }
 
-      // Verify code using v13 async API
-      const result = await verify({ secret, token: code });
+      // Verify code using otplib
+      const isValid = verify({ secret, token: code });
       
-      if (!result.valid) {
+      if (!isValid) {
         incrementRateLimitOnFailure(userId);
         return res.status(400).json({ error: "Invalid code. Please try again." });
       }
