@@ -62,6 +62,27 @@ const metrics = {
   requestsByEndpoint: {} as Record<string, number>,
 };
 
+const METRICS_ENDPOINT_CAP = 500;
+
+// Normalize path by replacing dynamic segments with :id
+function normalizePath(path: string): string {
+  return path.split("/").map(segment => {
+    // UUID pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) {
+      return ":id";
+    }
+    // Pure numeric
+    if (/^\d+$/.test(segment)) {
+      return ":id";
+    }
+    // Long hex strings (txhash, etc.) >= 24 chars
+    if (/^[0-9a-f]{24,}$/i.test(segment)) {
+      return ":id";
+    }
+    return segment;
+  }).join("/");
+}
+
 export function getMetrics() {
   return { ...metrics };
 }
@@ -85,7 +106,16 @@ app.use((req, res, next) => {
       metrics.requestCount++;
       const statusKey = `${res.statusCode}`;
       metrics.requestsByStatus[statusKey] = (metrics.requestsByStatus[statusKey] || 0) + 1;
-      const endpointKey = `${req.method} ${path.split("/").slice(0, 4).join("/")}`;
+
+      // Prefer Express route pattern if available, otherwise normalize path
+      const routePath = req.route?.path ? `${req.baseUrl}${req.route.path}` : normalizePath(path);
+      let endpointKey = `${req.method} ${routePath}`;
+
+      // Memory cap: aggregate to __other__ if too many unique keys
+      const keyCount = Object.keys(metrics.requestsByEndpoint).length;
+      if (keyCount >= METRICS_ENDPOINT_CAP && !(endpointKey in metrics.requestsByEndpoint)) {
+        endpointKey = "__other__";
+      }
       metrics.requestsByEndpoint[endpointKey] = (metrics.requestsByEndpoint[endpointKey] || 0) + 1;
 
       // Structured log
