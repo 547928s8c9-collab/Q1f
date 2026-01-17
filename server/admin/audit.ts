@@ -138,7 +138,7 @@ export function requireIdempotencyKey(
   next();
 }
 
-export function wrapMutation<T>(
+export function wrapMutation(
   actionType: string,
   handler: (
     req: Request,
@@ -150,7 +150,7 @@ export function wrapMutation<T>(
       ip: string;
       userAgent: string;
     }
-  ) => Promise<{ status: number; body: T; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown }>
+  ) => Promise<{ status: number; body: unknown; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown }>
 ) {
   return async (req: Request, res: Response): Promise<void> => {
     const adminUserId = res.locals.adminUserId!;

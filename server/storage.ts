@@ -1330,7 +1330,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSimSession(session: InsertSimSession): Promise<SimSession> {
-    const [created] = await db.insert(simSessions).values(session).returning();
+    const configOverrides = session.configOverrides;
+    const values: typeof simSessions.$inferInsert = {
+      ...session,
+      configOverrides:
+        configOverrides && typeof configOverrides === "object"
+          ? (configOverrides as Partial<StrategyProfileConfig>)
+          : configOverrides ?? null,
+    };
+    const [created] = await db.insert(simSessions).values(values).returning();
     return created;
   }
 

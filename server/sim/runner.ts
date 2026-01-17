@@ -38,7 +38,6 @@ const CANDLE_BATCH_SIZE = 100;
 
 function timeframeToMs(tf: Timeframe): number {
   const map: Record<Timeframe, number> = {
-    "1m": 60_000,
     "15m": 900_000,
     "1h": 3_600_000,
   };

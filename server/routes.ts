@@ -668,6 +668,7 @@ export async function registerRoutes(
   const MAX_CANDLES_PER_REQUEST = 35040; // ~1 year of 15m candles
 
   const TIMEFRAME_MS: Record<Timeframe, number> = {
+    "1m": 60 * 1000,
     "15m": 15 * 60 * 1000,
     "1h": 60 * 60 * 1000,
     "1d": 24 * 60 * 60 * 1000,
@@ -1644,9 +1645,6 @@ export async function registerRoutes(
               type: "transaction",
               title: "Auto-sweep executed",
               message: `${formatMoney(sweepAmountStr, "USDT")} swept to ${vaultGoalName || vaultType} vault (${vaultPct}% of profit)`,
-              priority: "low",
-              ctaLabel: "View Vaults",
-              ctaUrl: "/wallet/vaults",
             });
           }
         }
@@ -4426,7 +4424,7 @@ export async function registerRoutes(
       };
       
       // Listen to emitter events (filtered by sessionId)
-      const wrappedEventHandler = (sid: string, event: { seq: number; type: string; payload: unknown }) => {
+      const wrappedEventHandler = (sid: string, event: { seq: number; ts: number; type: string; payload: unknown }) => {
         if (sid === sessionId) eventHandler(sid, event);
       };
       const wrappedStatusHandler = (sid: string, status: string) => {
