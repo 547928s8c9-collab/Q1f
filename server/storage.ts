@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, gte, or, ilike, lte, lt, sql } from "drizzle-orm";
+import { eq, and, desc, gte, or, ilike, lte, lt, sql, inArray } from "drizzle-orm";
 import {
   balances,
   vaults,
@@ -191,11 +191,14 @@ export interface IStorage {
   createSimSession(session: InsertSimSession): Promise<SimSession>;
   updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined>;
   getSimSessionByIdempotencyKey(userId: string, idempotencyKey: string): Promise<SimSession | undefined>;
+  transitionSimSessionStatus(sessionId: string, fromStatuses: string[], toStatus: string): Promise<SimSession | undefined>;
+  resetRunningSessions(): Promise<number>;
 
   // Sim Events
   getSimEvents(sessionId: string, fromSeq?: number, limit?: number): Promise<SimEvent[]>;
   insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent>;
   updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void>;
+  getLastSimEventSeq(sessionId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1277,6 +1280,32 @@ export class DatabaseStorage implements IStorage {
     await db.update(simSessions)
       .set({ lastSeq, updatedAt: new Date() })
       .where(eq(simSessions.id, sessionId));
+  }
+
+  async transitionSimSessionStatus(sessionId: string, fromStatuses: string[], toStatus: string): Promise<SimSession | undefined> {
+    const [updated] = await db.update(simSessions)
+      .set({ status: toStatus, updatedAt: new Date() })
+      .where(and(
+        eq(simSessions.id, sessionId),
+        inArray(simSessions.status, fromStatuses)
+      ))
+      .returning();
+    return updated;
+  }
+
+  async resetRunningSessions(): Promise<number> {
+    const result = await db.update(simSessions)
+      .set({ status: "paused", updatedAt: new Date() })
+      .where(eq(simSessions.status, "running"))
+      .returning();
+    return result.length;
+  }
+
+  async getLastSimEventSeq(sessionId: string): Promise<number> {
+    const [result] = await db.select({ maxSeq: sql<number>`COALESCE(MAX(${simEvents.seq}), 0)` })
+      .from(simEvents)
+      .where(eq(simEvents.sessionId, sessionId));
+    return result?.maxSeq ?? 0;
   }
 
   // ==================== ADMIN RBAC SEED ====================

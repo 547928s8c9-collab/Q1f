@@ -1,0 +1,155 @@
+ROLE: Ты — Senior Backend Engineer в проекте ZEON (Node.js + TypeScript, Express, Postgres, Drizzle). Архитектура уже включает:
+- Таблицы `sim_sessions` и `sim_events` в `shared/schema.ts`
+- Симулятор `server/sim/runner.ts` (SessionRunnerManager + EventEmitter singleton `sessionRunner`)
+- SSE стрим: `GET /api/sim/sessions/:id/stream` (уже используется UI в `client/src/pages/live-sessions/session.tsx` с query `fromSeq`)
+- Market data слой: `server/marketData/loadCandles.ts` + кеш в `market_candles`
+- Storage abstraction: `server/storage.ts` с методами `getSimSession/createSimSession/insertSimEvent` и `getCandlesFromCache/upsertCandles`
+- Auth: `isAuthenticated` (Replit OIDC) + `getUserId(req)`
+
+Ограничения:
+- Один Node.js процесс (никаких воркеров/очередей/микросервисов)
+- Drizzle миграции через `npm run db:push` (drizzle-kit push), без ручных миграций
+- НЕ трогать деньги/ledger (`operations`, balances/vaults), симуляция не должна писать в финансовые таблицы
+
+ЦЕЛЬ ИТЕРАЦИИ B (SIMULATION CORE / REPLAY + LAGGED STREAM): сделать надёжное “проигрывание” свечей (OHLCV) как поток событий для симуляционных сессий, используя уже существующие `sim_sessions`, `sim_events`, `sessionRunner`, SSE и `loadCandles`.
+Результат итерации: пользователь может создать сим-сессию, старт/пауза/резюм, и получать события через SSE без потерь/дубликатов. Даже если клиент переподключился (fromSeq), он получает backlog из `sim_events` и продолжает стрим. Раннер хранит прогресс (cursor/seq) в БД и корректно переживает паузу/рестарт сервера (как минимум без “ложного running”).
+
+0) Recon (обязательное, кратко в отчёт):
+- Покажи текущую схему `sim_sessions` и `sim_events` из `shared/schema.ts` (колонки + типы + индексы).
+- Покажи текущую реализацию `server/sim/runner.ts` (как сейчас тикает, как пишет события, есть ли cursor/seq).
+- Найди в `server/routes.ts` существующие сим-эндпоинты `/api/sim/*` (create/start/pause/stop, если есть) и SSE handler `/api/sim/sessions/:id/stream`.
+- Подтверди, какой формат события ожидает фронт в `client/src/pages/live-sessions/session.tsx` (какие поля он читает: seq, ts, type, payload).
+
+1) Схема и инварианты (не создавать новые таблицы, использовать существующие):
+- Убедись, что `sim_events` обеспечивает строгий порядок:
+  - должен быть `seq` (int) и UNIQUE(`sessionId`,`seq`)
+  - индекс на (`sessionId`,`seq`) для быстрого backlog
+- Убедись, что в `sim_sessions` есть поля для состояния воспроизведения. Если каких-то нет — добавить их (аддитивно) в `shared/schema.ts` и применить `npm run db:push`:
+  - `status` (например: "created"|"running"|"paused"|"completed"|"error") — использовать те статусы, которые уже есть; если статусы уже реализованы иначе, подстроиться под существующее.
+  - `cursorMs` (bigint ms) — последняя обработанная свеча (openTimeMs)
+  - `lastSeq` (int) — последний записанный event seq
+  - `lagMs` (int) — default 900000
+  - `replayMsPerCandle` (int) — default 15000 (для wow-режима можно 1000–5000 в dev)
+  - `mode` (text) — "replay" по умолчанию (будущий "lagged_live" допускается, но сейчас достаточно "replay" + поддержка endMs=null как бесконечный lagged stream)
+  - `error` (text nullable)
+- Если добавляешь поля — не ломай существующие записи, ставь дефолты.
+
+2) Storage API (вписаться в `server/storage.ts`, не обходить его прямыми запросами из роутов/раннера):
+Расширь интерфейс `IStorage` и `DatabaseStorage` (если методов нет) следующими функциями:
+- `updateSimSession(sessionId, patch)` — обновление status/cursorMs/lastSeq/error/updatedAt
+- `transitionSimSessionStatus(sessionId, fromStatuses: string[], toStatus: string)` — атомарная смена статуса через UPDATE ... WHERE status IN (...) RETURNING (для защиты от double-start)
+- `getSimEvents(sessionId, fromSeq: number, limit: number)` — чтение backlog из `sim_events` ORDER BY seq ASC
+- `getLastSimEventSeq(sessionId)` — получить max(seq) (если lastSeq в сессии не гарантирован)
+- (опционально) `listSimSessions(userId, limit)` — для UI списка
+
+Важно: `insertSimEvent(sessionId, seq, ts, type, payload)` уже есть — обеспечить, что она не падает на JSONB/типах и пишет быстро.
+
+3) SessionRunnerManager hardening (server/sim/runner.ts):
+Цель: один sessionId = один активный таймер, тики через setTimeout (не setInterval), курсор и seq сохраняются в БД, события эмитятся в EventEmitter и пишутся в `sim_events`.
+
+Требования к раннеру:
+- Держать in-memory Map `activeSessions: Map<string, { timer?: NodeJS.Timeout }>` чтобы не было двух циклов на одну сессию.
+- tick loop должен быть управляемым: `setTimeout(nextTick, replayMsPerCandle)`; при pause/stop — clearTimeout и убрать из Map.
+- На старте/резюме:
+  1) атомарно перевести статус в "running" (через storage.transitionSimSessionStatus)
+  2) загрузить session из БД
+  3) восстановить `cursorMs` (если null — startMs)
+  4) восстановить `nextSeq` = (session.lastSeq ?? maxSeqFromDB ?? 0) + 1
+  5) эмитнуть status event ("running") и записать его в `sim_events`
+- На каждом тике:
+  1) пересчитать `endBoundMs`:
+     - если `session.endMs` задан: `endBoundMs = session.endMs`
+     - если `session.endMs` null: `endBoundMs = Date.now() - session.lagMs` (то есть бесконечный lagged stream)
+  2) получить следующую свечу (next candle) с `openTimeMs > cursorMs` и `openTimeMs <= endBoundMs`
+     - использовать `loadCandles` и/или `storage.getCandlesFromCache` (предпочтительно: небольшой window, чтобы не грузить гигантские массивы)
+     - если свечи нет:
+       - если `endMs` задан и cursorMs >= endMs -> завершить session (status="completed"), записать status event, stop
+       - если `endMs` НЕ задан (lagged stream) -> просто подождать и тикнуть позже (НЕ ставить error)
+  3) если свеча есть:
+     - сформировать событие типа `"candle"` (или тот type, который уже используется в вашей системе событий) с payload `{ candle }`
+     - вызвать `storage.insertSimEvent(sessionId, seq, candle.openTimeMs, type, payload)`
+     - обновить `sim_sessions.cursorMs = candle.openTimeMs` и `sim_sessions.lastSeq = seq`
+     - эмитнуть событие через EventEmitter: `sessionRunner.emit("event", sessionId, { seq, ts, type, payload })`
+     - `seq++`
+- Ошибки:
+  - при исключении в tick: поставить session status="error", заполнить error, записать status event, остановить раннер
+- Безопасность нагрузки:
+  - не делай tight-loop, если свечей нет — всегда ждать `replayMsPerCandle` или минимальный backoff (например 2–5s) в режиме lagged stream.
+
+4) SSE stream reliability (server/routes.ts, существующий endpoint):
+Сейчас SSE уже есть и клиент подключается с `?fromSeq=...`, но backlog должен реально работать.
+Обнови handler `GET /api/sim/sessions/:id/stream` так, чтобы:
+- Проверять доступ: session должен принадлежать текущему userId (из `getUserId(req)`), иначе 404/403
+- Прочитать `fromSeq` из query (default 0)
+- До подписки на EventEmitter:
+  - взять backlog из БД: `storage.getSimEvents(sessionId, fromSeq, limit=1000)` (и при необходимости батчами)
+  - отправить их в SSE клиенту в порядке seq ASC:
+    `res.write(`data: ${JSON.stringify(event)}\n\n`)`
+- Затем подписаться на live events `sessionRunner.on("event", onEvent)` и слать только события для нужного sessionId
+- Оставить heartbeat каждые 15s
+- На `close` обязательно `off` listener и clearInterval
+
+5) User API для управления сессиями (server/routes.ts, inline как принято):
+Добавь/доработай (если уже есть — привести к требованиям):
+- POST `/api/sim/sessions` (isAuthenticated)
+  body: `{ profileSlug: string, symbol: string, timeframe: string, startMs: number, endMs?: number|null, lagMs?: number, replayMsPerCandle?: number, mode?: "replay" }`
+  - валидация обязательных полей
+  - создать `sim_sessions` со status="created", cursorMs=null, lastSeq=0
+- POST `/api/sim/sessions/:id/start`
+  - проверить owner
+  - вызвать `sessionRunner.startSession(session, profileConfig)` ИЛИ новый метод `startSessionById(id)` (как у вас устроено)
+  - вернуть `{ success: true, data: session }`
+- POST `/api/sim/sessions/:id/pause`
+  - owner check
+  - `sessionRunner.pauseSession(id)` + update status="paused" (если runner сам не обновляет)
+- POST `/api/sim/sessions/:id/resume`
+  - owner check
+  - `sessionRunner.resumeSession(id)` (атомарно статус -> running)
+- POST `/api/sim/sessions/:id/stop`
+  - owner check
+  - `sessionRunner.stopSession(id)` + статус "completed" или "stopped" (использовать то, что уже принято)
+- GET `/api/sim/sessions/:id`
+  - owner check
+  - вернуть session + базовую мету (status, cursorMs, lastSeq, error)
+- (опционально для отладки) GET `/api/sim/sessions/:id/events?fromSeq=...&limit=...`
+  - owner check
+  - вернуть backlog из БД (полезно для диагностики)
+
+ВАЖНО: не вводи новый envelope ok/fail для user API — придерживайся текущего стиля user API в routes.ts:
+- success: `res.json({ success: true, data: ... })`
+- error: `res.status(400|404|403).json({ error: "..." })`
+
+6) Server restart safety:
+Так как раннер in-process, после рестарта активные таймеры исчезнут.
+Сделай безопасное поведение при старте сервера (внутри `registerRoutes` или рядом с init раннера):
+- Найти в БД все sim_sessions со статусом "running" и перевести в "paused" (или "created") чтобы не было ложного "running" без реально работающего таймера.
+- Это действие делать один раз при boot (и логировать сколько сессий сброшено).
+
+7) Selftest (обязателен, быстрый и воспроизводимый):
+Добавь `server/sim/selftest.ts` (запуск через `tsx`), который:
+- Создаёт сим-сессию на `BTCUSDT`, `15m`, диапазон 1 день (startMs/endMs), replayMsPerCandle=200–500ms
+- Стартует сессию
+- Ждёт ~2–3 секунды
+- Проверяет через `storage.getSimEvents(sessionId, fromSeq=0)` что появились события типа candle и что seq возрастают
+- Пауза -> подождать -> убедиться, что новых событий не добавилось
+- Resume -> подождать -> убедиться, что события продолжаются с корректным seq
+В отчёте дай точную команду запуска selftest.
+
+8) Acceptance criteria:
+- Создание session -> старт -> события candle пишутся в `sim_events` и стримятся по SSE
+- SSE с `fromSeq` реально догружает backlog и потом продолжает live (без пропусков)
+- Дубликатов по (sessionId, seq) нет, seq строго возрастает
+- Pause реально останавливает генерацию событий, resume продолжает
+- endMs задан -> по достижении диапазона статус становится completed и раннер останавливается
+- endMs null -> сессия продолжает “lagged stream” (ожидает новые свечи), не падает в error при отсутствии новых данных
+- После рестарта сервера нет сессий “running” без активного раннера (они сбрасываются в paused/created)
+- Никаких записей в финансовые таблицы (`operations` и т.п.)
+
+DELIVERABLES:
+- Обновления в `shared/schema.ts` (только аддитивные поля/индексы, если нужно) + `npm run db:push`
+- Доработки `server/sim/runner.ts` (hardening + cursor/seq persistence + setTimeout loop)
+- Расширение `server/storage.ts` (методы update/transition/events listing)
+- Доработка SSE handler в `server/routes.ts` (backlog по fromSeq + owner check)
+- Добавление/доработка user API `/api/sim/sessions/*` (start/pause/resume/stop/get)
+- `server/sim/selftest.ts`
+- Короткий отчёт: что сделано, как проверить (curl + selftest), какие статусы и поля используются

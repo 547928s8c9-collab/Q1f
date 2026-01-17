@@ -897,6 +897,13 @@ export const SimSessionStatus = {
 
 export type SimSessionStatusType = typeof SimSessionStatus[keyof typeof SimSessionStatus];
 
+export const SimSessionMode = {
+  REPLAY: "replay",
+  LAGGED_LIVE: "lagged_live",
+} as const;
+
+export type SimSessionModeType = typeof SimSessionMode[keyof typeof SimSessionMode];
+
 export const simSessions = pgTable("sim_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -904,12 +911,16 @@ export const simSessions = pgTable("sim_sessions", {
   symbol: text("symbol").notNull(),
   timeframe: text("timeframe").notNull(),
   startMs: bigint("start_ms", { mode: "number" }).notNull(),
-  endMs: bigint("end_ms", { mode: "number" }).notNull(),
+  endMs: bigint("end_ms", { mode: "number" }),
   speed: integer("speed").notNull().default(1),
   status: text("status").notNull().default("created"),
   configOverrides: jsonb("config_overrides").$type<Partial<StrategyProfileConfig>>(),
   errorMessage: text("error_message"),
   lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0),
+  cursorMs: bigint("cursor_ms", { mode: "number" }),
+  lagMs: integer("lag_ms").notNull().default(900000),
+  replayMsPerCandle: integer("replay_ms_per_candle").notNull().default(15000),
+  mode: text("mode").notNull().default("replay"),
   idempotencyKey: varchar("idempotency_key"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
