@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { errorHandler } from "./middleware/errorHandler";
 import { normalizePath } from "./metrics/normalizePath";
+import { initTwoFactorCrypto } from "./lib/twofactorCrypto";
 
 const app = express();
 const httpServer = createServer(app);
@@ -193,6 +194,9 @@ app.get("/api/metrics", (req, res) => {
 });
 
 (async () => {
+  // Initialize 2FA encryption
+  initTwoFactorCrypto();
+
   await registerRoutes(httpServer, app);
 
   const resetCount = await storage.resetRunningSessions();
