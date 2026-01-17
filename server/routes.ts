@@ -1310,8 +1310,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Insufficient balance (including network fee)" });
       }
 
-      // ATOMIC TRANSACTION: balance deduct + operation + audit
-      const operation = await withTransaction(async (tx) => {
+      // ATOMIC TRANSACTION: balance deduct + operation + withdrawal + audit
+      const { operation, withdrawal } = await withTransaction(async (tx) => {
         // Re-fetch balance within transaction
         const [currentBalance] = await tx.select().from(balances)
           .where(and(eq(balances.userId, userId), eq(balances.asset, "USDT")));
@@ -1329,15 +1329,15 @@ export async function registerRoutes(
           .set({ available: newAvailable.toString(), updatedAt: new Date() })
           .where(eq(balances.id, currentBalance.id));
 
-        // Create withdrawal operation
+        // Create withdrawal operation with pending status (no txHash yet)
         const [op] = await tx.insert(operations).values({
           userId,
           type: "WITHDRAW_USDT",
-          status: "completed",
+          status: "pending",
           asset: "USDT",
           amount,
           fee,
-          txHash: `0x${randomUUID().replace(/-/g, "")}`,
+          txHash: null,
           providerRef: null,
           strategyId: null,
           strategyName: null,
@@ -1347,16 +1347,28 @@ export async function registerRoutes(
           reason: null,
         }).returning();
 
+        // Create withdrawal record with PENDING_REVIEW status, linked to operation
+        const [wd] = await tx.insert(withdrawals).values({
+          userId,
+          amountMinor: amount,
+          feeMinor: fee,
+          currency: "USDT",
+          address,
+          status: "PENDING_REVIEW",
+          operationId: op.id,
+        }).returning();
+
         // Audit log (no address for privacy)
         await tx.insert(auditLogs).values({
           userId,
           event: "WITHDRAW_USDT",
-          resourceType: "operation",
-          resourceId: op.id,
+          resourceType: "withdrawal",
+          resourceId: wd.id,
           details: {
             amountMinor: amount,
             feeMinor: fee,
             asset: "USDT",
+            operationId: op.id,
             idempotencyKey: req.headers["idempotency-key"] || null,
             requestId: req.requestId,
           },
@@ -1364,10 +1376,10 @@ export async function registerRoutes(
           userAgent: req.headers["user-agent"] || null,
         });
 
-        return op;
+        return { operation: op, withdrawal: wd };
       });
 
-      const responseBody = { success: true, operation: { id: operation.id } };
+      const responseBody = { success: true, withdrawalId: withdrawal.id, operationId: operation.id };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
       }
