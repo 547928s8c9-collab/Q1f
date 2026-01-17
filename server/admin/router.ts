@@ -252,6 +252,104 @@ adminRouter.get("/users/:id", requirePermission("users.read"), async (req, res) 
   }
 });
 
+adminRouter.post(
+  "/users/:id/block",
+  requirePermission("users.update"),
+  requireIdempotencyKey,
+  wrapMutation("user.block", async (req, res, context) => {
+    const userId = req.params.id;
+    const { reason } = req.body || {};
+
+    if (!reason || typeof reason !== "string" || reason.trim().length === 0) {
+      return {
+        status: 400,
+        body: { ok: false, error: { code: "VALIDATION_ERROR", message: "Reason is required" }, requestId: context.requestId },
+      };
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: "NOT_FOUND", message: "User not found" }, requestId: context.requestId },
+      };
+    }
+
+    if (user.isBlocked) {
+      return {
+        status: 400,
+        body: { ok: false, error: { code: "VALIDATION_ERROR", message: "User is already blocked" }, requestId: context.requestId },
+      };
+    }
+
+    const beforeJson = { isBlocked: user.isBlocked, blockedAt: user.blockedAt, blockedReason: user.blockedReason };
+    const now = new Date();
+
+    await db.update(users).set({
+      isBlocked: true,
+      blockedAt: now,
+      blockedReason: reason.trim(),
+      updatedAt: now,
+    }).where(eq(users.id, userId));
+
+    const afterJson = { isBlocked: true, blockedAt: now.toISOString(), blockedReason: reason.trim() };
+
+    return {
+      status: 200,
+      body: { ok: true, data: { userId, blocked: true, blockedAt: now.toISOString(), reason: reason.trim() }, requestId: context.requestId },
+      targetType: "user",
+      targetId: userId,
+      beforeJson,
+      afterJson,
+    };
+  })
+);
+
+adminRouter.post(
+  "/users/:id/unblock",
+  requirePermission("users.update"),
+  requireIdempotencyKey,
+  wrapMutation("user.unblock", async (req, res, context) => {
+    const userId = req.params.id;
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) {
+      return {
+        status: 404,
+        body: { ok: false, error: { code: "NOT_FOUND", message: "User not found" }, requestId: context.requestId },
+      };
+    }
+
+    if (!user.isBlocked) {
+      return {
+        status: 400,
+        body: { ok: false, error: { code: "VALIDATION_ERROR", message: "User is not blocked" }, requestId: context.requestId },
+      };
+    }
+
+    const beforeJson = { isBlocked: user.isBlocked, blockedAt: user.blockedAt, blockedReason: user.blockedReason };
+    const now = new Date();
+
+    await db.update(users).set({
+      isBlocked: false,
+      blockedAt: null,
+      blockedReason: null,
+      updatedAt: now,
+    }).where(eq(users.id, userId));
+
+    const afterJson = { isBlocked: false, blockedAt: null, blockedReason: null };
+
+    return {
+      status: 200,
+      body: { ok: true, data: { userId, blocked: false }, requestId: context.requestId },
+      targetType: "user",
+      targetId: userId,
+      beforeJson,
+      afterJson,
+    };
+  })
+);
+
 adminRouter.get("/operations", requirePermission("money.read"), async (req, res) => {
   try {
     const query = AdminListQuery.safeParse(req.query);
