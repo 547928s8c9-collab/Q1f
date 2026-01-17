@@ -63,6 +63,9 @@ import {
   type InsertKycApplicant,
   type Notification,
   type InsertNotification,
+  type NotificationPreferences,
+  type UpdateNotificationPreferences,
+  notificationPreferences,
   type IdempotencyKey,
   type InsertIdempotencyKey,
   type Candle,
@@ -152,6 +155,10 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification | undefined>;
   markAllNotificationsRead(userId: string): Promise<void>;
+
+  // Notification Preferences
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences>;
+  updateNotificationPreferences(userId: string, patch: UpdateNotificationPreferences): Promise<NotificationPreferences>;
 
   // Payout Instructions
   getPayoutInstruction(userId: string, strategyId: string): Promise<PayoutInstruction | undefined>;
@@ -853,6 +860,33 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications)
       .set({ isRead: true })
       .where(eq(notifications.userId, userId));
+  }
+
+  // Notification Preferences
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+    const [existing] = await db.select().from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    
+    if (existing) {
+      return existing;
+    }
+
+    // Create default preferences for new user
+    const [created] = await db.insert(notificationPreferences)
+      .values({ userId })
+      .returning();
+    return created;
+  }
+
+  async updateNotificationPreferences(userId: string, patch: UpdateNotificationPreferences): Promise<NotificationPreferences> {
+    // Ensure preferences exist first
+    await this.getNotificationPreferences(userId);
+    
+    const [updated] = await db.update(notificationPreferences)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(notificationPreferences.userId, userId))
+      .returning();
+    return updated;
   }
 
   // Payout Instructions

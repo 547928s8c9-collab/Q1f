@@ -429,6 +429,29 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+// ==================== NOTIFICATION PREFERENCES ====================
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+  emailEnabled: boolean("email_enabled").notNull().default(false),
+  telegramEnabled: boolean("telegram_enabled").notNull().default(false),
+  marketingEnabled: boolean("marketing_enabled").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({ createdAt: true, updatedAt: true });
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+export const updateNotificationPreferencesSchema = z.object({
+  inAppEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  telegramEnabled: z.boolean().optional(),
+  marketingEnabled: z.boolean().optional(),
+});
+export type UpdateNotificationPreferences = z.infer<typeof updateNotificationPreferencesSchema>;
+
 // ==================== IDEMPOTENCY KEYS ====================
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

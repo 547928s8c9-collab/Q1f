@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import type { RouteDeps } from "./types";
+import { updateNotificationPreferencesSchema } from "@shared/schema";
 
 export function registerNotificationsRoutes({ app, isAuthenticated, devOnly, getUserId }: RouteDeps): void {
   // GET /api/notifications (protected) - returns InboxCard format
@@ -143,6 +144,36 @@ export function registerNotificationsRoutes({ app, isAuthenticated, devOnly, get
       res.json({ success: true, count: demoNotifications.length });
     } catch (error) {
       console.error("Seed notifications error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/notification-preferences (protected)
+  app.get("/api/notification-preferences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const preferences = await storage.getNotificationPreferences(userId);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Get notification preferences error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // PUT /api/notification-preferences (protected)
+  app.put("/api/notification-preferences", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const parsed = updateNotificationPreferencesSchema.safeParse(req.body);
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+      }
+
+      const updated = await storage.updateNotificationPreferences(userId, parsed.data);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update notification preferences error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });

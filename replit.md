@@ -61,6 +61,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features
 - **Notifications**: Real-time system with unread count, individual/bulk mark-as-read, and various notification types (transaction, security, kyc, system).
+- **Notification Preferences**: Per-user settings for notification channels (in-app, email, Telegram, marketing). Table: `notification_preferences` with auto-created defaults (inAppEnabled: true, others false). Endpoints: `GET/PUT /api/notification-preferences`.
 - **Activity Export**: CSV export of transaction history with filtering options.
 - **Monthly Statements**: PDF generation of monthly summaries (Total In, Total Out, Fees, Net Change) viewable and downloadable.
 - **Status Page**: System health monitoring (`/status`) with component-level status (Deposits, Withdrawals, Investment Strategies, API Services) and configurable banners.
