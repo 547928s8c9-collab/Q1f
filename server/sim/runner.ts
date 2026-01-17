@@ -1,5 +1,5 @@
-import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig, SimSessionModeType } from "@shared/schema";
-import { SimSessionStatus, SimSessionMode } from "@shared/schema";
+import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig, SimSessionModeType, SimTradingStatusType } from "@shared/schema";
+import { SimSessionStatus, SimSessionMode, SimTradingStatus } from "@shared/schema";
 import type { StrategyEvent, StrategyConfig, Timeframe } from "../strategies/types";
 import { createStrategy } from "../strategies/factory";
 import { loadCandles } from "../marketData/loadCandles";
@@ -32,6 +32,8 @@ interface RunnerState {
   isStopped: boolean;
   tickTimer: ReturnType<typeof setTimeout> | null;
   mode: SimSessionModeType;
+  tradingStatus: SimTradingStatusType;
+  tradingPausedReason: string | null;
 }
 
 const CANDLE_BATCH_SIZE = 100;
@@ -56,6 +58,18 @@ class SessionRunnerManager extends EventEmitter {
 
   setStatusChangeCallback(cb: (sessionId: string, status: SimSessionStatusType, errorMessage?: string) => Promise<void>) {
     this.onStatusChangeCallback = cb;
+  }
+
+  private async updateTradingStatus(state: RunnerState, status: SimTradingStatusType, reason: string | null) {
+    if (state.tradingStatus === status && state.tradingPausedReason === reason) {
+      return;
+    }
+    state.tradingStatus = status;
+    state.tradingPausedReason = reason;
+    await storage.updateSimSession(state.session.id, {
+      tradingStatus: status,
+      tradingPausedReason: reason,
+    });
   }
 
   async startSession(
@@ -89,7 +103,10 @@ class SessionRunnerManager extends EventEmitter {
       fetchEndMs = session.endMs ?? (session.startMs + tfMs * CANDLE_BATCH_SIZE);
     }
 
-    let candles: Candle[];
+    let candles: Candle[] = [];
+    let tradingStatus: SimTradingStatusType = SimTradingStatus.ACTIVE;
+    let tradingPausedReason: string | null = null;
+
     try {
       const result = await loadCandles({
         symbol: session.symbol,
@@ -97,27 +114,37 @@ class SessionRunnerManager extends EventEmitter {
         startMs: initialCursorMs,
         endMs: Math.min(fetchEndMs, initialCursorMs + tfMs * CANDLE_BATCH_SIZE),
       });
-      
-      if (result.gaps && result.gaps.length > 0) {
-        const errorMessage = `Data gaps detected: ${result.gaps.length} gaps found`;
-        await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
-        this.emit("statusChange", session.id, SimSessionStatus.FAILED);
-        return { success: false, error: errorMessage };
-      }
 
       candles = result.candles;
-      
-      if (candles.length < config.minBarsWarmup + 10) {
-        const errorMessage = `Insufficient candles: ${candles.length} < ${config.minBarsWarmup + 10} required`;
+
+      if (mode !== SimSessionMode.LAGGED_LIVE) {
+        if (result.gaps && result.gaps.length > 0) {
+          const errorMessage = `Data gaps detected: ${result.gaps.length} gaps found`;
+          await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
+          this.emit("statusChange", session.id, SimSessionStatus.FAILED);
+          return { success: false, error: errorMessage };
+        }
+
+        if (candles.length < config.minBarsWarmup + 10) {
+          const errorMessage = `Insufficient candles: ${candles.length} < ${config.minBarsWarmup + 10} required`;
+          await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
+          this.emit("statusChange", session.id, SimSessionStatus.FAILED);
+          return { success: false, error: errorMessage };
+        }
+      } else {
+        tradingStatus = SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY;
+        tradingPausedReason = "Waiting for history to warm up strategy";
+      }
+    } catch (err) {
+      if (mode !== SimSessionMode.LAGGED_LIVE) {
+        const errorMessage = err instanceof Error ? err.message : "Failed to load candles";
         await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
         this.emit("statusChange", session.id, SimSessionStatus.FAILED);
         return { success: false, error: errorMessage };
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to load candles";
-      await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
-      this.emit("statusChange", session.id, SimSessionStatus.FAILED);
-      return { success: false, error: errorMessage };
+      tradingStatus = SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY;
+      tradingPausedReason = "History unavailable, waiting for data";
+      candles = [];
     }
 
     const strategy = createStrategy(
@@ -140,9 +167,16 @@ class SessionRunnerManager extends EventEmitter {
       isStopped: false,
       tickTimer: null,
       mode,
+      tradingStatus,
+      tradingPausedReason,
     };
 
     this.runners.set(session.id, state);
+
+    await storage.updateSimSession(session.id, {
+      tradingStatus,
+      tradingPausedReason,
+    });
 
     await this.onStatusChangeCallback?.(session.id, SimSessionStatus.RUNNING);
     this.emit("statusChange", session.id, SimSessionStatus.RUNNING);
@@ -181,6 +215,11 @@ class SessionRunnerManager extends EventEmitter {
       const needsMoreCandles = await this.loadMoreCandles(state);
       if (!needsMoreCandles) {
         if (state.mode === SimSessionMode.LAGGED_LIVE) {
+          await this.updateTradingStatus(
+            state,
+            SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY,
+            "Waiting for history to warm up strategy"
+          );
           this.scheduleTick(sessionId);
           return;
         }
@@ -217,6 +256,16 @@ class SessionRunnerManager extends EventEmitter {
 
     state.candleIndex++;
     state.cursorMs = candle.ts + tfMs;
+
+    if (state.mode === SimSessionMode.LAGGED_LIVE) {
+      const strategyState = state.strategy?.getState();
+      const hasWarmup = (strategyState?.barIndex ?? 0) >= state.config.minBarsWarmup;
+      await this.updateTradingStatus(
+        state,
+        hasWarmup ? SimTradingStatus.ACTIVE : SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY,
+        hasWarmup ? null : "Waiting for history to warm up strategy"
+      );
+    }
 
     await storage.updateSimSession(sessionId, { 
       cursorMs: state.cursorMs,

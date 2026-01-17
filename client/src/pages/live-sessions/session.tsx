@@ -14,7 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { 
   Activity, Play, Pause, Square, Clock, TrendingUp,
   Wifi, WifiOff, Loader2,
-  ArrowUpRight, CircleDot
+  ArrowUpRight, CircleDot, AlertTriangle
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -22,6 +22,8 @@ interface LiveSession {
   id: string;
   profileSlug: string;
   status: "created" | "running" | "paused" | "stopped" | "finished" | "failed";
+  tradingStatus?: "active" | "paused_insufficient_history";
+  tradingPausedReason?: string | null;
   startMs: number;
   createdAt: string;
   timeframe: string;
@@ -240,7 +242,6 @@ export default function LiveSessionView() {
   const [events, setEvents] = useState<SimEvent[]>([]);
   const [equityHistory, setEquityHistory] = useState<Array<{ value: number }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
-  const [currentCandle, setCurrentCandle] = useState<{ ts: number; close: number } | null>(null);
   const [marketStatus, setMarketStatus] = useState<ConnectionStatus>("disconnected");
   const [latestQuote, setLatestQuote] = useState<MarketQuote | null>(null);
   const [candles, setCandles] = useState<MarketCandle[]>([]);
@@ -249,6 +250,7 @@ export default function LiveSessionView() {
   const marketSourceRef = useRef<EventSource | null>(null);
   const lastSeqRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const marketReconnectRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: session, isLoading, error, refetch } = useQuery<LiveSession>({
     queryKey: ["/api/live-sessions", id],
@@ -265,23 +267,21 @@ export default function LiveSessionView() {
 
   const symbolsParam = session?.symbols?.join(",") || "";
   const primarySymbol = session?.symbols?.[0];
+  const chartTimeframe = "1m";
 
-  const { data: quoteSnapshot } = useQuery<MarketQuotesResponse>({
+  const { data: quoteSnapshot, refetch: refetchQuotes } = useQuery<MarketQuotesResponse>({
     queryKey: ["/api/market/quotes", { symbols: symbolsParam }],
     enabled: !!symbolsParam,
     refetchInterval: false,
   });
 
   const { data: candleSnapshot } = useQuery<MarketCandlesResponse>({
-    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: session?.timeframe, limit: 120 }],
+    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: chartTimeframe, limit: 120 }],
     enabled: !!primarySymbol && !!session?.timeframe,
     refetchInterval: false,
   });
 
-  const timeframeMs = useMemo(() => {
-    if (!session?.timeframe) return 900_000;
-    return TIMEFRAME_MS[session.timeframe] || 900_000;
-  }, [session?.timeframe]);
+  const timeframeMs = useMemo(() => TIMEFRAME_MS[chartTimeframe] || 60_000, [chartTimeframe]);
 
   const applyQuoteToCandles = useCallback((prev: MarketCandle[], quote: MarketQuote) => {
     if (!prev || prev.length === 0) return prev;
@@ -341,16 +341,6 @@ export default function LiveSessionView() {
 
         const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
 
-        if (event.type === "candle") {
-          const candle = data.candle as { close?: number } | undefined;
-          if (candle?.close !== undefined) {
-            setCurrentCandle({
-              ts: event.ts,
-              close: candle.close,
-            });
-          }
-        }
-
         if (event.type === "equity") {
           const equity = data.equity as number;
           if (typeof equity === "number") {
@@ -382,6 +372,48 @@ export default function LiveSessionView() {
       }
     };
   }, [id, session, refetch]);
+
+  const connectMarketSSE = useCallback(() => {
+    if (!session || session.symbols.length === 0) return;
+
+    if (marketSourceRef.current) {
+      marketSourceRef.current.close();
+    }
+
+    setMarketStatus("connecting");
+    const streamUrl = `/api/market/stream?symbols=${encodeURIComponent(session.symbols.join(","))}`;
+    const es = new EventSource(streamUrl, { withCredentials: true });
+    marketSourceRef.current = es;
+
+    es.onopen = () => {
+      setMarketStatus("connected");
+      refetchQuotes();
+    };
+
+    es.addEventListener("quote", (e) => {
+      try {
+        const quote = JSON.parse((e as MessageEvent).data) as MarketQuote;
+        setLatestQuote(quote);
+        setCandles((prev) => applyQuoteToCandles(prev, quote));
+      } catch (err) {
+        console.error("Failed to parse market quote:", err);
+      }
+    });
+
+    es.onerror = () => {
+      setMarketStatus("disconnected");
+      es.close();
+      marketSourceRef.current = null;
+
+      if (!marketReconnectRef.current) {
+        setMarketStatus("reconnecting");
+        marketReconnectRef.current = setTimeout(() => {
+          marketReconnectRef.current = null;
+          connectMarketSSE();
+        }, 3000);
+      }
+    };
+  }, [applyQuoteToCandles, refetchQuotes, session]);
 
   useEffect(() => {
     const shouldConnect = session && (session.status === "running" || session.status === "paused" || session.status === "created");
@@ -421,40 +453,19 @@ export default function LiveSessionView() {
 
   useEffect(() => {
     if (!session || session.symbols.length === 0) return;
-    if (marketSourceRef.current) {
-      marketSourceRef.current.close();
-    }
-
-    setMarketStatus("connecting");
-    const streamUrl = `/api/market/stream?symbols=${encodeURIComponent(session.symbols.join(","))}`;
-    const es = new EventSource(streamUrl, { withCredentials: true });
-    marketSourceRef.current = es;
-
-    es.onopen = () => {
-      setMarketStatus("connected");
-    };
-
-    es.addEventListener("quote", (e) => {
-      try {
-        const quote = JSON.parse((e as MessageEvent).data) as MarketQuote;
-        setLatestQuote(quote);
-        setCandles((prev) => applyQuoteToCandles(prev, quote));
-      } catch (err) {
-        console.error("Failed to parse market quote:", err);
-      }
-    });
-
-    es.onerror = () => {
-      setMarketStatus("disconnected");
-      es.close();
-      marketSourceRef.current = null;
-    };
+    connectMarketSSE();
 
     return () => {
-      es.close();
-      marketSourceRef.current = null;
+      if (marketSourceRef.current) {
+        marketSourceRef.current.close();
+        marketSourceRef.current = null;
+      }
+      if (marketReconnectRef.current) {
+        clearTimeout(marketReconnectRef.current);
+        marketReconnectRef.current = null;
+      }
     };
-  }, [session?.id, session?.symbols?.join(","), applyQuoteToCandles]);
+  }, [connectMarketSSE, session?.id, session?.symbols?.join(",")]);
 
   const controlMutation = useMutation({
     mutationFn: async (action: "pause" | "resume" | "stop") => {
@@ -538,6 +549,7 @@ export default function LiveSessionView() {
   const statusCfg = statusConfig[session.status] || statusConfig.created;
   const isActive = session.status === "running" || session.status === "paused" || session.status === "created";
   const isTerminal = session.status === "stopped" || session.status === "finished" || session.status === "failed";
+  const tradingPaused = session.tradingStatus === "paused_insufficient_history";
   
   const equityPositive = equityHistory.length >= 2 
     ? equityHistory[equityHistory.length - 1].value >= equityHistory[0].value 
@@ -567,6 +579,17 @@ export default function LiveSessionView() {
         }
       />
 
+      {tradingPaused && (
+        <Card className="p-4 mb-4 border-warning/40 bg-warning/10">
+          <div className="flex items-center gap-2 text-sm text-warning">
+            <AlertTriangle className="w-4 h-4" />
+            <span>
+              Trading paused — {session.tradingPausedReason || "loading history and warming up strategy"}
+            </span>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <Card className="p-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -592,7 +615,7 @@ export default function LiveSessionView() {
               size="sm"
               icon={marketStatus === "connected" ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
             >
-              {marketStatus === "connected" ? "Feed" : "Offline"}
+              {marketStatus === "connected" ? "Feed" : marketStatus === "reconnecting" ? "Reconnecting..." : "Offline"}
             </Chip>
           </div>
           <p className="text-lg font-semibold tabular-nums">
@@ -615,7 +638,7 @@ export default function LiveSessionView() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Market Candles</h3>
               <span className="text-xs text-muted-foreground">
-                {primarySymbol || "—"} · {session.timeframe}
+                {primarySymbol || "—"} · {chartTimeframe} feed
               </span>
             </div>
             <CandleChart candles={candles} />

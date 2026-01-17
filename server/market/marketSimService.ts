@@ -11,6 +11,15 @@ export interface QuoteUpdate {
   price: number;
 }
 
+type QuoteMode = "candle" | "synthetic";
+
+interface SymbolState {
+  lastPrice: number | null;
+  lastTs: number;
+  driftSeed: number;
+  mode: QuoteMode;
+}
+
 interface CandleCacheEntry {
   candleStart: number;
   candle: Candle;
@@ -19,6 +28,8 @@ interface CandleCacheEntry {
 const ONE_MINUTE_MS = 60_000;
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "ADAUSDT", "TRXUSDT"];
 const PERSIST_INTERVAL_MS = 5_000;
+const DEFAULT_START_PRICE = 100;
+const MAX_PCT_MOVE_PER_SEC = 0.0015;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -29,6 +40,7 @@ class MarketSimService extends EventEmitter {
   private symbols: string[] = [];
   private quotes = new Map<string, QuoteUpdate>();
   private candleCache = new Map<string, CandleCacheEntry>();
+  private symbolState = new Map<string, SymbolState>();
   private interval: NodeJS.Timeout | null = null;
   private lastPersistAt = 0;
 
@@ -49,6 +61,33 @@ class MarketSimService extends EventEmitter {
     return this.symbols.slice();
   }
 
+  ensureSymbols(symbols: string[]): void {
+    let added = false;
+    for (const raw of symbols) {
+      const symbol = normalizeSymbol(raw);
+      if (!symbol) continue;
+      if (!this.symbols.includes(symbol)) {
+        this.symbols.push(symbol);
+        added = true;
+      }
+      if (!this.symbolState.has(symbol)) {
+        this.symbolState.set(symbol, {
+          lastPrice: null,
+          lastTs: 0,
+          driftSeed: Math.random() * 2 - 1,
+          mode: "synthetic",
+        });
+        added = true;
+      }
+    }
+
+    if (added && this.started) {
+      this.tick().catch((error) => {
+        console.error("[marketSimService] tick error after adding symbols:", error);
+      });
+    }
+  }
+
   getLatestQuotes(symbols?: string[]): QuoteUpdate[] {
     if (!symbols || symbols.length === 0) {
       return Array.from(this.quotes.values());
@@ -61,6 +100,11 @@ class MarketSimService extends EventEmitter {
 
   getLatestQuote(symbol: string): QuoteUpdate | undefined {
     return this.quotes.get(normalizeSymbol(symbol));
+  }
+
+  getLastKnownPrice(symbol: string): number | null {
+    const normalized = normalizeSymbol(symbol);
+    return this.symbolState.get(normalized)?.lastPrice ?? null;
   }
 
   private async loadSymbols(): Promise<void> {
@@ -82,6 +126,17 @@ class MarketSimService extends EventEmitter {
     if (this.symbols.length === 0) {
       this.symbols = DEFAULT_SYMBOLS;
     }
+
+    for (const symbol of this.symbols) {
+      if (!this.symbolState.has(symbol)) {
+        this.symbolState.set(symbol, {
+          lastPrice: null,
+          lastTs: 0,
+          driftSeed: Math.random() * 2 - 1,
+          mode: "synthetic",
+        });
+      }
+    }
   }
 
   private async tick(): Promise<void> {
@@ -91,23 +146,39 @@ class MarketSimService extends EventEmitter {
     const quotesToPersist: QuoteUpdate[] = [];
 
     for (const symbol of this.symbols) {
+      const state = this.getOrCreateState(symbol);
+      let price: number | null = null;
+      let mode: QuoteMode = "synthetic";
+
       try {
         const candle = await this.getCandleForSymbol(symbol, simNow);
-        if (!candle) continue;
-
-        const price = this.computePrice(candle, simNow);
-        const update: QuoteUpdate = {
-          symbol,
-          ts: simNow,
-          price,
-        };
-
-        this.quotes.set(symbol, update);
-        quotesToPersist.push(update);
-        this.emit("quote", update);
+        if (candle) {
+          price = this.computePrice(candle, simNow);
+          mode = "candle";
+        }
       } catch (error) {
-        console.error(`[marketSimService] quote update failed for ${symbol}:`, error);
+        console.error(`[marketSimService] candle lookup failed for ${symbol}:`, error);
       }
+
+      if (price === null) {
+        const fallback = await this.getFallbackPrice(symbol, state);
+        price = this.computeSyntheticPrice(state, simNow, fallback);
+        mode = "synthetic";
+      }
+
+      state.lastPrice = price;
+      state.lastTs = simNow;
+      state.mode = mode;
+
+      const update: QuoteUpdate = {
+        symbol,
+        ts: simNow,
+        price,
+      };
+
+      this.quotes.set(symbol, update);
+      quotesToPersist.push(update);
+      this.emit("quote", update);
     }
 
     const now = Date.now();
@@ -145,6 +216,44 @@ class MarketSimService extends EventEmitter {
 
     this.candleCache.set(symbol, { candleStart, candle });
     return candle;
+  }
+
+  private getOrCreateState(symbol: string): SymbolState {
+    const normalized = normalizeSymbol(symbol);
+    const existing = this.symbolState.get(normalized);
+    if (existing) return existing;
+
+    const created: SymbolState = {
+      lastPrice: null,
+      lastTs: 0,
+      driftSeed: Math.random() * 2 - 1,
+      mode: "synthetic",
+    };
+    this.symbolState.set(normalized, created);
+    return created;
+  }
+
+  private async getFallbackPrice(symbol: string, state: SymbolState): Promise<number> {
+    if (state.lastPrice && Number.isFinite(state.lastPrice)) {
+      return state.lastPrice;
+    }
+
+    const latest = await storage.getLatestMarketCandle(normalizeSymbol(symbol));
+    if (latest?.close && Number.isFinite(latest.close)) {
+      return latest.close;
+    }
+
+    return DEFAULT_START_PRICE;
+  }
+
+  private computeSyntheticPrice(state: SymbolState, simNow: number, seedPrice: number): number {
+    const basePrice = seedPrice > 0 ? seedPrice : DEFAULT_START_PRICE;
+    const elapsedSec = Math.max(1, (simNow - (state.lastTs || simNow)) / 1000);
+    const maxMove = MAX_PCT_MOVE_PER_SEC * elapsedSec;
+    const jitter = (Math.random() * 2 - 1) * maxMove;
+    const drift = state.driftSeed * maxMove * 0.2;
+    const pctMove = clamp(jitter + drift, -maxMove, maxMove);
+    return Math.max(0.0001, basePrice * (1 + pctMove));
   }
 
   private computePrice(candle: Candle, simNow: number): number {

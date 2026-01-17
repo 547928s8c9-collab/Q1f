@@ -182,6 +182,7 @@ export interface IStorage {
   getCandlesFromCache(exchange: string, symbol: string, timeframe: string, startMs: number, endMs: number): Promise<Candle[]>;
   upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void>;
   getMarketCandleBounds(exchange?: string, symbol?: string, timeframe?: string): Promise<{ minTs: number | null; maxTs: number | null }>;
+  getLatestMarketCandle(symbol: string): Promise<Candle | null>;
 
   // Market Live Quotes
   getMarketLiveQuotes(symbols?: string[]): Promise<{ symbol: string; ts: number; price: string }[]>;
@@ -1045,6 +1046,18 @@ export class DatabaseStorage implements IStorage {
     const minTs = row?.minTs !== null && row?.minTs !== undefined ? Number(row.minTs) : null;
     const maxTs = row?.maxTs !== null && row?.maxTs !== undefined ? Number(row.maxTs) : null;
     return { minTs: Number.isFinite(minTs as number) ? minTs : null, maxTs: Number.isFinite(maxTs as number) ? maxTs : null };
+  }
+
+  async getLatestMarketCandle(symbol: string): Promise<Candle | null> {
+    const [row] = await db
+      .select()
+      .from(marketCandles)
+      .where(eq(marketCandles.symbol, symbol))
+      .orderBy(desc(marketCandles.ts))
+      .limit(1);
+
+    if (!row) return null;
+    return dbRowToCandle(row);
   }
 
   async getMarketLiveQuotes(symbols?: string[]): Promise<{ symbol: string; ts: number; price: string }[]> {

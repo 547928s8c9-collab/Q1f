@@ -930,6 +930,13 @@ export const SimSessionMode = {
 
 export type SimSessionModeType = typeof SimSessionMode[keyof typeof SimSessionMode];
 
+export const SimTradingStatus = {
+  ACTIVE: "active",
+  PAUSED_INSUFFICIENT_HISTORY: "paused_insufficient_history",
+} as const;
+
+export type SimTradingStatusType = typeof SimTradingStatus[keyof typeof SimTradingStatus];
+
 export const simSessions = pgTable("sim_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -940,6 +947,8 @@ export const simSessions = pgTable("sim_sessions", {
   endMs: bigint("end_ms", { mode: "number" }),
   speed: integer("speed").notNull().default(1),
   status: text("status").notNull().default("created"),
+  tradingStatus: text("trading_status").notNull().default("active"),
+  tradingPausedReason: text("trading_paused_reason"),
   configOverrides: jsonb("config_overrides").$type<Partial<StrategyProfileConfig>>(),
   errorMessage: text("error_message"),
   lastSeq: bigint("last_seq", { mode: "number" }).notNull().default(0),

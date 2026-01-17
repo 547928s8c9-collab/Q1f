@@ -1,1 +1,1 @@
-{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"0000","when":1768588000000,"tag":"0000_add_sim_trades_market_live_quotes","breakpoints":true}]}
+{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"0000","when":1768588000000,"tag":"0000_add_sim_trades_market_live_quotes","breakpoints":true},{"idx":1,"version":"0001","when":1768648266000,"tag":"0001_add_sim_sessions_trading_status","breakpoints":true}]}

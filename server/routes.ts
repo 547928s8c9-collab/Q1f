@@ -3569,6 +3569,38 @@ export async function registerRoutes(
   const MAX_CANDLES = 50000;
   const MIN_SPEED = 1;
   const MAX_SPEED = 200;
+  const MARKET_SYNTHETIC_MAX_PCT = 0.002;
+
+  const buildSyntheticCandles = (params: {
+    startTs: number;
+    count: number;
+    tfMs: number;
+    seedPrice: number;
+  }) => {
+    const { startTs, count, tfMs, seedPrice } = params;
+    const candles: Array<{ ts: number; open: number; high: number; low: number; close: number; volume: number }> = [];
+    let prevClose = seedPrice > 0 ? seedPrice : 100;
+
+    for (let i = 0; i < count; i++) {
+      const ts = startTs + i * tfMs;
+      const pctMove = (Math.random() * 2 - 1) * MARKET_SYNTHETIC_MAX_PCT;
+      const close = Math.max(0.0001, prevClose * (1 + pctMove));
+      const open = prevClose;
+      const high = Math.max(open, close) * (1 + Math.random() * MARKET_SYNTHETIC_MAX_PCT);
+      const low = Math.min(open, close) * (1 - Math.random() * MARKET_SYNTHETIC_MAX_PCT);
+      candles.push({
+        ts,
+        open,
+        high,
+        low,
+        close,
+        volume: 0,
+      });
+      prevClose = close;
+    }
+
+    return candles;
+  };
 
   // GET /api/strategy-profiles - List enabled profiles with stable ordering
   app.get("/api/strategy-profiles", async (_req, res) => {
@@ -3637,6 +3669,7 @@ export async function registerRoutes(
         await ensureReplayClock();
         if (isSimEnabled()) {
           await marketSimService.ensureStarted();
+          marketSimService.ensureSymbols([symbol]);
         }
         const simNow = getSimNow();
         const currentStart = alignToGrid(simNow, tfMs);
@@ -3652,9 +3685,37 @@ export async function registerRoutes(
           maxBars: 5000,
         });
 
-        let candles = result.candles.slice(-requestedLimit);
-
         const latestQuote = marketSimService.getLatestQuote(symbol);
+        const latestCandle = result.candles[result.candles.length - 1];
+        const fallbackPrice =
+          latestQuote?.price ??
+          latestCandle?.close ??
+          marketSimService.getLastKnownPrice(symbol) ??
+          (await storage.getLatestMarketCandle(normalizeSymbol(symbol)))?.close ??
+          100;
+
+        const hasEnoughHistory = result.candles.length >= requestedLimit;
+
+        let candles: Array<{ ts: number; open: number; high: number; low: number; close: number; volume: number }>;
+
+        if (!hasEnoughHistory && isSimEnabled()) {
+          candles = buildSyntheticCandles({
+            startTs: rangeStart,
+            count: requestedLimit,
+            tfMs,
+            seedPrice: fallbackPrice,
+          });
+
+          for (const candle of result.candles) {
+            const idx = Math.floor((candle.ts - rangeStart) / tfMs);
+            if (idx >= 0 && idx < candles.length && candles[idx].ts === candle.ts) {
+              candles[idx] = candle;
+            }
+          }
+        } else {
+          candles = result.candles.slice(-requestedLimit);
+        }
+
         if (latestQuote) {
           const last = candles[candles.length - 1];
           if (last && last.ts === currentStart) {
@@ -3665,9 +3726,9 @@ export async function registerRoutes(
               low: Math.min(last.low, latestQuote.price),
             };
             candles = [...candles.slice(0, -1), updated];
-          } else {
+          } else if (last) {
             candles = [
-              ...candles,
+              ...candles.slice(0, -1),
               {
                 ts: currentStart,
                 open: latestQuote.price,
@@ -3676,7 +3737,7 @@ export async function registerRoutes(
                 close: latestQuote.price,
                 volume: 0,
               },
-            ].slice(-requestedLimit);
+            ];
           }
         }
 
@@ -3743,6 +3804,7 @@ export async function registerRoutes(
       ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
       : marketSimService.getSymbols();
 
+    marketSimService.ensureSymbols(symbols);
     const quotes = marketSimService.getLatestQuotes(symbols);
     res.json({ quotes, simNow: getSimNow() });
   });
@@ -3759,6 +3821,7 @@ export async function registerRoutes(
       ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
       : marketSimService.getSymbols();
 
+    marketSimService.ensureSymbols(requestedSymbols);
     const symbolSet = new Set(requestedSymbols.map((s) => normalizeSymbol(s)));
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -3946,16 +4009,19 @@ export async function registerRoutes(
 
       const latestEquity = await storage.getLatestSimEventByType(sessionId, "equity");
       const tradeCount = await storage.getSimTradeCount(sessionId);
+      const runnerState = sessionRunner.getState(sessionId);
 
       res.json({
         id: session.id,
         status: session.status,
+        tradingStatus: session.tradingStatus || "active",
+        tradingPausedReason: session.tradingPausedReason || null,
         profileSlug: session.profileSlug,
         timeframe: session.timeframe,
         symbols: [session.symbol],
         startMs: session.startMs,
         createdAt: session.createdAt,
-        lastUpdate: latestEquity?.ts || session.updatedAt?.getTime() || session.createdAt?.getTime(),
+        lastUpdate: latestEquity?.ts || runnerState?.cursorMs || session.updatedAt?.getTime() || session.createdAt?.getTime(),
         equity: (latestEquity?.payload as any)?.data?.equity ?? 10000,
         tradesCount: tradeCount,
         streamUrl: `/api/sim/sessions/${session.id}/stream`,
