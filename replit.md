@@ -51,6 +51,14 @@ Preferred communication style: Simple, everyday language.
 - **Questionnaire**: 3 questions on risk tolerance, time horizon, and investment goal.
 - **Recommendation Engine**: Rule-based scoring generating risk scores and profile labels (e.g., Safety-First Saver) with suggested deposit amounts and strategy allocations.
 
+### Investor Analytics
+- **Overview Endpoint**: `GET /api/analytics/overview` provides comprehensive portfolio summary
+- **Metrics**: Total equity, 30-day PnL, ROI percentage, max drawdown calculation
+- **Strategy Breakdown**: Per-strategy allocation, current value, PnL, ROI, and status
+- **Equity Series**: Historical portfolio value data for charting
+- **Performance**: Uses `Promise.all` for parallel data fetching
+- **Files**: `server/routes/analytics.ts`
+
 ### Core Features
 - **Notifications**: Real-time system with unread count, individual/bulk mark-as-read, and various notification types (transaction, security, kyc, system).
 - **Activity Export**: CSV export of transaction history with filtering options.
