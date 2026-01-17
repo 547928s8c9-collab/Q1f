@@ -270,13 +270,13 @@ export default function LiveSessionView() {
   const chartTimeframe = "1m";
 
   const { data: quoteSnapshot, refetch: refetchQuotes } = useQuery<MarketQuotesResponse>({
-    queryKey: ["/api/market/quotes", { symbols: symbolsParam }],
+    queryKey: ["/api/market/quotes", { symbols: symbolsParam, sessionId: id }],
     enabled: !!symbolsParam,
     refetchInterval: false,
   });
 
   const { data: candleSnapshot } = useQuery<MarketCandlesResponse>({
-    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: chartTimeframe, limit: 120 }],
+    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: chartTimeframe, limit: 120, sessionId: id }],
     enabled: !!primarySymbol && !!session?.timeframe,
     refetchInterval: false,
   });
@@ -381,7 +381,7 @@ export default function LiveSessionView() {
     }
 
     setMarketStatus("connecting");
-    const streamUrl = `/api/market/stream?symbols=${encodeURIComponent(session.symbols.join(","))}`;
+    const streamUrl = `/api/market/stream?sessionId=${encodeURIComponent(id)}&symbols=${encodeURIComponent(session.symbols.join(","))}`;
     const es = new EventSource(streamUrl, { withCredentials: true });
     marketSourceRef.current = es;
 

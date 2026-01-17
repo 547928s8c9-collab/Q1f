@@ -3654,7 +3654,7 @@ export async function registerRoutes(
   // GET /api/market/candles - Get candles for a symbol (with backfill if needed)
   app.get("/api/market/candles", isAuthenticated, async (req, res) => {
     try {
-      const { symbol, timeframe, startMs, endMs, limit, exchange = "cryptocompare" } = req.query;
+      const { symbol, timeframe, startMs, endMs, limit, exchange = "cryptocompare", sessionId } = req.query;
       
       if (!symbol || typeof symbol !== "string") {
         return res.status(400).json({ error: "symbol is required" });
@@ -3671,7 +3671,11 @@ export async function registerRoutes(
         await ensureReplayClock();
         if (isSimEnabled()) {
           await marketSimService.ensureStarted();
-          marketSimService.ensureSymbols([symbol]);
+          await marketSimService.ensureSessionSymbols(
+            typeof sessionId === "string" && sessionId ? sessionId : "global",
+            [symbol],
+            requestedLimit
+          );
         }
         const simNow = getSimNow();
         const currentStart = alignToGrid(simNow, tfMs);
@@ -3687,12 +3691,13 @@ export async function registerRoutes(
           maxBars: 5000,
         });
 
-        const latestQuote = marketSimService.getLatestQuote(symbol);
+        const sessionKey = typeof sessionId === "string" && sessionId ? sessionId : "global";
+        const latestQuote = marketSimService.getLatestQuote(sessionKey, symbol);
         const latestCandle = result.candles[result.candles.length - 1];
         const fallbackPrice =
           latestQuote?.price ??
           latestCandle?.close ??
-          marketSimService.getLastKnownPrice(symbol) ??
+          marketSimService.getLastKnownPrice(sessionKey, symbol) ??
           (await storage.getLatestMarketCandle(normalizeSymbol(symbol)))?.close ??
           100;
 
@@ -3701,12 +3706,17 @@ export async function registerRoutes(
         let candles: Array<{ ts: number; open: number; high: number; low: number; close: number; volume: number }>;
 
         if (!hasEnoughHistory && isSimEnabled()) {
-          candles = buildSyntheticCandles({
-            startTs: rangeStart,
-            count: requestedLimit,
-            tfMs,
-            seedPrice: fallbackPrice,
-          });
+          const synthetic = marketSimService.getSyntheticCandles(sessionKey, symbol, requestedLimit);
+          if (synthetic.length > 0) {
+            candles = synthetic;
+          } else {
+            candles = buildSyntheticCandles({
+              startTs: rangeStart,
+              count: requestedLimit,
+              tfMs,
+              seedPrice: fallbackPrice,
+            });
+          }
 
           for (const candle of result.candles) {
             const idx = Math.floor((candle.ts - rangeStart) / tfMs);
@@ -3802,12 +3812,14 @@ export async function registerRoutes(
 
     await marketSimService.ensureStarted();
     const symbolsParam = req.query.symbols as string | undefined;
+    const sessionId = req.query.sessionId as string | undefined;
     const symbols = symbolsParam
       ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
       : marketSimService.getSymbols();
 
-    marketSimService.ensureSymbols(symbols);
-    const quotes = marketSimService.getLatestQuotes(symbols);
+    const sessionKey = sessionId || "global";
+    await marketSimService.ensureSessionSymbols(sessionKey, symbols);
+    const quotes = marketSimService.getLatestQuotes(sessionKey, symbols);
     res.json({ quotes, simNow: getSimNow() });
   });
 
@@ -3819,11 +3831,13 @@ export async function registerRoutes(
 
     await marketSimService.ensureStarted();
     const symbolsParam = req.query.symbols as string | undefined;
+    const sessionId = req.query.sessionId as string | undefined;
     const requestedSymbols = symbolsParam
       ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
       : marketSimService.getSymbols();
 
-    marketSimService.ensureSymbols(requestedSymbols);
+    const sessionKey = sessionId || "global";
+    await marketSimService.ensureSessionSymbols(sessionKey, requestedSymbols);
     const symbolSet = new Set(requestedSymbols.map((s) => normalizeSymbol(s)));
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -3832,14 +3846,15 @@ export async function registerRoutes(
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
 
-    const sendQuote = (quote: { symbol: string; ts: number; price: number }) => {
-      if (symbolSet.has(quote.symbol)) {
-        res.write(`event: quote\ndata: ${JSON.stringify(quote)}\n\n`);
+    const sendQuote = (payload: { sessionKey: string; quote: { symbol: string; ts: number; price: number } }) => {
+      if (payload.sessionKey !== sessionKey) return;
+      if (symbolSet.has(payload.quote.symbol)) {
+        res.write(`event: quote\ndata: ${JSON.stringify(payload.quote)}\n\n`);
       }
     };
 
-    for (const quote of marketSimService.getLatestQuotes(Array.from(symbolSet))) {
-      sendQuote(quote);
+    for (const quote of marketSimService.getLatestQuotes(sessionKey, Array.from(symbolSet))) {
+      sendQuote({ sessionKey, quote });
     }
 
     const heartbeatInterval = setInterval(() => {
