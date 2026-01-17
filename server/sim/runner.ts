@@ -78,7 +78,7 @@ function buildStateSnapshot(
   };
 }
 
-function coerceStrategyState(snapshot: SimSessionStateSnapshot) {
+function coerceStrategyState(snapshot: SimSessionStateSnapshot): StrategyState {
   const openOrders = Array.isArray(snapshot.openOrders) ? snapshot.openOrders : [];
   const rollingWins = Array.isArray(snapshot.rollingWins) ? snapshot.rollingWins : [];
   const rollingPnls = Array.isArray(snapshot.rollingPnls) ? snapshot.rollingPnls : [];
