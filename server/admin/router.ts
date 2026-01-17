@@ -1467,6 +1467,16 @@ adminRouter.post(
         .where(eq(withdrawals.id, action.targetId))
         .returning();
 
+      // Sync operation status to approved (ready for processing)
+      if (withdrawal.operationId) {
+        await db.update(operations)
+          .set({
+            status: "approved",
+            updatedAt: new Date(),
+          })
+          .where(eq(operations.id, withdrawal.operationId));
+      }
+
       await db.update(adminInboxItems)
         .set({
           status: "DONE",
@@ -1488,7 +1498,7 @@ adminRouter.post(
         },
         targetType: "withdrawal",
         targetId: updated.id,
-        beforeJson: { status: "PENDING" },
+        beforeJson: { status: withdrawal.status },
         afterJson: { status: "APPROVED", approvedBy: checkerAdminUserId },
       };
     }
