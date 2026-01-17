@@ -20,6 +20,7 @@ function assertNonNegative(value: bigint, label: string): void {
 }
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 import { adminRouter } from "./admin/router";
+import { requireTwoFactor } from "./middleware/requireTwoFactor";
 
 // Production guard for dev/test endpoints
 const isProduction = process.env.NODE_ENV === "production";
@@ -1213,9 +1214,6 @@ export async function registerRoutes(
               type: "transaction",
               title: "Auto-sweep executed",
               message: `${formatMoney(sweepAmountStr, "USDT")} swept to ${vaultGoalName || vaultType} vault (${vaultPct}% of profit)`,
-              priority: "low",
-              ctaLabel: "View Vaults",
-              ctaUrl: "/wallet/vaults",
             });
           }
         }
@@ -1228,8 +1226,8 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/withdraw/usdt (protected, idempotent)
-  app.post("/api/withdraw/usdt", isAuthenticated, async (req, res) => {
+  // POST /api/withdraw/usdt (protected, idempotent, 2FA required)
+  app.post("/api/withdraw/usdt", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const endpoint = "/api/withdraw/usdt";

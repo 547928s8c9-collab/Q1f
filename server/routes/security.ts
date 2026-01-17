@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { storage } from "../storage";
 import { twoFactorVerifySchema, twoFactorDisableSchema } from "@shared/schema";
 import { isTwoFactorAvailable, encryptSecret, decryptSecret } from "../lib/twofactorCrypto";
+import { requireTwoFactor } from "../middleware/requireTwoFactor";
 import type { RouteDeps } from "./types";
 
 // In-memory rate limiter for 2FA operations
@@ -288,8 +289,8 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
     }
   });
 
-  // POST /api/security/whitelist/add (protected)
-  app.post("/api/security/whitelist/add", isAuthenticated, async (req, res) => {
+  // POST /api/security/whitelist/add (protected, 2FA required)
+  app.post("/api/security/whitelist/add", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({
@@ -324,8 +325,8 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
     }
   });
 
-  // POST /api/security/whitelist/remove (protected)
-  app.post("/api/security/whitelist/remove", isAuthenticated, async (req, res) => {
+  // POST /api/security/whitelist/remove (protected, 2FA required)
+  app.post("/api/security/whitelist/remove", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ addressId: z.string() });
