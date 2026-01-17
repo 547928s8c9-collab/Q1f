@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { fail, ErrorCodes } from "../http";
+import { logAdminAction } from "../audit";
 import { db } from "../../db";
 import {
   adminUserRoles,
@@ -28,6 +29,14 @@ interface CachedPermissions {
 
 const permissionsCache = new Map<string, CachedPermissions>();
 const CACHE_TTL_MS = 60_000;
+const SUPERADMIN_BYPASS_ENABLED = process.env.ADMIN_SUPER_ENABLED === "true";
+const SUPERADMIN_EMAIL = process.env.ADMIN_SUPER_EMAIL;
+
+function canUseSuperAdminBypass(res: Response): boolean {
+  if (!SUPERADMIN_BYPASS_ENABLED || !SUPERADMIN_EMAIL) return false;
+  const email = res.locals.email;
+  return typeof email === "string" && email === SUPERADMIN_EMAIL;
+}
 
 function getCachedPermissions(adminUserId: string): CachedPermissions | null {
   const cached = permissionsCache.get(adminUserId);
@@ -145,6 +154,24 @@ export function requirePermission(...requiredPerms: string[]) {
 
     const missing = requiredPerms.filter((p) => !perms.has(p));
     if (missing.length > 0) {
+      if (canUseSuperAdminBypass(res)) {
+        const adminUserId = res.locals.adminUserId as string | undefined;
+        if (adminUserId) {
+          const requestId = res.locals.requestId as string | undefined;
+          const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+          const userAgent = req.headers["user-agent"] || "unknown";
+          void logAdminAction({
+            actorAdminUserId: adminUserId,
+            requestId,
+            actionType: "admin.superadmin.bypass",
+            outcome: "success",
+            ip,
+            userAgent,
+          });
+        }
+        next();
+        return;
+      }
       fail(
         res,
         ErrorCodes.RBAC_DENIED,
