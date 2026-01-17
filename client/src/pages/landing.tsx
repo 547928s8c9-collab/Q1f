@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Landing() {
   const handleLogin = () => {
@@ -18,6 +19,9 @@ export default function Landing() {
             <span className="text-xl font-semibold tracking-tight">ZEON</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/admin/login">Admin</Link>
+            </Button>
             <Button onClick={handleLogin} data-testid="button-login-header">
               Sign In
             </Button>

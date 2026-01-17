@@ -136,6 +136,11 @@ export async function loadPermissions(
 
 export function requirePermission(...requiredPerms: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
+    if (res.locals.isSuperAdmin) {
+      next();
+      return;
+    }
+
     const perms = res.locals.permissionKeys;
 
     if (!perms) {

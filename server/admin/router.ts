@@ -55,6 +55,7 @@ adminRouter.get("/me", async (req, res) => {
     const email = res.locals.email!;
     const roles = res.locals.roleKeys || [];
     const permissions = Array.from(res.locals.permissionKeys || []);
+    const isSuperAdmin = res.locals.isSuperAdmin === true;
 
     ok(res, {
       adminUserId,
@@ -62,6 +63,7 @@ adminRouter.get("/me", async (req, res) => {
       email,
       roles,
       permissions,
+      isSuperAdmin,
     });
   } catch (error) {
     console.error("[GET /admin/me]", error);

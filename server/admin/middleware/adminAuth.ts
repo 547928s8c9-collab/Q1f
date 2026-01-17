@@ -9,6 +9,7 @@ export interface AdminLocals {
   adminUserId: string;
   userId: string;
   email: string;
+  isSuperAdmin: boolean;
 }
 
 declare global {
@@ -39,6 +40,34 @@ export async function adminAuth(
   next: NextFunction
 ): Promise<void> {
   try {
+    const sessionAdminId = (req.session as { adminId?: string } | undefined)?.adminId;
+    if (sessionAdminId) {
+      const [admin] = await db
+        .select()
+        .from(adminUsers)
+        .where(eq(adminUsers.id, sessionAdminId))
+        .limit(1);
+
+      if (!admin || !admin.isActive) {
+        fail(res, ErrorCodes.AUTH_REQUIRED, "Authentication required", 401);
+        return;
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, admin.userId))
+        .limit(1);
+
+      res.locals.adminUserId = admin.id;
+      res.locals.userId = admin.userId;
+      res.locals.email = admin.email || user?.email || "";
+      res.locals.isSuperAdmin = admin.isSuperAdmin === true;
+
+      next();
+      return;
+    }
+
     const oidcUserId = extractUserId(req);
 
     if (!oidcUserId) {
@@ -71,6 +100,7 @@ export async function adminAuth(
     res.locals.adminUserId = admin.id;
     res.locals.userId = oidcUserId;
     res.locals.email = admin.email || user.email || "";
+    res.locals.isSuperAdmin = admin.isSuperAdmin === true;
 
     next();
   } catch (error) {

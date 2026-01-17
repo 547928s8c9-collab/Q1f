@@ -23,6 +23,7 @@ function assertNonNegative(value: bigint, label: string): void {
 }
 import { setupAuth, registerAuthRoutes, isAuthenticated, authStorage } from "./replit_integrations/auth";
 import { adminRouter } from "./admin/router";
+import { adminAuthRouter } from "./admin/authRouter";
 
 // Production guard for dev/test endpoints
 const isProduction = process.env.NODE_ENV === "production";
@@ -348,6 +349,8 @@ export async function registerRoutes(
       console.error("Failed to start sim services:", error);
     }
   }
+
+  app.use("/api/admin/auth", adminAuthRouter);
 
   // Mount Admin API router
   app.use("/api/admin", adminRouter);

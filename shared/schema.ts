@@ -1017,6 +1017,7 @@ export const adminUsers = pgTable("admin_users", {
   userId: varchar("user_id").notNull(), // FK to users.id
   email: text("email"),
   isActive: boolean("is_active").notNull().default(true),
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

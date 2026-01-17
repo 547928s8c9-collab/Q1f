@@ -38,7 +38,11 @@ import LiveSessionDetail from "@/pages/live-sessions/detail";
 import LiveSessionView from "@/pages/live-sessions/session";
 import AdminKyc from "@/pages/admin/kyc";
 import AdminWithdrawals from "@/pages/admin/withdrawals";
+import AdminLogin from "@/pages/admin/login";
+import { AdminGuard } from "@/pages/admin/guard";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 
 function ProtectedRouter() {
   return (
@@ -65,12 +69,33 @@ function ProtectedRouter() {
           <Route path="/live-sessions" component={LiveSessions} />
           <Route path="/live-sessions/session/:id" component={LiveSessionView} />
           <Route path="/live-sessions/:slug" component={LiveSessionDetail} />
-          <Route path="/admin/kyc" component={AdminKyc} />
-          <Route path="/admin/withdrawals" component={AdminWithdrawals} />
           <Route component={NotFound} />
         </Switch>
       </AppShell>
     </GateGuard>
+  );
+}
+
+function AdminHomeRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/admin/kyc");
+  }, [setLocation]);
+  return null;
+}
+
+function AdminRouter() {
+  return (
+    <AdminGuard>
+      <div className="min-h-screen bg-background">
+        <Switch>
+          <Route path="/admin" component={AdminHomeRedirect} />
+          <Route path="/admin/kyc" component={AdminKyc} />
+          <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+          <Route component={NotFound} />
+        </Switch>
+      </div>
+    </AdminGuard>
   );
 }
 
@@ -119,7 +144,11 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <AuthenticatedApp />
+          <Switch>
+            <Route path="/admin/login" component={AdminLogin} />
+            <Route path="/admin/:rest*" component={AdminRouter} />
+            <Route component={AuthenticatedApp} />
+          </Switch>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

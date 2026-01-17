@@ -37,19 +37,20 @@ async function ensureSuperAdmin(): Promise<void> {
 
   if (!admin) {
     const [created] = await db
-      .insert(adminUsers)
-      .values({
-        userId: user.id,
-        email: user.email,
-        isActive: true,
-      })
+    .insert(adminUsers)
+    .values({
+      userId: user.id,
+      email: user.email,
+      isActive: true,
+      isSuperAdmin: true,
+    })
       .returning();
     admin = created;
     console.log(`SuperAdmin created: adminUserId=${admin.id}`);
   } else if (!admin.isActive) {
     await db
-      .update(adminUsers)
-      .set({ isActive: true, email: user.email })
+    .update(adminUsers)
+    .set({ isActive: true, email: user.email, isSuperAdmin: true })
       .where(eq(adminUsers.id, admin.id));
     console.log(`SuperAdmin reactivated: adminUserId=${admin.id}`);
   }
