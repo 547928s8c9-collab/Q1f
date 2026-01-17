@@ -73,6 +73,7 @@ import {
   type StrategyProfileConfigSchema,
   type SimSession,
   type InsertSimSession,
+  type SimSessionStateSnapshot,
   type SimEvent,
   type InsertSimEvent,
 } from "@shared/schema";
@@ -1331,12 +1332,17 @@ export class DatabaseStorage implements IStorage {
 
   async createSimSession(session: InsertSimSession): Promise<SimSession> {
     const configOverrides = session.configOverrides;
+    const stateJson = session.stateJson;
     const values: typeof simSessions.$inferInsert = {
       ...session,
       configOverrides:
         configOverrides && typeof configOverrides === "object"
           ? (configOverrides as Partial<StrategyProfileConfig>)
           : configOverrides ?? null,
+      stateJson:
+        stateJson && typeof stateJson === "object"
+          ? (stateJson as SimSessionStateSnapshot)
+          : stateJson ?? null,
     };
     const [created] = await db.insert(simSessions).values(values).returning();
     return created;

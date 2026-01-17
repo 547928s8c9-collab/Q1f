@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Candle } from "@shared/schema";
-import { computeDeterministicPrice } from "./marketSimService";
+import { computeDeterministicPrice } from "./priceNoise";
 
 describe("marketSimService deterministic quotes", () => {
   it("produces identical sequences for the same seed", () => {
