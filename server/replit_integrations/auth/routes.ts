@@ -1,17 +1,27 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { authStorage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
 import { storage } from "../../storage";
 
 const DEMO_USER_ID = "demo-user-001";
+const allowDemoEndpoints = process.env.ALLOW_DEMO_ENDPOINTS === "true";
+const isProduction = process.env.NODE_ENV === "production";
+
+function demoOnlyGuard(res: Response): boolean {
+  if (isProduction || !allowDemoEndpoints) {
+    res.status(403).json({ error: "Not allowed" });
+    return false;
+  }
+  return true;
+}
 
 // Register auth-specific routes
 export function registerAuthRoutes(app: Express): void {
   // Demo login - creates a demo session for preview purposes
   app.get("/api/demo-login", async (req: any, res) => {
     try {
-      if (process.env.NODE_ENV === "production") {
-        return res.status(404).json({ error: "Not found" });
+      if (!demoOnlyGuard(res)) {
+        return;
       }
 
       // Check if demo user exists, create if not

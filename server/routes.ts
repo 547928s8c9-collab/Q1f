@@ -31,8 +31,9 @@ import { ensureRequestId } from "./admin/middleware/requestId";
 
 // Production guard for dev/test endpoints
 const isProduction = process.env.NODE_ENV === "production";
-function devOnly(_req: Request, res: Response, next: NextFunction) {
-  if (isProduction) {
+const allowDemoEndpoints = process.env.ALLOW_DEMO_ENDPOINTS === "true";
+function devOnlyGuard(_req: Request, res: Response, next: NextFunction) {
+  if (isProduction || !allowDemoEndpoints) {
     return res.status(403).json({ error: "Not allowed" });
   }
   next();
@@ -662,7 +663,7 @@ export async function registerRoutes(
   });
 
   // POST /api/strategies/seed - Seed strategies (dev only)
-  app.post("/api/strategies/seed", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/strategies/seed", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       await storage.seedStrategies();
       res.json({ success: true, message: "Strategies seeded" });
@@ -1215,7 +1216,7 @@ export async function registerRoutes(
   });
 
   // POST /api/deposit/usdt/simulate (protected, idempotent, dev only)
-  app.post("/api/deposit/usdt/simulate", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/deposit/usdt/simulate", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const endpoint = "/api/deposit/usdt/simulate";
@@ -1285,7 +1286,7 @@ export async function registerRoutes(
   });
 
   // POST /api/deposit/card/simulate (protected, idempotent, dev only)
-  app.post("/api/deposit/card/simulate", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/deposit/card/simulate", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const endpoint = "/api/deposit/card/simulate";
@@ -1526,7 +1527,7 @@ export async function registerRoutes(
   });
 
   // POST /api/payout/daily - Demo daily payout simulation (protected, dev only)
-  app.post("/api/payout/daily", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/payout/daily", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const positions = await storage.getPositions(userId);
@@ -2210,7 +2211,7 @@ export async function registerRoutes(
   // ==================== ONBOARDING ROUTES ====================
 
   // POST /api/onboarding/send-code (protected) - Demo: just returns success
-  app.post("/api/onboarding/send-code", isAuthenticated, async (req, res) => {
+  app.post("/api/onboarding/send-code", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       // Demo: In production, would send actual OTP via email/SMS
       res.json({ success: true, message: "Code sent" });
@@ -2221,7 +2222,7 @@ export async function registerRoutes(
   });
 
   // POST /api/onboarding/verify-code (protected) - Demo: accepts any 6-digit code
-  app.post("/api/onboarding/verify-code", isAuthenticated, async (req, res) => {
+  app.post("/api/onboarding/verify-code", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ code: z.string().length(6) });
@@ -2283,7 +2284,7 @@ export async function registerRoutes(
   });
 
   // POST /api/onboarding/complete-kyc (protected) - Demo: approves KYC
-  app.post("/api/onboarding/complete-kyc", isAuthenticated, async (req, res) => {
+  app.post("/api/onboarding/complete-kyc", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       // Update kycApplicants table (single source of truth)
@@ -2343,7 +2344,7 @@ export async function registerRoutes(
   // ==================== SUMSUB INTEGRATION (DEMO) ====================
 
   // GET /api/sumsub/access-token - Generate access token for SDK (demo mode)
-  app.get("/api/sumsub/access-token", isAuthenticated, devOnly, async (req, res) => {
+  app.get("/api/sumsub/access-token", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -2534,7 +2535,7 @@ export async function registerRoutes(
   });
 
   // POST /api/sumsub/demo-callback - Trigger a demo callback (for testing)
-  app.post("/api/sumsub/demo-callback", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/sumsub/demo-callback", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -2629,7 +2630,7 @@ export async function registerRoutes(
   });
 
   // POST /api/fx/quote - Demo FX quote
-  app.post("/api/fx/quote", async (req, res) => {
+  app.post("/api/fx/quote", devOnlyGuard, async (req, res) => {
     try {
       const schema = z.object({
         fromAsset: z.string(),
@@ -2740,7 +2741,7 @@ export async function registerRoutes(
   });
 
   // POST /api/notifications/seed - Seed demo notifications (protected, dev only)
-  app.post("/api/notifications/seed", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/notifications/seed", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const operations = await storage.getOperations(userId, undefined, undefined, undefined, 5);
@@ -3176,7 +3177,7 @@ export async function registerRoutes(
   // ==================== JOB ROUTES (DEV TRIGGERS) ====================
 
   // POST /api/jobs/accrue-daily - Apply daily strategy returns to positions (dev only)
-  app.post("/api/jobs/accrue-daily", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/jobs/accrue-daily", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const today = new Date().toISOString().split("T")[0];
       const positions = await storage.getAllPositions();
@@ -3317,7 +3318,7 @@ export async function registerRoutes(
   });
 
   // POST /api/jobs/payout-run - Execute profit payouts (dev only)
-  app.post("/api/jobs/payout-run", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/jobs/payout-run", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const frequency = (req.query.frequency as string) || "DAILY";
       
@@ -3469,7 +3470,7 @@ export async function registerRoutes(
   });
 
   // POST /api/jobs/redemption-weekly-run - Execute due redemption requests (dev only)
-  app.post("/api/jobs/redemption-weekly-run", isAuthenticated, devOnly, async (req, res) => {
+  app.post("/api/jobs/redemption-weekly-run", devOnlyGuard, isAuthenticated, async (req, res) => {
     try {
       const dueRequests = await storage.getPendingRedemptionsDue();
       const results: Array<{ requestId: string; status: string; amount?: string }> = [];
