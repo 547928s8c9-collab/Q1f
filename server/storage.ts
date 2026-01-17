@@ -66,6 +66,8 @@ import {
   type NotificationPreferences,
   type UpdateNotificationPreferences,
   notificationPreferences,
+  twoFactor,
+  type TwoFactor,
   type IdempotencyKey,
   type InsertIdempotencyKey,
   type Candle,
@@ -159,6 +161,12 @@ export interface IStorage {
   // Notification Preferences
   getNotificationPreferences(userId: string): Promise<NotificationPreferences>;
   updateNotificationPreferences(userId: string, patch: UpdateNotificationPreferences): Promise<NotificationPreferences>;
+
+  // Two Factor Authentication
+  getTwoFactor(userId: string): Promise<TwoFactor | undefined>;
+  upsertTwoFactor(userId: string, secretEncrypted: string): Promise<TwoFactor>;
+  enableTwoFactor(userId: string): Promise<TwoFactor | undefined>;
+  disableTwoFactor(userId: string): Promise<TwoFactor | undefined>;
 
   // Payout Instructions
   getPayoutInstruction(userId: string, strategyId: string): Promise<PayoutInstruction | undefined>;
@@ -885,6 +893,46 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(notificationPreferences)
       .set({ ...patch, updatedAt: new Date() })
       .where(eq(notificationPreferences.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  // Two Factor Authentication
+  async getTwoFactor(userId: string): Promise<TwoFactor | undefined> {
+    const [record] = await db.select().from(twoFactor)
+      .where(eq(twoFactor.userId, userId));
+    return record;
+  }
+
+  async upsertTwoFactor(userId: string, secretEncrypted: string): Promise<TwoFactor> {
+    const existing = await this.getTwoFactor(userId);
+    
+    if (existing) {
+      const [updated] = await db.update(twoFactor)
+        .set({ secretEncrypted, enabled: false, verifiedAt: null, updatedAt: new Date() })
+        .where(eq(twoFactor.userId, userId))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(twoFactor)
+      .values({ userId, secretEncrypted, enabled: false })
+      .returning();
+    return created;
+  }
+
+  async enableTwoFactor(userId: string): Promise<TwoFactor | undefined> {
+    const [updated] = await db.update(twoFactor)
+      .set({ enabled: true, verifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(twoFactor.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async disableTwoFactor(userId: string): Promise<TwoFactor | undefined> {
+    const [updated] = await db.update(twoFactor)
+      .set({ enabled: false, updatedAt: new Date() })
+      .where(eq(twoFactor.userId, userId))
       .returning();
     return updated;
   }
