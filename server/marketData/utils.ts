@@ -9,6 +9,9 @@ export function normalizeTimeframe(tf: string): Timeframe {
   const normalized = tf.toLowerCase().trim();
   
   const mapping: Record<string, Timeframe> = {
+    "1m": "1m",
+    "1min": "1m",
+    "60s": "1m",
     "15m": "15m",
     "15min": "15m",
     "1h": "1h",
@@ -28,6 +31,7 @@ export function normalizeTimeframe(tf: string): Timeframe {
 
 export function timeframeToMs(tf: Timeframe): number {
   switch (tf) {
+    case "1m": return 60_000;
     case "15m": return 900_000;
     case "1h": return 3_600_000;
     case "1d": return 86_400_000;

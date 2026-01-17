@@ -5,6 +5,7 @@ import { createStrategy } from "../strategies/factory";
 import { loadCandles } from "../marketData/loadCandles";
 import { EventEmitter } from "events";
 import { storage } from "../storage";
+import { ensureReplayClock, getDecisionNow } from "../market/replayClock";
 
 export interface SessionRunnerEvents {
   event: (sessionId: string, event: SimEventData) => void;
@@ -37,6 +38,7 @@ const CANDLE_BATCH_SIZE = 100;
 
 function timeframeToMs(tf: Timeframe): number {
   const map: Record<Timeframe, number> = {
+    "1m": 60_000,
     "15m": 900_000,
     "1h": 3_600_000,
   };
@@ -73,11 +75,16 @@ class SessionRunnerManager extends EventEmitter {
     const tfMs = timeframeToMs(timeframe);
     const mode = (session.mode as SimSessionModeType) || SimSessionMode.REPLAY;
 
+    if (mode === SimSessionMode.LAGGED_LIVE && config.oracleExit) {
+      config.oracleExit = { ...config.oracleExit, enabled: false };
+    }
+
     const initialCursorMs = session.cursorMs ?? session.startMs;
 
     let fetchEndMs: number;
     if (mode === SimSessionMode.LAGGED_LIVE) {
-      fetchEndMs = Date.now() - (session.lagMs || 900_000);
+      await ensureReplayClock();
+      fetchEndMs = getDecisionNow(session.lagMs || 900_000);
     } else {
       fetchEndMs = session.endMs ?? (session.startMs + tfMs * CANDLE_BATCH_SIZE);
     }
@@ -173,6 +180,10 @@ class SessionRunnerManager extends EventEmitter {
     if (state.candleIndex >= state.candles.length) {
       const needsMoreCandles = await this.loadMoreCandles(state);
       if (!needsMoreCandles) {
+        if (state.mode === SimSessionMode.LAGGED_LIVE) {
+          this.scheduleTick(sessionId);
+          return;
+        }
         await this.onStatusChangeCallback?.(sessionId, SimSessionStatus.FINISHED);
         this.emit("statusChange", sessionId, SimSessionStatus.FINISHED);
         this.cleanup(sessionId);
@@ -181,13 +192,17 @@ class SessionRunnerManager extends EventEmitter {
     }
 
     const candle = state.candles[state.candleIndex];
-    const futureCandles = state.config.oracleExit.enabled
+    const futureCandles = state.mode === SimSessionMode.REPLAY && state.config.oracleExit.enabled
       ? state.candles.slice(state.candleIndex + 1, state.candleIndex + state.config.oracleExit.horizonBars + 1)
       : undefined;
 
     const events = state.strategy!.onCandle(candle, futureCandles);
 
     for (const event of events) {
+      if (event.payload.type === "trade" && typeof event.payload.data === "object" && event.payload.data !== null) {
+        (event.payload.data as { symbol?: string }).symbol = state.session.symbol;
+      }
+
       state.seq++;
       const simEvent: SimEventData = {
         seq: state.seq,
@@ -217,7 +232,8 @@ class SessionRunnerManager extends EventEmitter {
 
     let fetchEndMs: number;
     if (state.mode === SimSessionMode.LAGGED_LIVE) {
-      fetchEndMs = Date.now() - (state.session.lagMs || 900_000);
+      await ensureReplayClock();
+      fetchEndMs = getDecisionNow(state.session.lagMs || 900_000);
     } else {
       if (state.session.endMs && state.cursorMs >= state.session.endMs) {
         return false;

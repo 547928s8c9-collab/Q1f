@@ -13,9 +13,10 @@ export interface MarketDataSource {
 }
 
 const TIMEFRAME_MS: Record<Timeframe, number> = {
-  "15m": 900000,
-  "1h": 3600000,
-  "1d": 86400000,
+  "1m": 60_000,
+  "15m": 900_000,
+  "1h": 3_600_000,
+  "1d": 86_400_000,
 };
 
 const DEFAULT_MAX_BARS = 20000;

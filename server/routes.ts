@@ -3,8 +3,11 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus } from "@shared/schema";
-import { loadCandles } from "./marketData/loadCandles";
+import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus, type StrategyProfileConfig } from "@shared/schema";
+import { loadCandles, alignToGrid } from "./marketData/loadCandles";
+import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./marketData/utils";
+import { marketSimService } from "./market/marketSimService";
+import { ensureReplayClock, getDecisionNow, getSimLagMs, getSimNow, isSimEnabled } from "./market/replayClock";
 import { sessionRunner } from "./sim/runner";
 
 import { db, withTransaction, type DbTransaction } from "./db";
@@ -335,6 +338,14 @@ export async function registerRoutes(
   // Setup authentication first
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  if (isSimEnabled()) {
+    try {
+      await marketSimService.ensureStarted();
+    } catch (error) {
+      console.error("Failed to start market sim service:", error);
+    }
+  }
 
   // Mount Admin API router
   app.use("/api/admin", adminRouter);
@@ -3609,7 +3620,7 @@ export async function registerRoutes(
   // GET /api/market/candles - Get candles for a symbol (with backfill if needed)
   app.get("/api/market/candles", isAuthenticated, async (req, res) => {
     try {
-      const { symbol, timeframe, startMs, endMs, exchange = "binance_spot" } = req.query;
+      const { symbol, timeframe, startMs, endMs, limit, exchange = "cryptocompare" } = req.query;
       
       if (!symbol || typeof symbol !== "string") {
         return res.status(400).json({ error: "symbol is required" });
@@ -3617,6 +3628,70 @@ export async function registerRoutes(
       if (!timeframe || typeof timeframe !== "string") {
         return res.status(400).json({ error: "timeframe is required (15m, 1h, 1d)" });
       }
+
+      const normalizedTimeframe = normalizeTimeframe(timeframe);
+      const tfMs = timeframeToMs(normalizedTimeframe);
+
+      if (limit && !isNaN(Number(limit))) {
+        const requestedLimit = Math.min(500, Math.max(10, Number(limit)));
+        await ensureReplayClock();
+        if (isSimEnabled()) {
+          await marketSimService.ensureStarted();
+        }
+        const simNow = getSimNow();
+        const currentStart = alignToGrid(simNow, tfMs);
+        const rangeStart = currentStart - (requestedLimit - 1) * tfMs;
+        const rangeEnd = currentStart + tfMs;
+
+        const result = await loadCandles({
+          exchange: exchange as string,
+          symbol,
+          timeframe: normalizedTimeframe,
+          startMs: rangeStart,
+          endMs: rangeEnd,
+          maxBars: 5000,
+        });
+
+        let candles = result.candles.slice(-requestedLimit);
+
+        const latestQuote = marketSimService.getLatestQuote(symbol);
+        if (latestQuote) {
+          const last = candles[candles.length - 1];
+          if (last && last.ts === currentStart) {
+            const updated = {
+              ...last,
+              close: latestQuote.price,
+              high: Math.max(last.high, latestQuote.price),
+              low: Math.min(last.low, latestQuote.price),
+            };
+            candles = [...candles.slice(0, -1), updated];
+          } else {
+            candles = [
+              ...candles,
+              {
+                ts: currentStart,
+                open: latestQuote.price,
+                high: latestQuote.price,
+                low: latestQuote.price,
+                close: latestQuote.price,
+                volume: 0,
+              },
+            ].slice(-requestedLimit);
+          }
+        }
+
+        return res.json({
+          success: true,
+          data: {
+            candles,
+            gaps: result.gaps,
+            source: result.source,
+            count: candles.length,
+            simNow,
+          },
+        });
+      }
+
       if (!startMs || isNaN(Number(startMs))) {
         return res.status(400).json({ error: "startMs is required (unix ms)" });
       }
@@ -3634,7 +3709,7 @@ export async function registerRoutes(
       const result = await loadCandles({
         exchange: exchange as string,
         symbol,
-        timeframe,
+        timeframe: normalizedTimeframe,
         startMs: start,
         endMs: end,
         maxBars: 5000,
@@ -3656,12 +3731,325 @@ export async function registerRoutes(
     }
   });
 
+  // GET /api/market/quotes - Snapshot of latest simulated quotes
+  app.get("/api/market/quotes", isAuthenticated, async (req, res) => {
+    if (!isSimEnabled()) {
+      return res.status(503).json({ error: "SIM_DISABLED" });
+    }
+
+    await marketSimService.ensureStarted();
+    const symbolsParam = req.query.symbols as string | undefined;
+    const symbols = symbolsParam
+      ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : marketSimService.getSymbols();
+
+    const quotes = marketSimService.getLatestQuotes(symbols);
+    res.json({ quotes, simNow: getSimNow() });
+  });
+
+  // GET /api/market/stream - SSE stream of simulated quotes
+  app.get("/api/market/stream", isAuthenticated, async (req, res) => {
+    if (!isSimEnabled()) {
+      return res.status(503).json({ error: "SIM_DISABLED" });
+    }
+
+    await marketSimService.ensureStarted();
+    const symbolsParam = req.query.symbols as string | undefined;
+    const requestedSymbols = symbolsParam
+      ? symbolsParam.split(",").map((s) => s.trim()).filter(Boolean)
+      : marketSimService.getSymbols();
+
+    const symbolSet = new Set(requestedSymbols.map((s) => normalizeSymbol(s)));
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const sendQuote = (quote: { symbol: string; ts: number; price: number }) => {
+      if (symbolSet.has(quote.symbol)) {
+        res.write(`event: quote\ndata: ${JSON.stringify(quote)}\n\n`);
+      }
+    };
+
+    for (const quote of marketSimService.getLatestQuotes(Array.from(symbolSet))) {
+      sendQuote(quote);
+    }
+
+    const heartbeatInterval = setInterval(() => {
+      res.write(": heartbeat\n\n");
+    }, 15000);
+
+    marketSimService.on("quote", sendQuote);
+
+    const cleanup = () => {
+      clearInterval(heartbeatInterval);
+      marketSimService.off("quote", sendQuote);
+      res.end();
+    };
+
+    req.on("close", cleanup);
+  });
+
+  // ==================== LIVE SESSIONS ====================
+
+  const LIVE_SESSION_DEFAULT_SPEED = 10;
+  const LIVE_WARMUP_BUFFER_BARS = 20;
+
+  app.post("/api/live-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
+
+      if (idempotencyKey) {
+        const existing = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
+        if (existing) {
+          return res.status(200).json({
+            sessionId: existing.id,
+            status: existing.status,
+          });
+        }
+      }
+
+      const schema = z.object({
+        strategyId: z.string().min(1),
+        symbols: z.array(z.string().min(1)).optional(),
+        configOverride: z.record(z.unknown()).optional(),
+        speed: z.number().int().min(1).max(50).optional(),
+        startMs: z.number().int().positive().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: parsed.error.errors,
+          },
+        });
+      }
+
+      const { strategyId, symbols, configOverride, speed, startMs } = parsed.data;
+
+      let profile = await storage.getStrategyProfile(strategyId);
+      if (!profile) {
+        profile = await storage.getStrategyProfileById(strategyId);
+      }
+      if (!profile) {
+        return res.status(404).json({
+          error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" },
+        });
+      }
+
+      const tfMs = SIM_TIMEFRAME_MS[profile.timeframe];
+      if (!tfMs) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
+        });
+      }
+
+      await ensureReplayClock();
+      const lagMs = getSimLagMs();
+      const decisionNow = getDecisionNow(lagMs);
+
+      const warmupBars = Math.max(
+        (profile.defaultConfig as StrategyProfileConfig).minBarsWarmup || 200,
+        100
+      );
+
+      const warmupStart = decisionNow - tfMs * (warmupBars + LIVE_WARMUP_BUFFER_BARS);
+      const startBase = startMs ?? warmupStart;
+      const alignedStart = alignToGrid(Math.min(startBase, warmupStart), tfMs);
+
+      const symbol = normalizeSymbol(symbols && symbols.length > 0 ? symbols[0] : profile.symbol);
+
+      const session = await storage.createSimSession({
+        userId,
+        profileSlug: profile.slug,
+        symbol,
+        timeframe: profile.timeframe,
+        startMs: alignedStart,
+        endMs: null,
+        speed: speed ?? LIVE_SESSION_DEFAULT_SPEED,
+        mode: "lagged_live",
+        lagMs,
+        replayMsPerCandle: 1000,
+        configOverrides: configOverride as any,
+        status: SimSessionStatus.CREATED,
+        idempotencyKey,
+      });
+
+      res.status(201).json({
+        sessionId: session.id,
+        status: session.status,
+      });
+    } catch (error) {
+      console.error("Create live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  app.post("/api/live-sessions/:id/start", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
+      }
+
+      if (sessionRunner.isRunning(sessionId)) {
+        return res.status(200).json({ sessionId, status: session.status });
+      }
+
+      const profile = await storage.getStrategyProfile(session.profileSlug);
+      if (!profile) {
+        return res.status(404).json({ error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" } });
+      }
+
+      const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
+      if (!startResult.success) {
+        await storage.updateSimSession(session.id, {
+          status: SimSessionStatus.FAILED,
+          errorMessage: startResult.error,
+        });
+        return res.status(400).json({
+          error: { code: "START_FAILED", message: startResult.error },
+        });
+      }
+
+      res.status(200).json({ sessionId, status: SimSessionStatus.RUNNING });
+    } catch (error) {
+      console.error("Start live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  app.get("/api/live-sessions/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
+      }
+
+      const latestEquity = await storage.getLatestSimEventByType(sessionId, "equity");
+      const tradeCount = await storage.getSimTradeCount(sessionId);
+
+      res.json({
+        id: session.id,
+        status: session.status,
+        profileSlug: session.profileSlug,
+        timeframe: session.timeframe,
+        symbols: [session.symbol],
+        startMs: session.startMs,
+        createdAt: session.createdAt,
+        lastUpdate: latestEquity?.ts || session.updatedAt?.getTime() || session.createdAt?.getTime(),
+        equity: (latestEquity?.payload as any)?.data?.equity ?? 10000,
+        tradesCount: tradeCount,
+        streamUrl: `/api/sim/sessions/${session.id}/stream`,
+      });
+    } catch (error) {
+      console.error("Get live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  app.post("/api/live-sessions/:id/control", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+
+      const schema = z.object({
+        action: z.enum(["pause", "resume", "stop"]),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid action",
+            details: parsed.error.errors,
+          },
+        });
+      }
+
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
+      }
+
+      const { action } = parsed.data;
+
+      if (action === "pause") {
+        if (session.status !== SimSessionStatus.RUNNING) {
+          return res.status(400).json({ error: { code: "NOT_RUNNING", message: "Session is not running" } });
+        }
+        sessionRunner.pause(sessionId);
+        return res.json({ sessionId, status: SimSessionStatus.PAUSED });
+      }
+
+      if (action === "resume") {
+        if (session.status !== SimSessionStatus.PAUSED) {
+          return res.status(400).json({ error: { code: "NOT_PAUSED", message: "Session is not paused" } });
+        }
+        sessionRunner.resume(sessionId);
+        return res.json({ sessionId, status: SimSessionStatus.RUNNING });
+      }
+
+      sessionRunner.stop(sessionId);
+      return res.json({ sessionId, status: SimSessionStatus.STOPPED });
+    } catch (error) {
+      console.error("Control live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
   // ==================== SIMULATION SESSIONS ====================
   
   // Configure session runner callbacks for event persistence
   sessionRunner.setEventCallback(async (sessionId, event) => {
     await storage.insertSimEvent(sessionId, event.seq, event.ts, event.type, event.payload);
     await storage.updateSessionLastSeq(sessionId, event.seq);
+
+    if (event.type === "trade") {
+      const payload = event.payload as { data?: Record<string, unknown> } | null;
+      const trade = payload?.data || {};
+      const qty = typeof trade.qty === "number" ? trade.qty.toString() : "0";
+      const priceValue =
+        typeof trade.exitPrice === "number"
+          ? trade.exitPrice
+          : typeof trade.price === "number"
+            ? trade.price
+            : typeof trade.entryPrice === "number"
+              ? trade.entryPrice
+              : 0;
+
+      await storage.insertSimTrade({
+        sessionId,
+        ts: event.ts,
+        symbol: trade.symbol?.toString() || "UNKNOWN",
+        side: trade.side?.toString() || "LONG",
+        qty,
+        price: priceValue.toString(),
+        meta: trade,
+      });
+    }
   });
 
   sessionRunner.setStatusChangeCallback(async (sessionId, status, errorMessage) => {
@@ -3993,6 +4381,10 @@ export async function registerRoutes(
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
     
+    const sendEnvelope = (payload: { seq: number; ts: number; type: string; payload: unknown }) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
     // Send heartbeat
     const sendHeartbeat = () => {
       res.write(": heartbeat\n\n");
@@ -4005,7 +4397,7 @@ export async function registerRoutes(
     // First, send any missed events from DB
     const missedEvents = await storage.getSimEvents(sessionId, fromSeq, 1000);
     for (const event of missedEvents) {
-      res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+      sendEnvelope({ seq: event.seq, ts: event.ts, type: event.type, payload: event.payload });
       currentSeq = event.seq + 1;
     }
     
@@ -4013,15 +4405,15 @@ export async function registerRoutes(
     const isActive = sessionRunner.isRunning(sessionId);
     
     if (isActive) {
-      const eventHandler = (_sid: string, event: { seq: number; type: string; payload: unknown }) => {
+      const eventHandler = (_sid: string, event: { seq: number; ts: number; type: string; payload: unknown }) => {
         if (event.seq >= currentSeq) {
-          res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+          sendEnvelope({ seq: event.seq, ts: event.ts, type: event.type, payload: event.payload });
           currentSeq = event.seq + 1;
         }
       };
       
       const statusHandler = (_sid: string, status: string) => {
-        res.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
+        sendEnvelope({ seq: currentSeq, ts: Date.now(), type: "status", payload: { status } });
         if (status === SimSessionStatus.FINISHED || 
             status === SimSessionStatus.FAILED || 
             status === SimSessionStatus.STOPPED) {
@@ -4050,7 +4442,7 @@ export async function registerRoutes(
       req.on("close", cleanup);
     } else {
       // No active runner - just send current status and close
-      res.write(`event: status\ndata: ${JSON.stringify({ status: session.status })}\n\n`);
+      sendEnvelope({ seq: currentSeq, ts: Date.now(), type: "status", payload: { status: session.status } });
       clearInterval(heartbeatInterval);
       res.end();
     }

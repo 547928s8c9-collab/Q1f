@@ -55,7 +55,6 @@ interface GapInfo {
 interface SessionCreateResponse {
   sessionId: string;
   status: string;
-  streamUrl: string;
 }
 
 interface SessionCreateError {
@@ -215,7 +214,6 @@ export default function LiveSessionDetail() {
   const [startDate, setStartDate] = useState<Date | undefined>(
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   );
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [speed, setSpeed] = useState(10);
   const [configOverride, setConfigOverride] = useState<Record<string, unknown>>({});
   const [gaps, setGaps] = useState<GapInfo[]>([]);
@@ -252,27 +250,26 @@ export default function LiveSessionDetail() {
 
   const createSessionMutation = useMutation({
     mutationFn: async () => {
-      if (!profile || !startDate || !endDate) throw new Error("Missing required fields");
+      if (!profile || !startDate) throw new Error("Missing required fields");
       
       const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
       const startMs = Math.floor(startDate.getTime() / tfMs) * tfMs;
-      const endMs = Math.floor(endDate.getTime() / tfMs) * tfMs;
 
       const configHash = JSON.stringify(configOverride).split("").reduce((a, b) => {
         a = ((a << 5) - a) + b.charCodeAt(0);
         return a & a;
       }, 0);
-      const res = await fetch("/api/sim/sessions", {
+      const res = await fetch("/api/live-sessions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": `${slug}-${startMs}-${endMs}-${speed}-${configHash}`,
+          "Idempotency-Key": `${slug}-${startMs}-${speed}-${configHash}`,
         },
         credentials: "include",
         body: JSON.stringify({
-          profileSlug: slug,
+          strategyId: slug,
+          symbols: profile ? [profile.symbol] : undefined,
           startMs,
-          endMs,
           speed,
           configOverride: Object.keys(configOverride).length > 0 ? configOverride : undefined,
         }),
@@ -368,17 +365,16 @@ export default function LiveSessionDetail() {
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-4">
             <Calendar className="w-4 h-4 text-muted-foreground" />
-            <h3 className="font-medium">Session Period</h3>
+            <h3 className="font-medium">Warmup Window</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-1.5">
-              <Label>Start Date</Label>
-              <DatePicker date={startDate} onSelect={setStartDate} label="Start Date" />
+              <Label>Warmup Start</Label>
+              <DatePicker date={startDate} onSelect={setStartDate} label="Warmup Start" />
             </div>
-            <div className="space-y-1.5">
-              <Label>End Date</Label>
-              <DatePicker date={endDate} onSelect={setEndDate} label="End Date" />
+            <div className="rounded-lg border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+              Live sessions use a 15m lagged market feed. The warmup window sets how far back the model loads history.
             </div>
           </div>
 
@@ -443,7 +439,7 @@ export default function LiveSessionDetail() {
         <Button
           size="lg"
           className="w-full"
-          disabled={!startDate || !endDate || createSessionMutation.isPending}
+          disabled={!startDate || createSessionMutation.isPending}
           onClick={() => createSessionMutation.mutate()}
           data-testid="button-start-session"
         >

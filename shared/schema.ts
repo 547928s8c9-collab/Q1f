@@ -470,9 +470,26 @@ export const insertMarketCandleSchema = createInsertSchema(marketCandles).omit({
 export type InsertMarketCandle = z.infer<typeof insertMarketCandleSchema>;
 export type MarketCandle = typeof marketCandles.$inferSelect;
 
+// ==================== MARKET LIVE QUOTES ====================
+export const marketLiveQuotes = pgTable("market_live_quotes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  symbol: text("symbol").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  price: text("price").notNull(),
+  source: text("source").default("sim"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("market_live_quotes_symbol_unique_idx").on(table.symbol),
+  index("market_live_quotes_ts_idx").on(table.ts),
+]);
+
+export const insertMarketLiveQuoteSchema = createInsertSchema(marketLiveQuotes).omit({ id: true, createdAt: true });
+export type InsertMarketLiveQuote = z.infer<typeof insertMarketLiveQuoteSchema>;
+export type MarketLiveQuote = typeof marketLiveQuotes.$inferSelect;
+
 // ==================== MARKET DATA TYPES ====================
 // Timeframe validation
-export const VALID_TIMEFRAMES = ["15m", "1h", "1d"] as const;
+export const VALID_TIMEFRAMES = ["1m", "15m", "1h", "1d"] as const;
 export type Timeframe = typeof VALID_TIMEFRAMES[number];
 
 // Candle DTO (numbers for API consumers)
@@ -958,6 +975,26 @@ export const simEvents = pgTable("sim_events", {
 export const insertSimEventSchema = createInsertSchema(simEvents).omit({ id: true });
 export type InsertSimEvent = z.infer<typeof insertSimEventSchema>;
 export type SimEvent = typeof simEvents.$inferSelect;
+
+// ==================== SIM TRADES ====================
+export const simTrades = pgTable("sim_trades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => simSessions.id),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  symbol: text("symbol").notNull(),
+  side: text("side").notNull(),
+  qty: text("qty").notNull(),
+  price: text("price").notNull(),
+  meta: jsonb("meta"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("sim_trades_session_ts_idx").on(table.sessionId, table.ts),
+  index("sim_trades_symbol_ts_idx").on(table.symbol, table.ts),
+]);
+
+export const insertSimTradeSchema = createInsertSchema(simTrades).omit({ id: true, createdAt: true });
+export type InsertSimTrade = z.infer<typeof insertSimTradeSchema>;
+export type SimTrade = typeof simTrades.$inferSelect;
 
 // ==================== ADMIN CONSOLE TABLES ====================
 // Stage C: RBAC, Audit, Idempotency, 4-Eyes, Inbox, Incidents

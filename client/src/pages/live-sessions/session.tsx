@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,28 +12,24 @@ import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { 
-  Activity, Play, Pause, Square, Clock, TrendingUp, 
-  TrendingDown, Wifi, WifiOff, RefreshCw, Loader2,
-  ArrowUpRight, ArrowDownRight, CircleDot
+  Activity, Play, Pause, Square, Clock, TrendingUp,
+  Wifi, WifiOff, Loader2,
+  ArrowUpRight, CircleDot
 } from "lucide-react";
 import { format } from "date-fns";
 
-interface SimSession {
+interface LiveSession {
   id: string;
   profileSlug: string;
   status: "created" | "running" | "paused" | "stopped" | "finished" | "failed";
-  config: Record<string, unknown>;
   startMs: number;
-  endMs: number;
-  speed: number;
-  lastSeq: number;
-  progress?: {
-    candleIndex: number;
-    totalCandles: number;
-    pct: number;
-  };
-  streamUrl: string;
   createdAt: string;
+  timeframe: string;
+  symbols: string[];
+  lastUpdate: number | null;
+  equity: number;
+  tradesCount: number;
+  streamUrl: string;
 }
 
 interface SimEvent {
@@ -41,6 +37,34 @@ interface SimEvent {
   type: "candle" | "trade" | "equity" | "status" | "error";
   ts: number;
   payload: Record<string, unknown>;
+}
+
+interface MarketQuote {
+  symbol: string;
+  ts: number;
+  price: number;
+}
+
+interface MarketCandle {
+  ts: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface MarketQuotesResponse {
+  quotes: MarketQuote[];
+  simNow?: number;
+}
+
+interface MarketCandlesResponse {
+  success: boolean;
+  data: {
+    candles: MarketCandle[];
+    simNow?: number;
+  };
 }
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
@@ -52,6 +76,12 @@ const statusConfig: Record<string, { color: string; chipVariant: "success" | "wa
   stopped: { color: "text-muted-foreground", chipVariant: "default", label: "Stopped" },
   finished: { color: "text-positive", chipVariant: "success", label: "Finished" },
   failed: { color: "text-negative", chipVariant: "danger", label: "Failed" },
+};
+
+const TIMEFRAME_MS: Record<string, number> = {
+  "1m": 60_000,
+  "15m": 900_000,
+  "1h": 3_600_000,
 };
 
 function EventFeed({ events }: { events: SimEvent[] }) {
@@ -79,35 +109,36 @@ function EventFeed({ events }: { events: SimEvent[] }) {
   };
 
   const getEventColor = (type: string, payload: Record<string, unknown>) => {
+    const data = (payload as { data?: Record<string, unknown> })?.data || {};
     if (type === "trade") {
-      return payload.side === "buy" ? "text-positive" : "text-negative";
+      return data.side === "LONG" ? "text-positive" : "text-negative";
     }
     if (type === "equity") {
-      const change = payload.change as number;
-      return change >= 0 ? "text-positive" : "text-negative";
+      const equity = Number(data.equity ?? 0);
+      return equity >= 10000 ? "text-positive" : "text-negative";
     }
     return "text-muted-foreground";
   };
 
   const formatPayload = (type: string, payload: Record<string, unknown>) => {
+    const data = (payload as { data?: Record<string, unknown> })?.data || {};
     if (type === "trade") {
-      const side = payload.side as string;
-      const price = payload.price as number;
-      const qty = payload.qty as number;
+      const side = data.side as string;
+      const price = (data.exitPrice ?? data.price ?? data.entryPrice) as number;
+      const qty = data.qty as number;
       return `${side?.toUpperCase()} ${qty} @ ${price?.toFixed(2)}`;
     }
     if (type === "equity") {
-      const value = payload.value as number;
-      const change = payload.change as number;
-      const sign = change >= 0 ? "+" : "";
-      return `$${value?.toFixed(2)} (${sign}${change?.toFixed(2)}%)`;
+      const value = data.equity as number;
+      const drawdown = data.drawdownPct as number;
+      return `$${value?.toFixed(2)} (DD ${drawdown?.toFixed(2)}%)`;
     }
     if (type === "candle") {
-      const close = payload.close as number;
-      return `Close: ${close?.toFixed(2)}`;
+      const candle = data.candle as { close?: number } | undefined;
+      return `Close: ${candle?.close?.toFixed(2)}`;
     }
     if (type === "status") {
-      return payload.status as string;
+      return (payload.status as string) || (data.status as string);
     }
     return JSON.stringify(payload).slice(0, 50);
   };
@@ -148,6 +179,59 @@ function EventFeed({ events }: { events: SimEvent[] }) {
   );
 }
 
+function CandleChart({ candles }: { candles: MarketCandle[] }) {
+  if (!candles || candles.length === 0) {
+    return (
+      <div className="h-52 flex items-center justify-center text-muted-foreground text-sm">
+        Waiting for candles...
+      </div>
+    );
+  }
+
+  const highs = candles.map((c) => c.high);
+  const lows = candles.map((c) => c.low);
+  const maxHigh = Math.max(...highs);
+  const minLow = Math.min(...lows);
+  const range = Math.max(1e-6, maxHigh - minLow);
+
+  const height = 100;
+  const candleSpacing = 3;
+  const width = candles.length * candleSpacing;
+
+  const scaleY = (value: number) => height - ((value - minLow) / range) * height;
+
+  return (
+    <div className="h-52 w-full">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+        {candles.map((candle, index) => {
+          const x = index * candleSpacing + 1;
+          const openY = scaleY(candle.open);
+          const closeY = scaleY(candle.close);
+          const highY = scaleY(candle.high);
+          const lowY = scaleY(candle.low);
+          const up = candle.close >= candle.open;
+          const color = up ? "#22c55e" : "#ef4444";
+          const bodyY = Math.min(openY, closeY);
+          const bodyH = Math.max(1, Math.abs(closeY - openY));
+
+          return (
+            <g key={candle.ts}>
+              <line x1={x} x2={x} y1={highY} y2={lowY} stroke={color} strokeWidth={1} />
+              <rect x={x - 1} y={bodyY} width={2} height={bodyH} fill={color} />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function formatSymbol(symbol?: string): string {
+  if (!symbol) return "";
+  if (symbol.includes("/")) return symbol;
+  return symbol.replace("USDT", "/USDT");
+}
+
 export default function LiveSessionView() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -157,13 +241,17 @@ export default function LiveSessionView() {
   const [equityHistory, setEquityHistory] = useState<Array<{ value: number }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [currentCandle, setCurrentCandle] = useState<{ ts: number; close: number } | null>(null);
+  const [marketStatus, setMarketStatus] = useState<ConnectionStatus>("disconnected");
+  const [latestQuote, setLatestQuote] = useState<MarketQuote | null>(null);
+  const [candles, setCandles] = useState<MarketCandle[]>([]);
   
   const eventSourceRef = useRef<EventSource | null>(null);
+  const marketSourceRef = useRef<EventSource | null>(null);
   const lastSeqRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { data: session, isLoading, error, refetch } = useQuery<SimSession>({
-    queryKey: ["/api/sim/sessions", id],
+  const { data: session, isLoading, error, refetch } = useQuery<LiveSession>({
+    queryKey: ["/api/live-sessions", id],
     enabled: !!id,
     refetchInterval: (query) => {
       const data = query.state.data;
@@ -175,6 +263,55 @@ export default function LiveSessionView() {
     },
   });
 
+  const symbolsParam = session?.symbols?.join(",") || "";
+  const primarySymbol = session?.symbols?.[0];
+
+  const { data: quoteSnapshot } = useQuery<MarketQuotesResponse>({
+    queryKey: ["/api/market/quotes", { symbols: symbolsParam }],
+    enabled: !!symbolsParam,
+    refetchInterval: false,
+  });
+
+  const { data: candleSnapshot } = useQuery<MarketCandlesResponse>({
+    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: session?.timeframe, limit: 120 }],
+    enabled: !!primarySymbol && !!session?.timeframe,
+    refetchInterval: false,
+  });
+
+  const timeframeMs = useMemo(() => {
+    if (!session?.timeframe) return 900_000;
+    return TIMEFRAME_MS[session.timeframe] || 900_000;
+  }, [session?.timeframe]);
+
+  const applyQuoteToCandles = useCallback((prev: MarketCandle[], quote: MarketQuote) => {
+    if (!prev || prev.length === 0) return prev;
+    const candleStart = Math.floor(quote.ts / timeframeMs) * timeframeMs;
+    const last = prev[prev.length - 1];
+    if (last && last.ts === candleStart) {
+      const updated = {
+        ...last,
+        close: quote.price,
+        high: Math.max(last.high, quote.price),
+        low: Math.min(last.low, quote.price),
+      };
+      return [...prev.slice(0, -1), updated];
+    }
+    if (last && candleStart > last.ts) {
+      return [
+        ...prev,
+        {
+          ts: candleStart,
+          open: quote.price,
+          high: quote.price,
+          low: quote.price,
+          close: quote.price,
+          volume: 0,
+        },
+      ].slice(-120);
+    }
+    return prev;
+  }, [timeframeMs]);
+
   useSetPageTitle(session ? `Session ${session.profileSlug}` : "Live Session");
 
   const connectSSE = useCallback(() => {
@@ -185,7 +322,8 @@ export default function LiveSessionView() {
     }
 
     setConnectionStatus("connecting");
-    const url = `/api/sim/sessions/${id}/stream?fromSeq=${lastSeqRef.current}`;
+    const baseUrl = session.streamUrl || `/api/sim/sessions/${id}/stream`;
+    const url = `${baseUrl}?fromSeq=${lastSeqRef.current}`;
     const es = new EventSource(url, { withCredentials: true });
     eventSourceRef.current = es;
 
@@ -195,27 +333,32 @@ export default function LiveSessionView() {
 
     es.onmessage = (e) => {
       try {
-        const data = JSON.parse(e.data);
-        
-        if (data.type === "heartbeat") return;
-        
-        const event = data as SimEvent;
+        const event = JSON.parse(e.data) as SimEvent;
+        if (!event?.type) return;
+
         lastSeqRef.current = event.seq;
-        
         setEvents((prev) => [...prev.slice(-200), event]);
 
+        const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
+
         if (event.type === "candle") {
-          setCurrentCandle({
-            ts: event.ts,
-            close: event.payload.close as number,
-          });
+          const candle = data.candle as { close?: number } | undefined;
+          if (candle?.close !== undefined) {
+            setCurrentCandle({
+              ts: event.ts,
+              close: candle.close,
+            });
+          }
         }
 
         if (event.type === "equity") {
-          setEquityHistory((prev) => [
-            ...prev.slice(-100),
-            { value: event.payload.value as number },
-          ]);
+          const equity = data.equity as number;
+          if (typeof equity === "number") {
+            setEquityHistory((prev) => [
+              ...prev.slice(-100),
+              { value: equity },
+            ]);
+          }
         }
 
         if (event.type === "status") {
@@ -256,13 +399,70 @@ export default function LiveSessionView() {
     };
   }, [session?.status, connectSSE]);
 
+  useEffect(() => {
+    if (!quoteSnapshot?.quotes || !primarySymbol) return;
+    const match = quoteSnapshot.quotes.find((q) => q.symbol === primarySymbol);
+    if (match) {
+      setLatestQuote(match);
+    }
+  }, [quoteSnapshot, primarySymbol]);
+
+  useEffect(() => {
+    if (candleSnapshot?.data?.candles) {
+      setCandles(candleSnapshot.data.candles);
+    }
+  }, [candleSnapshot]);
+
+  useEffect(() => {
+    if (session && equityHistory.length === 0 && typeof session.equity === "number") {
+      setEquityHistory([{ value: session.equity }]);
+    }
+  }, [session?.equity, equityHistory.length]);
+
+  useEffect(() => {
+    if (!session || session.symbols.length === 0) return;
+    if (marketSourceRef.current) {
+      marketSourceRef.current.close();
+    }
+
+    setMarketStatus("connecting");
+    const streamUrl = `/api/market/stream?symbols=${encodeURIComponent(session.symbols.join(","))}`;
+    const es = new EventSource(streamUrl, { withCredentials: true });
+    marketSourceRef.current = es;
+
+    es.onopen = () => {
+      setMarketStatus("connected");
+    };
+
+    es.addEventListener("quote", (e) => {
+      try {
+        const quote = JSON.parse((e as MessageEvent).data) as MarketQuote;
+        setLatestQuote(quote);
+        setCandles((prev) => applyQuoteToCandles(prev, quote));
+      } catch (err) {
+        console.error("Failed to parse market quote:", err);
+      }
+    });
+
+    es.onerror = () => {
+      setMarketStatus("disconnected");
+      es.close();
+      marketSourceRef.current = null;
+    };
+
+    return () => {
+      es.close();
+      marketSourceRef.current = null;
+    };
+  }, [session?.id, session?.symbols?.join(","), applyQuoteToCandles]);
+
   const controlMutation = useMutation({
     mutationFn: async (action: "pause" | "resume" | "stop") => {
-      const res = await apiRequest("POST", `/api/sim/sessions/${id}/control`, { action });
+      const res = await apiRequest("POST", `/api/live-sessions/${id}/control`, { action });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sim/sessions", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/live-sessions", id] });
     },
     onError: (err: Error) => {
       toast({
@@ -272,6 +472,29 @@ export default function LiveSessionView() {
       });
     },
   });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/live-sessions/${id}/start`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/live-sessions", id] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to start session",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (session?.status === "created" && !startMutation.isPending) {
+      startMutation.mutate();
+    }
+  }, [session?.status, startMutation]);
 
   if (isLoading) {
     return (
@@ -348,45 +571,56 @@ export default function LiveSessionView() {
         <Card className="p-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Clock className="w-4 h-4" />
-            <span className="text-xs">Current Time</span>
+            <span className="text-xs">Sim Time</span>
           </div>
           <p className="text-lg font-semibold tabular-nums">
-            {currentCandle 
-              ? format(new Date(currentCandle.ts), "MMM d, yyyy HH:mm")
+            {latestQuote?.ts
+              ? format(new Date(latestQuote.ts), "MMM d, yyyy HH:mm")
               : format(new Date(session.startMs), "MMM d, yyyy HH:mm")
             }
           </p>
         </Card>
 
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Activity className="w-4 h-4" />
-            <span className="text-xs">Progress</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="text-lg font-semibold tabular-nums">
-              {session.progress ? `${session.progress.pct.toFixed(1)}%` : "0%"}
-            </p>
-            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${session.progress?.pct || 0}%` }}
-              />
+          <div className="flex items-center justify-between text-muted-foreground mb-1">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-xs">Live Price</span>
             </div>
+            <Chip
+              variant={marketStatus === "connected" ? "success" : "warning"}
+              size="sm"
+              icon={marketStatus === "connected" ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            >
+              {marketStatus === "connected" ? "Feed" : "Offline"}
+            </Chip>
           </div>
+          <p className="text-lg font-semibold tabular-nums">
+            {latestQuote ? `${latestQuote.price.toFixed(4)} ${formatSymbol(primarySymbol)}` : "--"}
+          </p>
         </Card>
 
         <Card className="p-4">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-xs">Speed</span>
+            <Activity className="w-4 h-4" />
+            <span className="text-xs">Trades</span>
           </div>
-          <p className="text-lg font-semibold tabular-nums">{session.speed}x</p>
+          <p className="text-lg font-semibold tabular-nums">{session.tradesCount}</p>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium">Market Candles</h3>
+              <span className="text-xs text-muted-foreground">
+                {primarySymbol || "—"} · {session.timeframe}
+              </span>
+            </div>
+            <CandleChart candles={candles} />
+          </Card>
+
           <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Event Feed</h3>
@@ -425,7 +659,21 @@ export default function LiveSessionView() {
           <div className="flex items-center justify-between gap-4">
             <span className="text-sm text-muted-foreground">Session Controls</span>
             <div className="flex gap-2">
-              {session.status === "running" ? (
+              {session.status === "created" ? (
+                <Button
+                  variant="default"
+                  onClick={() => startMutation.mutate()}
+                  disabled={startMutation.isPending}
+                  data-testid="button-start"
+                >
+                  {startMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-2" />
+                  )}
+                  Start
+                </Button>
+              ) : session.status === "running" ? (
                 <Button
                   variant="outline"
                   onClick={() => controlMutation.mutate("pause")}

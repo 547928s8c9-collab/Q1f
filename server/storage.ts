@@ -20,9 +20,11 @@ import {
   notifications,
   idempotencyKeys,
   marketCandles,
+  marketLiveQuotes,
   strategyProfiles,
   simSessions,
   simEvents,
+  simTrades,
   AddressStatus,
   dbRowToCandle,
   // Admin tables
@@ -179,6 +181,11 @@ export interface IStorage {
   // Market Candles
   getCandlesFromCache(exchange: string, symbol: string, timeframe: string, startMs: number, endMs: number): Promise<Candle[]>;
   upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void>;
+  getMarketCandleBounds(exchange?: string, symbol?: string, timeframe?: string): Promise<{ minTs: number | null; maxTs: number | null }>;
+
+  // Market Live Quotes
+  getMarketLiveQuotes(symbols?: string[]): Promise<{ symbol: string; ts: number; price: string }[]>;
+  upsertMarketLiveQuotes(quotes: Array<{ symbol: string; ts: number; price: string; source?: string | null }>): Promise<void>;
 
   // Strategy Profiles
   getStrategyProfiles(): Promise<StrategyProfile[]>;
@@ -200,6 +207,11 @@ export interface IStorage {
   insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent>;
   updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void>;
   getLastSimEventSeq(sessionId: string): Promise<number>;
+  getLatestSimEventByType(sessionId: string, type: string): Promise<SimEvent | undefined>;
+
+  // Sim Trades
+  insertSimTrade(trade: { sessionId: string; ts: number; symbol: string; side: string; qty: string; price: string; meta?: unknown }): Promise<void>;
+  getSimTradeCount(sessionId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1007,6 +1019,70 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getMarketCandleBounds(
+    exchange?: string,
+    symbol?: string,
+    timeframe?: string
+  ): Promise<{ minTs: number | null; maxTs: number | null }> {
+    const whereClauses = [];
+    if (exchange) whereClauses.push(eq(marketCandles.exchange, exchange));
+    if (symbol) whereClauses.push(eq(marketCandles.symbol, symbol));
+    if (timeframe) whereClauses.push(eq(marketCandles.timeframe, timeframe));
+
+    let query = db
+      .select({
+        minTs: sql<number | null>`min(${marketCandles.ts})`,
+        maxTs: sql<number | null>`max(${marketCandles.ts})`,
+      })
+      .from(marketCandles);
+
+    if (whereClauses.length > 0) {
+      query = query.where(and(...whereClauses)) as typeof query;
+    }
+
+    const [row] = await query;
+
+    const minTs = row?.minTs !== null && row?.minTs !== undefined ? Number(row.minTs) : null;
+    const maxTs = row?.maxTs !== null && row?.maxTs !== undefined ? Number(row.maxTs) : null;
+    return { minTs: Number.isFinite(minTs as number) ? minTs : null, maxTs: Number.isFinite(maxTs as number) ? maxTs : null };
+  }
+
+  async getMarketLiveQuotes(symbols?: string[]): Promise<{ symbol: string; ts: number; price: string }[]> {
+    let query = db.select({
+      symbol: marketLiveQuotes.symbol,
+      ts: marketLiveQuotes.ts,
+      price: marketLiveQuotes.price,
+    }).from(marketLiveQuotes);
+
+    if (symbols && symbols.length > 0) {
+      query = query.where(inArray(marketLiveQuotes.symbol, symbols)) as typeof query;
+    }
+
+    return await query;
+  }
+
+  async upsertMarketLiveQuotes(
+    quotes: Array<{ symbol: string; ts: number; price: string; source?: string | null }>
+  ): Promise<void> {
+    if (quotes.length === 0) return;
+
+    const values = quotes.map((q) => ({
+      symbol: q.symbol,
+      ts: q.ts,
+      price: q.price,
+      source: q.source ?? "sim",
+    }));
+
+    await db.insert(marketLiveQuotes).values(values).onConflictDoUpdate({
+      target: [marketLiveQuotes.symbol],
+      set: {
+        ts: sql`excluded.ts`,
+        price: sql`excluded.price`,
+        source: sql`excluded.source`,
+      },
+    });
+  }
+
   private dedupeCandles(candles: Candle[]): Candle[] {
     const seen = new Map<number, Candle>();
     for (const c of candles) {
@@ -1294,6 +1370,36 @@ export class DatabaseStorage implements IStorage {
       payload,
     }).onConflictDoNothing().returning();
     return event;
+  }
+
+  async getLatestSimEventByType(sessionId: string, type: string): Promise<SimEvent | undefined> {
+    const [event] = await db
+      .select()
+      .from(simEvents)
+      .where(and(eq(simEvents.sessionId, sessionId), eq(simEvents.type, type)))
+      .orderBy(desc(simEvents.seq))
+      .limit(1);
+    return event;
+  }
+
+  async insertSimTrade(trade: { sessionId: string; ts: number; symbol: string; side: string; qty: string; price: string; meta?: unknown }): Promise<void> {
+    await db.insert(simTrades).values({
+      sessionId: trade.sessionId,
+      ts: trade.ts,
+      symbol: trade.symbol,
+      side: trade.side,
+      qty: trade.qty,
+      price: trade.price,
+      meta: trade.meta ?? null,
+    }).onConflictDoNothing();
+  }
+
+  async getSimTradeCount(sessionId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(simTrades)
+      .where(eq(simTrades.sessionId, sessionId));
+    return row?.count ? Number(row.count) : 0;
   }
 
   async updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void> {
