@@ -270,6 +270,31 @@ export const insertSecuritySettingsSchema = createInsertSchema(securitySettings)
 export type InsertSecuritySettings = z.infer<typeof insertSecuritySettingsSchema>;
 export type SecuritySettings = typeof securitySettings.$inferSelect;
 
+// ==================== TWO FACTOR AUTHENTICATION ====================
+export const twoFactor = pgTable("two_factor", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  secretEncrypted: text("secret_encrypted").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTwoFactorSchema = createInsertSchema(twoFactor).omit({ createdAt: true, updatedAt: true });
+export type InsertTwoFactor = z.infer<typeof insertTwoFactorSchema>;
+export type TwoFactor = typeof twoFactor.$inferSelect;
+
+// Zod schemas for 2FA endpoints
+export const twoFactorVerifySchema = z.object({
+  code: z.string().length(6).regex(/^\d{6}$/, "Code must be 6 digits"),
+});
+export type TwoFactorVerifyInput = z.infer<typeof twoFactorVerifySchema>;
+
+export const twoFactorDisableSchema = z.object({
+  code: z.string().length(6).regex(/^\d{6}$/, "Code must be 6 digits"),
+});
+export type TwoFactorDisableInput = z.infer<typeof twoFactorDisableSchema>;
+
 // ==================== WHITELIST ADDRESSES ====================
 export const AddressStatus = {
   PENDING_ACTIVATION: "PENDING_ACTIVATION",
