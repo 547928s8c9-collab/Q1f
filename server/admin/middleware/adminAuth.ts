@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { fail, ErrorCodes } from "../http";
+import { logAdminAction } from "../audit";
 import { db } from "../../db";
 import { adminUsers, users } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -69,10 +70,26 @@ export async function adminAuth(
     const [admin] = await db
       .select()
       .from(adminUsers)
-      .where(and(eq(adminUsers.userId, oidcUserId), eq(adminUsers.isActive, true)))
+      .where(eq(adminUsers.userId, oidcUserId))
       .limit(1);
 
     if (!admin) {
+      fail(res, ErrorCodes.ADMIN_REQUIRED, "Admin access required", 403);
+      return;
+    }
+    if (!admin.isActive) {
+      const requestId = res.locals.requestId as string | undefined;
+      const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+      const userAgent = req.headers["user-agent"] || "unknown";
+      void logAdminAction({
+        actorAdminUserId: admin.id,
+        requestId,
+        actionType: "admin.auth.login",
+        outcome: "failure",
+        errorCode: ErrorCodes.ADMIN_REQUIRED,
+        ip,
+        userAgent,
+      });
       fail(res, ErrorCodes.ADMIN_REQUIRED, "Admin access required", 403);
       return;
     }
