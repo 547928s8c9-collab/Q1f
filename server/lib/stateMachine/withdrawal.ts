@@ -1,8 +1,18 @@
 import { WithdrawalStatus, type WithdrawalStatusType } from "@shared/schema";
 
 export const WithdrawalTransitions: Record<WithdrawalStatusType, WithdrawalStatusType[]> = {
-  [WithdrawalStatus.PENDING]: [
+  [WithdrawalStatus.PENDING_REVIEW]: [
+    WithdrawalStatus.PENDING_APPROVAL,
+    WithdrawalStatus.REJECTED,
+    WithdrawalStatus.CANCELLED,
+  ],
+  [WithdrawalStatus.PENDING_APPROVAL]: [
     WithdrawalStatus.APPROVED,
+    WithdrawalStatus.REJECTED,
+    WithdrawalStatus.CANCELLED,
+  ],
+  [WithdrawalStatus.PENDING]: [
+    WithdrawalStatus.PENDING_APPROVAL,
     WithdrawalStatus.REJECTED,
     WithdrawalStatus.CANCELLED,
   ],
