@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/loading-skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { formatMoney, type BootstrapResponse, type Strategy } from "@shared/schema";
 import { 
@@ -15,7 +16,8 @@ import {
   Vault,
   ChevronRight,
   PiggyBank,
-  Plus
+  Plus,
+  AlertTriangle
 } from "lucide-react";
 import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
 
@@ -421,13 +423,34 @@ export default function Home() {
   useSetPageTitle("Home");
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
 
-  const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
+  const { data: bootstrap, isLoading: bootstrapLoading, isError: bootstrapError, refetch: refetchBootstrap } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });
 
-  const { data: strategies, isLoading: strategiesLoading } = useQuery<Strategy[]>({
+  const { data: strategies, isLoading: strategiesLoading, isError: strategiesError, refetch: refetchStrategies } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
   });
+
+  if (bootstrapError || strategiesError) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
+        <Card className="p-6">
+          <EmptyState
+            icon={AlertTriangle}
+            title="Unable to load dashboard"
+            description="There was an error loading your data. Please try again."
+            action={{
+              label: "Retry",
+              onClick: () => {
+                void refetchBootstrap();
+                void refetchStrategies();
+              },
+            }}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">

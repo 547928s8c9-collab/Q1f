@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -109,7 +111,7 @@ export default function AdminWithdrawals() {
     };
   }, [adminMeData]);
 
-  const { data: withdrawalsData, isLoading } = useQuery<{ ok: boolean; data: AdminWithdrawalListItem[]; meta?: { nextCursor: string | null } }>({
+  const { data: withdrawalsData, isLoading, error, refetch } = useQuery<{ ok: boolean; data: AdminWithdrawalListItem[]; meta?: { nextCursor: string | null } }>({
     queryKey: ["/api/admin/withdrawals", { status: statusFilter === "all" ? undefined : statusFilter }],
   });
 
@@ -333,6 +335,25 @@ export default function AdminWithdrawals() {
     toast({ title: "Copied", description: "Address copied to clipboard" });
   };
 
+  const listSkeleton = (
+    <div className="space-y-2">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <Card key={`withdrawal-skeleton-${index}`} className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card sticky top-0 z-10">
@@ -382,9 +403,18 @@ export default function AdminWithdrawals() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="py-6">
+            {listSkeleton}
           </div>
+        ) : error ? (
+          <Card className="p-8">
+            <EmptyState
+              icon={AlertTriangle}
+              title="Unable to load withdrawals"
+              description="There was an error loading withdrawals. Please try again."
+              action={{ label: "Retry", onClick: () => void refetch() }}
+            />
+          </Card>
         ) : filteredWithdrawals.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">No withdrawals found</p>

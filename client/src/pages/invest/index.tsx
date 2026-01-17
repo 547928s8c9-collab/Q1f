@@ -6,6 +6,7 @@ import { StrategyDetailsSheet } from "@/components/strategy/strategy-details-she
 import { InvestSheet } from "@/components/operations/invest-sheet";
 import { StrategyCardSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Card } from "@/components/ui/card";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { TrendingUp, AlertTriangle } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
@@ -16,7 +17,7 @@ export default function Invest() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [investOpen, setInvestOpen] = useState(false);
 
-  const { data: strategies, isLoading } = useQuery<Strategy[]>({
+  const { data: strategies, isLoading, isError, refetch } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
   });
 
@@ -95,7 +96,16 @@ export default function Invest() {
         <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <Card className="p-6">
+          <EmptyState
+            icon={TrendingUp}
+            title="Unable to load strategies"
+            description="There was an error loading strategy data. Please try again."
+            action={{ label: "Retry", onClick: () => void refetch() }}
+          />
+        </Card>
+      ) : isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <StrategyCardSkeleton />
           <StrategyCardSkeleton />

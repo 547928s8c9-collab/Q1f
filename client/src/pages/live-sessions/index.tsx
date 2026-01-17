@@ -148,7 +148,7 @@ function ProfileCard({ profile }: { profile: StrategyProfile }) {
 export default function LiveSessions() {
   useSetPageTitle("Live Sessions");
 
-  const { data, isLoading, error } = useQuery<ProfilesResponse>({
+  const { data, isLoading, error, refetch } = useQuery<ProfilesResponse>({
     queryKey: ["/api/strategy-profiles"],
   });
 
@@ -174,6 +174,7 @@ export default function LiveSessions() {
             icon={Activity}
             title="Unable to load profiles"
             description="There was an error loading strategy profiles. Please try again."
+            action={{ label: "Retry", onClick: () => void refetch() }}
           />
         </Card>
       ) : profiles.length === 0 ? (

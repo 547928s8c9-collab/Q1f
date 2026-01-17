@@ -218,7 +218,7 @@ export default function LiveSessionDetail() {
   const [configOverride, setConfigOverride] = useState<Record<string, unknown>>({});
   const [gaps, setGaps] = useState<GapInfo[]>([]);
 
-  const { data: profile, isLoading, error } = useQuery<StrategyProfile>({
+  const { data: profile, isLoading, error, refetch } = useQuery<StrategyProfile>({
     queryKey: ["/api/strategy-profiles", slug],
     enabled: !!slug,
   });
@@ -327,6 +327,7 @@ export default function LiveSessionDetail() {
             icon={Activity}
             title="Strategy profile not found"
             description="The requested strategy profile does not exist."
+            action={{ label: "Retry", onClick: () => void refetch() }}
           />
         </Card>
       </div>

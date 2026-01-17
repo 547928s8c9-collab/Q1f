@@ -529,6 +529,7 @@ export default function LiveSessionView() {
             icon={Activity}
             title="Session not found"
             description="The requested session does not exist or has been deleted."
+            action={{ label: "Retry", onClick: () => void refetch() }}
           />
         </Card>
       </div>

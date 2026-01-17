@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Select,
   SelectContent,
@@ -62,7 +64,7 @@ export default function AdminKyc() {
   const [decisionDialog, setDecisionDialog] = useState<{ open: boolean; decision: DecisionType | null }>({ open: false, decision: null });
   const [decisionReason, setDecisionReason] = useState("");
 
-  const { data: applicantsData, isLoading } = useQuery<{ ok: boolean; data: AdminKycApplicantListItem[]; meta?: { nextCursor: string | null } }>({
+  const { data: applicantsData, isLoading, error, refetch } = useQuery<{ ok: boolean; data: AdminKycApplicantListItem[]; meta?: { nextCursor: string | null } }>({
     queryKey: ["/api/admin/kyc/applicants", { status: statusFilter === "all" ? undefined : statusFilter }],
   });
 
@@ -128,6 +130,25 @@ export default function AdminKyc() {
     });
   };
 
+  const listSkeleton = (
+    <div className="space-y-2">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <Card key={`kyc-skeleton-${index}`} className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card sticky top-0 z-10">
@@ -176,9 +197,18 @@ export default function AdminKyc() {
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="py-6">
+            {listSkeleton}
           </div>
+        ) : error ? (
+          <Card className="p-8">
+            <EmptyState
+              icon={AlertTriangle}
+              title="Unable to load KYC applicants"
+              description="There was an error loading the KYC queue. Please try again."
+              action={{ label: "Retry", onClick: () => void refetch() }}
+            />
+          </Card>
         ) : filteredApplicants.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">No KYC applicants found</p>
