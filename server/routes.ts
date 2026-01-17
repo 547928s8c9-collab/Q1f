@@ -38,6 +38,11 @@ const MIN_WITHDRAWAL_MINOR = process.env.MIN_WITHDRAWAL_MINOR || "10000000"; // 
 const MIN_DEPOSIT_MINOR = process.env.MIN_DEPOSIT_MINOR || "10000000"; // 10 USDT
 const DEFAULT_RUB_RATE = parseFloat(process.env.DEFAULT_RUB_RATE || "92.5");
 
+// Common amount schema: digits only, must be > 0
+const amountSchema = z.string()
+  .regex(/^\d+$/, "Amount must contain only digits")
+  .refine((val) => BigInt(val) > 0n, "Amount must be greater than zero");
+
 // Consent constants (canonical source)
 const CURRENT_CONSENT_VERSION = "1.0";
 const CURRENT_DOC_HASH = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -754,12 +759,13 @@ export async function registerRoutes(
 
   // POST /api/deposit/usdt/simulate (protected, idempotent, dev only)
   app.post("/api/deposit/usdt/simulate", isAuthenticated, devOnly, async (req, res) => {
+    const userId = getUserId(req);
+    const endpoint = "/api/deposit/usdt/simulate";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+    
     try {
-      const userId = getUserId(req);
-      const endpoint = "/api/deposit/usdt/simulate";
-
       // Acquire idempotency lock (atomic)
-      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint);
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -767,12 +773,25 @@ export async function registerRoutes(
         // No idempotency key provided, continue normally
       }
 
-      const schema = z.object({ amount: z.string() });
+      const schema = z.object({ amount: amountSchema });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+        const errorBody = { error: "Invalid request data", details: parsed.error.flatten() };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
       const { amount } = parsed.data;
+
+      // Validate minimum deposit
+      if (BigInt(amount) < BigInt(MIN_DEPOSIT_MINOR)) {
+        const errorBody = { error: "Amount below minimum deposit", code: "MIN_DEPOSIT", minimum: MIN_DEPOSIT_MINOR };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
+      }
 
       const balance = await storage.getBalance(userId, "USDT");
       const newAvailable = (BigInt(balance?.available || "0") + BigInt(amount)).toString();
@@ -818,28 +837,37 @@ export async function registerRoutes(
       res.json(responseBody);
     } catch (error) {
       console.error("Deposit USDT simulate error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 
   // POST /api/deposit/card/simulate (protected, idempotent, dev only)
   app.post("/api/deposit/card/simulate", isAuthenticated, devOnly, async (req, res) => {
+    const userId = getUserId(req);
+    const endpoint = "/api/deposit/card/simulate";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+    
     try {
-      const userId = getUserId(req);
-      const endpoint = "/api/deposit/card/simulate";
-
       // Acquire idempotency lock (atomic)
-      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint);
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
         }
       }
 
-      const schema = z.object({ amount: z.string() }); // RUB in kopeks
+      const schema = z.object({ amount: amountSchema }); // RUB in kopeks
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+        const errorBody = { error: "Invalid request data", details: parsed.error.flatten() };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
       const { amount } = parsed.data;
 
@@ -897,18 +925,23 @@ export async function registerRoutes(
       res.json(responseBody);
     } catch (error) {
       console.error("Deposit card simulate error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 
   // POST /api/invest (protected, idempotent)
   app.post("/api/invest", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const endpoint = "/api/invest";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+    
     try {
-      const userId = getUserId(req);
-      const endpoint = "/api/invest";
-
       // Acquire idempotency lock (atomic)
-      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint);
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -917,11 +950,15 @@ export async function registerRoutes(
 
       const schema = z.object({
         strategyId: z.string(),
-        amount: z.string(),
+        amount: amountSchema,
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+        const errorBody = { error: "Invalid request data", details: parsed.error.flatten() };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
       const { strategyId, amount } = parsed.data;
 
@@ -930,45 +967,69 @@ export async function registerRoutes(
       const kycApplicant = await storage.getKycApplicant(userId);
       
       if (!security?.consentAccepted) {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "Consent required",
           code: "CONSENT_REQUIRED",
           message: "Please accept the terms and conditions before investing"
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
       
       if (kycApplicant?.status !== "APPROVED") {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "KYC required",
           code: "KYC_REQUIRED",
           message: "Please complete identity verification before investing"
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
 
       const strategy = await storage.getStrategy(strategyId);
       if (!strategy) {
-        return res.status(404).json({ error: "Strategy not found" });
+        const errorBody = { error: "Strategy not found" };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 404, errorBody);
+        }
+        return res.status(404).json(errorBody);
       }
 
       // Check if position is paused (risk control)
       const existingPosition = await storage.getPosition(userId, strategyId);
       if (existingPosition?.paused) {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "Strategy paused",
           code: "STRATEGY_PAUSED",
           message: existingPosition.pausedReason === "dd_breach" 
             ? "This strategy is paused due to drawdown limit breach. Please review your risk settings."
             : "This strategy is currently paused. Resume it to make new investments."
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
 
       const balance = await storage.getBalance(userId, "USDT");
       if (BigInt(balance?.available || "0") < BigInt(amount)) {
-        return res.status(400).json({ error: "Insufficient balance" });
+        const errorBody = { error: "Insufficient balance" };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
 
       if (BigInt(amount) < BigInt(strategy.minInvestment)) {
-        return res.status(400).json({ error: "Amount below minimum investment" });
+        const errorBody = { error: "Amount below minimum investment", code: "MIN_INVESTMENT", minimum: strategy.minInvestment };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
 
       // ATOMIC TRANSACTION: balance + position + operation + audit
@@ -1057,9 +1118,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Invest error:", error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
-        return res.status(400).json({ error: "Insufficient balance" });
+        const errorBody = { error: "Insufficient balance" };
+        if (lock?.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 
@@ -1228,12 +1297,13 @@ export async function registerRoutes(
 
   // POST /api/withdraw/usdt (protected, idempotent, 2FA required)
   app.post("/api/withdraw/usdt", isAuthenticated, requireTwoFactor, async (req, res) => {
+    const userId = getUserId(req);
+    const endpoint = "/api/withdraw/usdt";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+    
     try {
-      const userId = getUserId(req);
-      const endpoint = "/api/withdraw/usdt";
-
       // Acquire idempotency lock (atomic)
-      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint);
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -1241,43 +1311,68 @@ export async function registerRoutes(
       }
 
       const schema = z.object({
-        amount: z.string(),
+        amount: amountSchema,
         address: z.string().min(30),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+        const errorBody = { error: "Invalid request data", details: parsed.error.flatten() };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
       const { amount, address } = parsed.data;
+
+      // Validate minimum withdrawal
+      if (BigInt(amount) < BigInt(MIN_WITHDRAWAL_MINOR)) {
+        const errorBody = { error: "Amount below minimum withdrawal", code: "MIN_WITHDRAWAL", minimum: MIN_WITHDRAWAL_MINOR };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
+      }
 
       const security = await storage.getSecuritySettings(userId);
       const kycApplicant = await storage.getKycApplicant(userId);
 
       // Gate checks: consent required
       if (!security?.consentAccepted) {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "Consent required",
           code: "CONSENT_REQUIRED",
           message: "Please accept the terms and conditions before withdrawing"
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
 
       // Gate checks: KYC required
       if (kycApplicant?.status !== "APPROVED") {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "KYC required",
           code: "KYC_REQUIRED",
           message: "Please complete identity verification before withdrawing"
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
 
       // Check 2FA
       if (!security?.twoFactorEnabled) {
-        return res.status(403).json({ 
+        const errorBody = { 
           error: "2FA required",
           code: "TWO_FACTOR_REQUIRED",
           message: "Please enable two-factor authentication before withdrawing"
-        });
+        };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 403, errorBody);
+        }
+        return res.status(403).json(errorBody);
       }
 
       // Check whitelist and activation delay
@@ -1285,19 +1380,27 @@ export async function registerRoutes(
         const whitelist = await storage.getWhitelistAddresses(userId);
         const whitelisted = whitelist.find((w) => w.address === address && w.status === "active");
         if (!whitelisted) {
-          return res.status(403).json({ 
+          const errorBody = { 
             error: "Whitelist required",
             code: "WHITELIST_REQUIRED",
             message: "Address not in whitelist or not yet active"
-          });
+          };
+          if (lock.acquired) {
+            await completeIdempotency(lock.keyId, null, 403, errorBody);
+          }
+          return res.status(403).json(errorBody);
         }
         // Check activation delay has passed
         if (whitelisted.activatesAt && new Date(whitelisted.activatesAt) > new Date()) {
-          return res.status(403).json({ 
+          const errorBody = { 
             error: "Address not yet active",
             code: "ADDRESS_DELAY_PENDING",
             message: `Address will be active after ${whitelisted.activatesAt.toISOString()}`
-          });
+          };
+          if (lock.acquired) {
+            await completeIdempotency(lock.keyId, null, 403, errorBody);
+          }
+          return res.status(403).json(errorBody);
         }
       }
 
@@ -1307,7 +1410,11 @@ export async function registerRoutes(
       
       // Check balance includes fee
       if (BigInt(balance?.available || "0") < totalDeduct) {
-        return res.status(400).json({ error: "Insufficient balance (including network fee)" });
+        const errorBody = { error: "Insufficient balance (including network fee)" };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
 
       // ATOMIC TRANSACTION: balance deduct + operation + withdrawal + audit
@@ -1387,20 +1494,29 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Withdraw error:", error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
-        return res.status(400).json({ error: "Insufficient balance" });
+        const errorBody = { error: "Insufficient balance" };
+        if (lock?.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 
   // POST /api/vault/transfer (protected, idempotent)
   app.post("/api/vault/transfer", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    const endpoint = "/api/vault/transfer";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+    
     try {
-      const userId = getUserId(req);
-      const endpoint = "/api/vault/transfer";
-
       // Acquire idempotency lock (atomic)
-      const lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint);
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -1410,16 +1526,24 @@ export async function registerRoutes(
       const schema = z.object({
         fromVault: z.string(),
         toVault: z.string(),
-        amount: z.string(),
+        amount: amountSchema,
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
+        const errorBody = { error: "Invalid request data", details: parsed.error.flatten() };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
       const { fromVault, toVault, amount } = parsed.data;
 
       if (fromVault === toVault) {
-        return res.status(400).json({ error: "Source and destination must be different" });
+        const errorBody = { error: "Source and destination must be different" };
+        if (lock.acquired) {
+          await completeIdempotency(lock.keyId, null, 400, errorBody);
+        }
+        return res.status(400).json(errorBody);
       }
 
       // ATOMIC TRANSACTION: source deduct + dest credit + operation + audit
@@ -1555,13 +1679,25 @@ export async function registerRoutes(
       console.error("Vault transfer error:", error);
       if (error instanceof Error) {
         if (error.message === "INSUFFICIENT_BALANCE") {
-          return res.status(400).json({ error: "Insufficient wallet balance" });
+          const errorBody = { error: "Insufficient wallet balance" };
+          if (lock?.acquired) {
+            await completeIdempotency(lock.keyId, null, 400, errorBody);
+          }
+          return res.status(400).json(errorBody);
         }
         if (error.message === "INSUFFICIENT_VAULT_BALANCE") {
-          return res.status(400).json({ error: "Insufficient vault balance" });
+          const errorBody = { error: "Insufficient vault balance" };
+          if (lock?.acquired) {
+            await completeIdempotency(lock.keyId, null, 400, errorBody);
+          }
+          return res.status(400).json(errorBody);
         }
       }
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 
