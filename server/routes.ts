@@ -847,8 +847,12 @@ export async function registerRoutes(
   // GET /api/operations/:id (protected)
   app.get("/api/operations/:id", isAuthenticated, async (req, res) => {
     try {
+      const userId = getUserId(req);
       const operation = await storage.getOperation(req.params.id);
       if (!operation) {
+        return res.status(404).json({ error: "Operation not found" });
+      }
+      if (operation.userId !== userId) {
         return res.status(404).json({ error: "Operation not found" });
       }
       res.json(operation);

@@ -10,6 +10,10 @@ export function registerAuthRoutes(app: Express): void {
   // Demo login - creates a demo session for preview purposes
   app.get("/api/demo-login", async (req: any, res) => {
     try {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(404).json({ error: "Not found" });
+      }
+
       // Check if demo user exists, create if not
       let user = await authStorage.getUser(DEMO_USER_ID);
       if (!user) {
