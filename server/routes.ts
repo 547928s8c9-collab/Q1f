@@ -16,6 +16,7 @@ import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { balances, vaults, positions, operations, auditLogs } from "@shared/schema";
 import { applyInvestmentToExistingPosition, buildNewPositionInvestment } from "./invest/positionMath";
+import { applyDailyPayoutToBalance } from "./payout/dailyPayout";
 
 // Invariant check: no negative balance
 function assertNonNegative(value: bigint, label: string): void {
@@ -1546,14 +1547,14 @@ export async function registerRoutes(
         const dailyReturn = 0.001 + Math.random() * 0.002;
         const payoutAmount = Math.round(parseFloat(position.currentValue) * dailyReturn).toString();
 
-        // Update position value
-        const newCurrentValue = (BigInt(position.currentValue) + BigInt(payoutAmount)).toString();
-        await storage.updatePosition(position.id, { currentValue: newCurrentValue });
-
-        // Credit to balance
+        // Model A: profit paid to balance; position value remains unchanged
         const balance = await storage.getBalance(userId, "USDT");
-        const newAvailable = (BigInt(balance?.available || "0") + BigInt(payoutAmount)).toString();
-        await storage.updateBalance(userId, "USDT", newAvailable, balance?.locked || "0");
+        const payoutResult = applyDailyPayoutToBalance({
+          positionCurrentValue: position.currentValue,
+          balanceAvailable: balance?.available || "0",
+          payoutAmount,
+        });
+        await storage.updateBalance(userId, "USDT", payoutResult.balanceAvailable, balance?.locked || "0");
 
         const strategy = await storage.getStrategy(position.strategyId);
 
