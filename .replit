@@ -46,3 +46,6 @@ integrations = ["javascript_log_in_with_replit:2.0.0"]
 
 [userenv.shared]
 ADMIN_SUPER_EMAIL = "Unosekoj30re8@icloud.com"
+SIM_ENABLED = "1"
+SIM_SPEED = "1"
+SIM_LAG_MS = "900000"
