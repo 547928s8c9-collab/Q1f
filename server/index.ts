@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import crypto from "crypto";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -122,6 +123,11 @@ app.get("/api/metrics", (req, res) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  const resetCount = await storage.resetRunningSessions();
+  if (resetCount > 0) {
+    log(`Reset ${resetCount} running simulation sessions to paused state`, "sim");
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

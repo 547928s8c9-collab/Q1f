@@ -1,9 +1,10 @@
-import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig } from "@shared/schema";
-import { SimSessionStatus } from "@shared/schema";
+import type { Candle, SimSession, SimSessionStatusType, StrategyProfileConfig, SimSessionModeType } from "@shared/schema";
+import { SimSessionStatus, SimSessionMode } from "@shared/schema";
 import type { StrategyEvent, StrategyConfig, Timeframe } from "../strategies/types";
 import { createStrategy } from "../strategies/factory";
 import { loadCandles } from "../marketData/loadCandles";
 import { EventEmitter } from "events";
+import { storage } from "../storage";
 
 export interface SessionRunnerEvents {
   event: (sessionId: string, event: SimEventData) => void;
@@ -25,9 +26,21 @@ interface RunnerState {
   strategy: ReturnType<typeof createStrategy> | null;
   config: StrategyConfig;
   seq: number;
+  cursorMs: number;
   isPaused: boolean;
   isStopped: boolean;
   tickTimer: ReturnType<typeof setTimeout> | null;
+  mode: SimSessionModeType;
+}
+
+const CANDLE_BATCH_SIZE = 100;
+
+function timeframeToMs(tf: Timeframe): number {
+  const map: Record<Timeframe, number> = {
+    "15m": 900_000,
+    "1h": 3_600_000,
+  };
+  return map[tf] || 900_000;
 }
 
 class SessionRunnerManager extends EventEmitter {
@@ -57,14 +70,25 @@ class SessionRunnerManager extends EventEmitter {
     };
 
     const timeframe = session.timeframe as Timeframe;
+    const tfMs = timeframeToMs(timeframe);
+    const mode = (session.mode as SimSessionModeType) || SimSessionMode.REPLAY;
+
+    const initialCursorMs = session.cursorMs ?? session.startMs;
+
+    let fetchEndMs: number;
+    if (mode === SimSessionMode.LAGGED_LIVE) {
+      fetchEndMs = Date.now() - (session.lagMs || 900_000);
+    } else {
+      fetchEndMs = session.endMs ?? (session.startMs + tfMs * CANDLE_BATCH_SIZE);
+    }
 
     let candles: Candle[];
     try {
       const result = await loadCandles({
         symbol: session.symbol,
         timeframe,
-        startMs: session.startMs,
-        endMs: session.endMs,
+        startMs: initialCursorMs,
+        endMs: Math.min(fetchEndMs, initialCursorMs + tfMs * CANDLE_BATCH_SIZE),
       });
       
       if (result.gaps && result.gaps.length > 0) {
@@ -95,16 +119,20 @@ class SessionRunnerManager extends EventEmitter {
       { symbol: session.symbol, timeframe }
     );
 
+    const lastSeq = await storage.getLastSimEventSeq(session.id);
+
     const state: RunnerState = {
       session,
       candles,
       candleIndex: 0,
       strategy,
       config,
-      seq: session.lastSeq || 0,
+      seq: lastSeq,
+      cursorMs: initialCursorMs,
       isPaused: false,
       isStopped: false,
       tickTimer: null,
+      mode,
     };
 
     this.runners.set(session.id, state);
@@ -117,11 +145,18 @@ class SessionRunnerManager extends EventEmitter {
     return { success: true };
   }
 
+  private getTickInterval(state: RunnerState): number {
+    if (state.mode === SimSessionMode.REPLAY) {
+      return state.session.replayMsPerCandle || 15000;
+    }
+    return Math.max(10, 1000 / state.session.speed);
+  }
+
   private scheduleTick(sessionId: string) {
     const state = this.runners.get(sessionId);
     if (!state || state.isStopped || state.isPaused) return;
 
-    const tickIntervalMs = Math.max(10, 1000 / state.session.speed);
+    const tickIntervalMs = this.getTickInterval(state);
 
     state.tickTimer = setTimeout(() => {
       this.processTick(sessionId);
@@ -132,11 +167,17 @@ class SessionRunnerManager extends EventEmitter {
     const state = this.runners.get(sessionId);
     if (!state || state.isStopped || state.isPaused) return;
 
+    const timeframe = state.session.timeframe as Timeframe;
+    const tfMs = timeframeToMs(timeframe);
+
     if (state.candleIndex >= state.candles.length) {
-      await this.onStatusChangeCallback?.(sessionId, SimSessionStatus.FINISHED);
-      this.emit("statusChange", sessionId, SimSessionStatus.FINISHED);
-      this.cleanup(sessionId);
-      return;
+      const needsMoreCandles = await this.loadMoreCandles(state);
+      if (!needsMoreCandles) {
+        await this.onStatusChangeCallback?.(sessionId, SimSessionStatus.FINISHED);
+        this.emit("statusChange", sessionId, SimSessionStatus.FINISHED);
+        this.cleanup(sessionId);
+        return;
+      }
     }
 
     const candle = state.candles[state.candleIndex];
@@ -160,8 +201,52 @@ class SessionRunnerManager extends EventEmitter {
     }
 
     state.candleIndex++;
+    state.cursorMs = candle.ts + tfMs;
+
+    await storage.updateSimSession(sessionId, { 
+      cursorMs: state.cursorMs,
+      lastSeq: state.seq,
+    });
 
     this.scheduleTick(sessionId);
+  }
+
+  private async loadMoreCandles(state: RunnerState): Promise<boolean> {
+    const timeframe = state.session.timeframe as Timeframe;
+    const tfMs = timeframeToMs(timeframe);
+
+    let fetchEndMs: number;
+    if (state.mode === SimSessionMode.LAGGED_LIVE) {
+      fetchEndMs = Date.now() - (state.session.lagMs || 900_000);
+    } else {
+      if (state.session.endMs && state.cursorMs >= state.session.endMs) {
+        return false;
+      }
+      fetchEndMs = state.session.endMs ?? state.cursorMs + tfMs * CANDLE_BATCH_SIZE;
+    }
+
+    if (state.cursorMs >= fetchEndMs) {
+      return false;
+    }
+
+    try {
+      const result = await loadCandles({
+        symbol: state.session.symbol,
+        timeframe,
+        startMs: state.cursorMs,
+        endMs: Math.min(fetchEndMs, state.cursorMs + tfMs * CANDLE_BATCH_SIZE),
+      });
+
+      if (result.candles.length === 0) {
+        return false;
+      }
+
+      state.candles = result.candles;
+      state.candleIndex = 0;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   pause(sessionId: string): boolean {
@@ -218,14 +303,25 @@ class SessionRunnerManager extends EventEmitter {
     return this.runners.has(sessionId);
   }
 
-  getState(sessionId: string): { candleIndex: number; totalCandles: number; seq: number } | null {
+  getState(sessionId: string): { candleIndex: number; totalCandles: number; seq: number; cursorMs: number } | null {
     const state = this.runners.get(sessionId);
     if (!state) return null;
     return {
       candleIndex: state.candleIndex,
       totalCandles: state.candles.length,
       seq: state.seq,
+      cursorMs: state.cursorMs,
     };
+  }
+
+  getActiveSessionIds(): string[] {
+    return Array.from(this.runners.keys());
+  }
+
+  stopAll(): void {
+    for (const sessionId of this.runners.keys()) {
+      this.stop(sessionId);
+    }
   }
 }
 
