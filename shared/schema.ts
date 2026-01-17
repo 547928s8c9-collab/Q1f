@@ -17,7 +17,9 @@ export const balances = pgTable("balances", {
   available: text("available").notNull().default("0"), // minor units as string
   locked: text("locked").notNull().default("0"),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("balances_user_id_idx").on(table.userId),
+]);
 
 export const insertBalanceSchema = createInsertSchema(balances).omit({ id: true, updatedAt: true });
 export type InsertBalance = z.infer<typeof insertBalanceSchema>;
@@ -35,7 +37,9 @@ export const vaults = pgTable("vaults", {
   autoSweepPct: integer("auto_sweep_pct").default(0), // 0-100
   autoSweepEnabled: boolean("auto_sweep_enabled").default(false),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("vaults_user_id_idx").on(table.userId),
+]);
 
 export const insertVaultSchema = createInsertSchema(vaults).omit({ id: true, updatedAt: true });
 export type InsertVault = z.infer<typeof insertVaultSchema>;
@@ -108,7 +112,9 @@ export const positions = pgTable("positions", {
   pausedReason: text("paused_reason"), // e.g., "manual", "dd_breach"
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("positions_user_strategy_idx").on(table.userId, table.strategyId),
+]);
 
 export const insertPositionSchema = createInsertSchema(positions).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertPosition = z.infer<typeof insertPositionSchema>;
@@ -133,7 +139,9 @@ export const redemptionRequests = pgTable("redemption_requests", {
   status: text("status").notNull().default("PENDING"), // PENDING, EXECUTED, CANCELLED
   executedAmountMinor: text("executed_amount_minor"), // actual amount redeemed
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("redemption_requests_user_status_execute_idx").on(table.userId, table.status, table.executeAt),
+]);
 
 export const insertRedemptionRequestSchema = createInsertSchema(redemptionRequests).omit({ id: true, createdAt: true });
 export type InsertRedemptionRequest = z.infer<typeof insertRedemptionRequestSchema>;
@@ -220,7 +228,9 @@ export const portfolioSeries = pgTable("portfolio_series", {
   userId: varchar("user_id").notNull().references(() => users.id),
   date: text("date").notNull(), // RFC3339 date
   value: text("value").notNull(), // USDT minor units
-});
+}, (table) => [
+  index("portfolio_series_user_date_idx").on(table.userId, table.date),
+]);
 
 export const insertPortfolioSeriesSchema = createInsertSchema(portfolioSeries).omit({ id: true });
 export type InsertPortfolioSeries = z.infer<typeof insertPortfolioSeriesSchema>;
@@ -232,7 +242,9 @@ export const strategySeries = pgTable("strategy_series", {
   strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   date: text("date").notNull(),
   value: text("value").notNull(), // normalized to 100
-});
+}, (table) => [
+  index("strategy_series_strategy_date_idx").on(table.strategyId, table.date),
+]);
 
 export const insertStrategySeriesSchema = createInsertSchema(strategySeries).omit({ id: true });
 export type InsertStrategySeries = z.infer<typeof insertStrategySeriesSchema>;
@@ -245,7 +257,9 @@ export const quotes = pgTable("quotes", {
   date: text("date").notNull(),
   price: text("price").notNull(), // minor units
   change24h: text("change_24h"),
-});
+}, (table) => [
+  index("quotes_pair_date_idx").on(table.pair, table.date),
+]);
 
 export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true });
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
@@ -331,7 +345,9 @@ export const consents = pgTable("consents", {
   ip: text("ip"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("consents_user_doc_created_idx").on(table.userId, table.documentType, table.createdAt),
+]);
 
 export const insertConsentSchema = createInsertSchema(consents).omit({ id: true, createdAt: true });
 export type InsertConsent = z.infer<typeof insertConsentSchema>;
@@ -349,7 +365,9 @@ export const auditLogs = pgTable("audit_logs", {
   ip: text("ip"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("audit_logs_user_created_idx").on(table.userId, table.createdAt),
+]);
 
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
@@ -382,7 +400,9 @@ export const kycApplicants = pgTable("kyc_applicants", {
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("kyc_applicants_status_created_idx").on(table.status, table.createdAt),
+]);
 
 export const insertKycApplicantSchema = createInsertSchema(kycApplicants).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertKycApplicant = z.infer<typeof insertKycApplicantSchema>;
