@@ -16,7 +16,7 @@ import {
   pendingAdminActions,
   PendingActionStatus,
 } from "@shared/schema";
-import { eq, desc, and, lt, or, ilike } from "drizzle-orm";
+import { eq, desc, and, lt, or, ilike, sql, count, sum, gte } from "drizzle-orm";
 import {
   AdminListQuery,
   encodeCursor,
@@ -66,6 +66,58 @@ adminRouter.get("/me", async (req, res) => {
   } catch (error) {
     console.error("[GET /admin/me]", error);
     fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to get admin info", 500);
+  }
+});
+
+adminRouter.get("/overview", requirePermission("users.read"), async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      usersCountResult,
+      activeUsersResult,
+      balancesAggResult,
+      pendingWithdrawalsResult,
+      kycPendingResult,
+    ] = await Promise.all([
+      db.select({ count: count() }).from(users),
+      db.select({ count: count() })
+        .from(operations)
+        .where(gte(operations.createdAt, thirtyDaysAgo))
+        .groupBy(operations.userId),
+      db.select({
+        totalAvailable: sql<string>`COALESCE(SUM(CAST(${balances.available} AS BIGINT)), 0)::text`,
+        totalLocked: sql<string>`COALESCE(SUM(CAST(${balances.locked} AS BIGINT)), 0)::text`,
+      }).from(balances).where(eq(balances.asset, "USDT")),
+      db.select({
+        count: count(),
+        totalAmount: sql<string>`COALESCE(SUM(CAST(${withdrawals.amountMinor} AS BIGINT)), 0)::text`,
+      }).from(withdrawals).where(eq(withdrawals.status, "PENDING")),
+      db.select({ count: count() })
+        .from(kycApplicants)
+        .where(eq(kycApplicants.status, "IN_REVIEW")),
+    ]);
+
+    const usersTotal = usersCountResult[0]?.count ?? 0;
+    const usersActive = activeUsersResult.length;
+    const totalAvailable = balancesAggResult[0]?.totalAvailable ?? "0";
+    const totalLocked = balancesAggResult[0]?.totalLocked ?? "0";
+    const totalAUMMinor = (BigInt(totalAvailable) + BigInt(totalLocked)).toString();
+    const pendingWithdrawalsCount = pendingWithdrawalsResult[0]?.count ?? 0;
+    const pendingWithdrawalsAmountMinor = pendingWithdrawalsResult[0]?.totalAmount ?? "0";
+    const kycPendingCount = kycPendingResult[0]?.count ?? 0;
+
+    ok(res, {
+      usersTotal,
+      usersActive,
+      totalAUMMinor,
+      pendingWithdrawalsCount,
+      pendingWithdrawalsAmountMinor,
+      kycPendingCount,
+    });
+  } catch (error) {
+    console.error("[GET /admin/overview]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to get overview metrics", 500);
   }
 });
 
