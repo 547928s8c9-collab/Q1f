@@ -439,6 +439,17 @@ export const KycTransitions: Record<KycStatusType, KycStatusType[]> = {
   ON_HOLD: ["IN_REVIEW", "REJECTED"], // Manual review
 };
 
+// Mapping from KycStatus (uppercase) to securitySettings.kycStatus (lowercase)
+// Used to sync applicant status with legacy security settings field
+export const KycStatusToSecurityStatus: Record<KycStatusType, string> = {
+  NOT_STARTED: "not_started",
+  IN_REVIEW: "in_review",
+  APPROVED: "approved",
+  NEEDS_ACTION: "needs_action",
+  REJECTED: "rejected",
+  ON_HOLD: "on_hold",
+};
+
 // ==================== NOTIFICATIONS ====================
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

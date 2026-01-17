@@ -138,7 +138,7 @@ interface StartKycResult {
  */
 async function startKycCanonical(params: StartKycParams): Promise<StartKycResult & { httpStatus: number }> {
   const { userId, ip, userAgent } = params;
-  const { KycTransitions, KycStatus } = await import("@shared/schema");
+  const { KycTransitions, KycStatus, KycStatusToSecurityStatus } = await import("@shared/schema");
 
   // Check if applicant exists
   let applicant = await storage.getKycApplicant(userId);
@@ -177,6 +177,11 @@ async function startKycCanonical(params: StartKycParams): Promise<StartKycResult
     });
   }
 
+  // Sync securitySettings.kycStatus
+  await storage.updateSecuritySettings(userId, { 
+    kycStatus: KycStatusToSecurityStatus["IN_REVIEW"] 
+  });
+
   // Log audit event
   await storage.createAuditLog({
     userId,
@@ -207,7 +212,9 @@ async function startKycCanonical(params: StartKycParams): Promise<StartKycResult
           status: "APPROVED",
           reviewedAt: new Date(),
         });
-        await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+        await storage.updateSecuritySettings(userId, { 
+          kycStatus: KycStatusToSecurityStatus["APPROVED"] 
+        });
 
         // Log audit event
         await storage.createAuditLog({
@@ -496,6 +503,23 @@ export async function registerRoutes(
         return acc;
       }, {} as Record<string, typeof vaults[0]>);
 
+      // Import mapping for fallback normalization
+      const { KycStatusToSecurityStatus } = await import("@shared/schema");
+      
+      // Fallback normalization: derive kycStatus from kycApplicant if securitySettings is out of sync
+      // This ensures UI always sees consistent lowercase status values
+      // Priority: 1) kycApplicant status (mapped to lowercase), 2) securitySettings (normalized), 3) default
+      const normalizeLegacyStatus = (status: string | null | undefined): string => {
+        if (!status) return "not_started";
+        // Handle legacy "pending" value by mapping to "not_started"
+        if (status === "pending") return "not_started";
+        return status;
+      };
+      
+      const normalizedKycStatus = kycApplicant 
+        ? KycStatusToSecurityStatus[kycApplicantStatus as keyof typeof KycStatusToSecurityStatus] || "not_started"
+        : normalizeLegacyStatus(security?.kycStatus);
+
       res.json({
         user: {
           id: user.id,
@@ -553,14 +577,15 @@ export async function registerRoutes(
             series: rubQuotes.map((q) => ({ date: q.date, price: q.price })),
           },
         },
-        security: security || {
-          consentAccepted: false,
-          kycStatus: "pending",
-          twoFactorEnabled: false,
-          antiPhishingCode: null,
-          whitelistEnabled: false,
-          addressDelay: 0,
-          autoSweepEnabled: false,
+        security: {
+          ...security,
+          consentAccepted: security?.consentAccepted ?? false,
+          kycStatus: normalizedKycStatus, // Use normalized status from kycApplicant
+          twoFactorEnabled: security?.twoFactorEnabled ?? false,
+          antiPhishingCode: security?.antiPhishingCode ?? null,
+          whitelistEnabled: security?.whitelistEnabled ?? false,
+          addressDelay: security?.addressDelay ?? 0,
+          autoSweepEnabled: security?.autoSweepEnabled ?? false,
         },
         config: {
           depositAddress: DEPOSIT_ADDRESS,
@@ -1976,6 +2001,8 @@ export async function registerRoutes(
       }
 
       if (newStatus && newStatus !== previousStatus) {
+        const { KycStatusToSecurityStatus, KycStatus: KycStatusEnum } = await import("@shared/schema");
+        
         await storage.updateKycApplicant(userId, {
           status: newStatus,
           reviewedAt: ["APPROVED", "REJECTED"].includes(newStatus) ? new Date() : undefined,
@@ -1983,9 +2010,10 @@ export async function registerRoutes(
           needsActionReason,
         });
 
-        // Update security settings if approved
-        if (newStatus === "APPROVED") {
-          await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+        // Sync securitySettings.kycStatus for ALL status changes
+        const securityStatus = KycStatusToSecurityStatus[newStatus as keyof typeof KycStatusEnum];
+        if (securityStatus) {
+          await storage.updateSecuritySettings(userId, { kycStatus: securityStatus });
         }
 
         // Create audit log

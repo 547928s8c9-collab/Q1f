@@ -15,6 +15,9 @@ import {
   withdrawals,
   pendingAdminActions,
   PendingActionStatus,
+  KycStatusToSecurityStatus,
+  notifications,
+  type KycStatusType,
 } from "@shared/schema";
 import { eq, desc, and, lt, or, ilike, sql, count, sum, gte } from "drizzle-orm";
 import {
@@ -981,6 +984,35 @@ adminRouter.post(
       .set(updates)
       .where(eq(kycApplicants.id, applicantId))
       .returning();
+
+    // Sync securitySettings.kycStatus
+    const securityStatus = KycStatusToSecurityStatus[input.decision as KycStatusType];
+    if (securityStatus) {
+      await db
+        .update(securitySettings)
+        .set({ kycStatus: securityStatus, updatedAt: new Date() })
+        .where(eq(securitySettings.userId, updated.userId));
+    }
+
+    // Create user notification
+    const notificationMessages: Record<string, { title: string; message: string }> = {
+      APPROVED: { title: "KYC Approved", message: "Your identity has been successfully verified." },
+      REJECTED: { title: "KYC Rejected", message: input.reason || "Your verification was not successful." },
+      NEEDS_ACTION: { title: "Action Required", message: input.reason || "Additional documents are needed." },
+      ON_HOLD: { title: "Verification On Hold", message: "Your verification is temporarily on hold for review." },
+    };
+
+    const notification = notificationMessages[input.decision];
+    if (notification) {
+      await db.insert(notifications).values({
+        userId: updated.userId,
+        type: "kyc",
+        title: notification.title,
+        message: notification.message,
+        resourceType: "kyc",
+        resourceId: updated.id,
+      });
+    }
 
     const [user] = await db
       .select()
