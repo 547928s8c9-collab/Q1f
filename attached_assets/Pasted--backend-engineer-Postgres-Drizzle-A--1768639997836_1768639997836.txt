@@ -1,0 +1,42 @@
+Ты — backend engineer (Postgres + Drizzle). Минимальные изменения, но с ощутимой пользой.
+
+Цели:
+A) Ускорить выборки операций/уведомлений индексами.
+B) Исправить некорректность выписок: сейчас берём 1000 операций и фильтруем в памяти — это может дать неполные данные.
+C) Убрать in-memory фильтрацию после limit в getOperations (сначала фильтр, потом limit).
+
+Сделай:
+
+1) Индексы в `shared/schema.ts`:
+   - Для таблицы `operations` добавь индексы:
+     a) `operations_user_created_idx` на (userId, createdAt)
+     b) (опционально) `operations_user_type_created_idx` на (userId, type, createdAt) если фильтрация по type используется часто
+   - Для `notifications` добавь индекс `notifications_user_created_idx` на (userId, createdAt)
+   - Для `whitelist_addresses` добавь индекс `whitelist_user_created_idx` на (userId, createdAt)
+   (делай ровно через `index(...).on(...)` в определении таблиц)
+
+2) В `server/storage.ts`:
+   - Переделай `getOperations(userId, filter, q, cursor, limit)` так, чтобы фильтрация по `filter` (types) и по `q` (поиск) выполнялась на уровне БД, а не через `.filter()` в JS.
+   - Важно: limit должен применяться ПОСЛЕ всех where условий.
+   - Если поиск q слишком широкий, для MVP допустимо ограничиться поиском по нескольким полям (type/status/txHash/providerRef/strategyName) через `ilike` (Drizzle) и `or(...)`.
+
+3) Добавь новый метод `getOperationsByDate(userId, start: Date, end: Date)` (или (startISO, endISO)) в `server/storage.ts`:
+   - Запрашивает операции пользователя в диапазоне createdAt >= start и createdAt <= end
+   - Сортирует по createdAt (как нужно маршрутам)
+
+4) В `server/routes.ts`:
+   - В `/api/statements/summary` замени:
+     `storage.getOperations(..., limit=1000)` + `.filter(opDate...)`
+     на вызов `storage.getOperationsByDate(userId, startDate, endDate)`
+   - В `/api/statements/monthly` (PDF) — аналогично.
+   - Убери фильтрацию по датам в JS, оставь только расчёты.
+
+5) Миграция:
+   - Сгенерируй миграцию (или добавь SQL в `migrations/`) для новых индексов, чтобы изменения применялись к БД.
+   - Добавь/обнови скрипты в package.json: `db:generate` (drizzle-kit generate) и `db:migrate` (drizzle-kit migrate), оставив текущий `db:push`.
+
+Acceptance criteria:
+- Выписки корректны даже если операций у пользователя больше 1000.
+- `getOperations` возвращает корректные результаты: фильтрация/поиск не “обрезаются” из-за limit.
+- Добавлены индексы, и схема/миграции консистентны.
+- TypeScript сборка проходит.
