@@ -18,17 +18,26 @@ declare global {
 }
 
 const isDev = process.env.NODE_ENV !== "production";
+const allowDevAdminHeader = isDev && process.env.ALLOW_DEV_ADMIN_HEADER === "true";
+let warnedDevHeader = false;
+
+function warnDevHeaderDenied(): void {
+  if (warnedDevHeader) return;
+  warnedDevHeader = true;
+  console.warn("[adminAuth] x-replit-user-id header ignored (ALLOW_DEV_ADMIN_HEADER not enabled)");
+}
 
 function extractUserId(req: Request): string | undefined {
   const userClaims = (req.user as any)?.claims;
   if (userClaims?.sub) {
     return userClaims.sub;
   }
-  if (isDev) {
-    const devHeader = req.headers["x-replit-user-id"] as string | undefined;
-    if (devHeader) {
+  const devHeader = req.headers["x-replit-user-id"] as string | undefined;
+  if (devHeader) {
+    if (allowDevAdminHeader) {
       return devHeader;
     }
+    warnDevHeaderDenied();
   }
   return undefined;
 }

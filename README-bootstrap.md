@@ -17,6 +17,7 @@ This guide explains how to set up and bootstrap the ZEON environment for local d
 2. **Configure Environment Variables**
    Create a `.env` file (or set in your environment) with:
    - `DATABASE_URL`: Your PostgreSQL connection string
+   - `ALLOW_DEV_ADMIN_HEADER`: Set to `true` to enable `x-replit-user-id` in dev for admin auth (default: `false`)
 
 3. **Initialize Database Schema**
    Push the Drizzle schema to your PostgreSQL instance:
