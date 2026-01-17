@@ -68,14 +68,20 @@ Preferred communication style: Simple, everyday language.
 - **Progress Tracking**: Calculates progress percentage based on current balance and goal amount.
 
 ### Live Session Simulation System
-- **Tables**: `sim_sessions` (session metadata, status, config) and `sim_events` (streaming events with seq numbers)
+- **Tables**: `sim_sessions` (session metadata, status, config, cursorMs) and `sim_events` (streaming events with seq numbers)
 - **SessionRunner**: Singleton manager (`server/sim/runner.ts`) with tick loop, event emission via EventEmitter
 - **Status Flow**: CREATED → RUNNING → (PAUSED ↔ RUNNING) → FINISHED/STOPPED/FAILED
-- **SSE Streaming**: Real-time event delivery via `/api/sim/sessions/:id/stream` with heartbeat keepalive
+- **Session Modes**: `replay` (historical data with fixed endMs) and `lagged_live` (live data with lagMs delay, nullable endMs)
+- **Cursor-Based Streaming**: Candles loaded in batches via cursorMs, persisted after each tick for restart resilience
+- **SSE Streaming**: Real-time event delivery via `/api/sim/sessions/:id/stream` with heartbeat keepalive; supports fromSeq for backlog replay
 - **Control API**: Start/pause/resume/stop via `/api/sim/sessions/:id/control`
-- **Persistence**: Events persisted to `sim_events` table with lastSeq tracking for replay
+- **Persistence**: Events persisted to `sim_events` table with lastSeq tracking; cursorMs persisted for resume
+- **Restart Safety**: `resetRunningSessions()` called on server boot to transition RUNNING → PAUSED
+- **Atomic Transitions**: `transitionSimSessionStatus()` for safe status changes with expected-state validation
 - **Strategy Profiles**: 8 profiles (btc_squeeze_breakout, eth_ema_revert, etc.) with configurable parameters
-- **Deterministic Execution**: No Date.now()/Math.random(), sorted outputs, stable sequence numbers
+- **Timing Config**: `replayMsPerCandle` (100-60000ms) for replay pacing, `lagMs` (60s-1h) for live delay
+- **Selftest**: `server/sim/selftest.ts` validates all storage APIs and session lifecycle
+- **Files**: `server/sim/runner.ts`, `server/sim/selftest.ts`, `shared/schema.ts` (simSessions, SimSessionMode)
 
 ### Admin Console (Backend API)
 - **Architecture**: Separate overlay at `/api/admin/*`, doesn't modify existing user-facing routes
