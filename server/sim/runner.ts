@@ -156,22 +156,26 @@ class SessionRunnerManager extends EventEmitter {
 
     const persistedSnapshot = isStateSnapshot(session.stateJson) ? session.stateJson : null;
     const initialCursorMs = session.cursorMs ?? persistedSnapshot?.cursorMs ?? session.startMs;
+    const minBarsWarmup = config.minBarsWarmup ?? 200;
+    const initialLoadBars = Math.max(CANDLE_BATCH_SIZE, minBarsWarmup + 50);
+    const initialEndMs = initialCursorMs + tfMs * initialLoadBars;
 
     let fetchEndMs: number;
     if (mode === SimSessionMode.LAGGED_LIVE) {
       await ensureReplayClock();
       fetchEndMs = getDecisionNow(session.lagMs || 900_000);
     } else {
-      fetchEndMs = session.endMs ?? (session.startMs + tfMs * CANDLE_BATCH_SIZE);
+      fetchEndMs = session.endMs ?? (session.startMs + tfMs * initialLoadBars);
     }
 
+    const loadEndMs = Math.min(fetchEndMs, initialEndMs);
     let candles: Candle[];
     try {
       const result = await loadCandles({
         symbol: session.symbol,
         timeframe,
         startMs: initialCursorMs,
-        endMs: Math.min(fetchEndMs, initialCursorMs + tfMs * CANDLE_BATCH_SIZE),
+        endMs: loadEndMs,
       });
       
       if (result.gaps && result.gaps.length > 0) {
@@ -183,8 +187,11 @@ class SessionRunnerManager extends EventEmitter {
 
       candles = result.candles;
       
-      if (candles.length < config.minBarsWarmup + 10) {
-        const errorMessage = `Insufficient candles: ${candles.length} < ${config.minBarsWarmup + 10} required`;
+      if (candles.length < minBarsWarmup + 10) {
+        console.warn(
+          `[sim.runner] insufficient candles sessionId=${session.id} mode=${mode} timeframe=${timeframe} minBarsWarmup=${minBarsWarmup} candlesLoaded=${candles.length} startMs=${initialCursorMs} endMs=${loadEndMs}`
+        );
+        const errorMessage = `Insufficient candles: ${candles.length} < ${minBarsWarmup + 10} required`;
         await this.onStatusChangeCallback?.(session.id, SimSessionStatus.FAILED, errorMessage);
         this.emit("statusChange", session.id, SimSessionStatus.FAILED);
         return { success: false, error: errorMessage };
