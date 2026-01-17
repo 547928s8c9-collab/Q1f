@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { ensureRequestId } from "./middleware/requestId";
 import { adminAuth } from "./middleware/adminAuth";
 import { loadPermissions, requirePermission } from "./middleware/rbac";
@@ -40,9 +40,20 @@ import {
   AdminWithdrawalProcessBody,
   WITHDRAWAL_ADMIN_TRANSITIONS,
 } from "@shared/admin/dto";
-import { requireIdempotencyKey, wrapMutation } from "./audit";
+import { requireIdempotencyKey, wrapMutation, logAdminAction } from "./audit";
 
 export const adminRouter = Router();
+
+function getReadAuditContext(req: Request, res: Response) {
+  const actorAdminUserId = res.locals.adminUserId;
+  if (!actorAdminUserId) return null;
+  const requestId = res.locals.requestId as string | undefined;
+  const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
+  const userAgent = req.headers["user-agent"] || "unknown";
+  const reasonHeader = req.headers["x-admin-reason"];
+  const reason = typeof reasonHeader === "string" ? reasonHeader : undefined;
+  return { actorAdminUserId, requestId, ip, userAgent, reason };
+}
 
 adminRouter.use(ensureRequestId);
 adminRouter.use(adminAuth);
@@ -135,6 +146,16 @@ adminRouter.get("/users", requirePermission("users.read"), async (req, res) => {
       ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
       : null;
 
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.users.list",
+        outcome: "success",
+        beforeJson: { query: q, limit, cursor },
+      });
+    }
+
     ok(res, result, { limit, nextCursor });
   } catch (error) {
     console.error("[GET /admin/users]", error);
@@ -193,6 +214,17 @@ adminRouter.get("/users/:id", requirePermission("users.read"), async (req, res) 
       })),
     };
 
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.users.detail",
+        targetType: "user",
+        targetId: userId,
+        outcome: "success",
+      });
+    }
+
     ok(res, result);
   } catch (error) {
     console.error("[GET /admin/users/:id]", error);
@@ -207,7 +239,7 @@ adminRouter.get("/operations", requirePermission("money.read"), async (req, res)
       return fail(res, ErrorCodes.VALIDATION_ERROR, "Invalid query", 400, query.error.issues);
     }
 
-    const { limit, cursor, status, sort } = query.data;
+    const { limit, cursor, status, sort, q } = query.data;
 
     let whereConditions: any[] = [];
 
@@ -250,6 +282,16 @@ adminRouter.get("/operations", requirePermission("money.read"), async (req, res)
       ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
       : null;
 
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.operations.list",
+        outcome: "success",
+        beforeJson: { query: q, limit, cursor },
+      });
+    }
+
     ok(res, result, { limit, nextCursor });
   } catch (error) {
     console.error("[GET /admin/operations]", error);
@@ -289,6 +331,17 @@ adminRouter.get("/operations/:id", requirePermission("money.read"), async (req, 
       metadata: op.metadata,
       reason: op.reason,
     };
+
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.operations.detail",
+        targetType: "operation",
+        targetId: operationId,
+        outcome: "success",
+      });
+    }
 
     ok(res, result);
   } catch (error) {
@@ -694,6 +747,16 @@ adminRouter.get("/kyc/applicants", requirePermission("kyc.read"), async (req, re
       ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
       : null;
 
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.kyc.applicants.list",
+        outcome: "success",
+        beforeJson: { query: q, limit, cursor },
+      });
+    }
+
     ok(res, result, { limit, nextCursor });
   } catch (error) {
     console.error("[GET /admin/kyc/applicants]", error);
@@ -747,6 +810,17 @@ adminRouter.get("/kyc/applicants/:id", requirePermission("kyc.read"), async (req
       } : null,
       allowedTransitions,
     };
+
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.kyc.applicants.detail",
+        targetType: "kyc_applicant",
+        targetId: applicantId,
+        outcome: "success",
+      });
+    }
 
     ok(res, result);
   } catch (error) {
@@ -950,6 +1024,16 @@ adminRouter.get("/withdrawals", requirePermission("withdrawals.read"), async (re
       ? encodeCursor(items[items.length - 1].createdAt!, items[items.length - 1].id)
       : null;
 
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.withdrawals.list",
+        outcome: "success",
+        beforeJson: { query: q, limit, cursor },
+      });
+    }
+
     ok(res, result, { limit, nextCursor });
   } catch (error) {
     console.error("[GET /admin/withdrawals]", error);
@@ -1048,6 +1132,17 @@ adminRouter.get("/withdrawals/:id", requirePermission("withdrawals.read"), async
       } : null,
       allowedTransitions,
     };
+
+    const auditContext = getReadAuditContext(req, res);
+    if (auditContext) {
+      await logAdminAction({
+        ...auditContext,
+        actionType: "admin.read.withdrawals.detail",
+        targetType: "withdrawal",
+        targetId: withdrawalId,
+        outcome: "success",
+      });
+    }
 
     ok(res, result);
   } catch (error) {
