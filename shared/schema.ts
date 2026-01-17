@@ -5,12 +5,14 @@ import { z } from "zod";
 
 // Export auth models (users, sessions tables)
 export * from "./models/auth";
+// Import users for FK references
+import { users } from "./models/auth";
 
 // ==================== BALANCES ====================
 // Amounts stored as string of integer minor units
 export const balances = pgTable("balances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   asset: text("asset").notNull(), // RUB, USDT
   available: text("available").notNull().default("0"), // minor units as string
   locked: text("locked").notNull().default("0"),
@@ -24,7 +26,7 @@ export type Balance = typeof balances.$inferSelect;
 // ==================== VAULTS ====================
 export const vaults = pgTable("vaults", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   type: text("type").notNull(), // principal, profit, taxes
   asset: text("asset").notNull().default("USDT"),
   balance: text("balance").notNull().default("0"),
@@ -75,7 +77,7 @@ export type Strategy = typeof strategies.$inferSelect;
 // ==================== STRATEGY PERFORMANCE ====================
 export const strategyPerformance = pgTable("strategy_performance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  strategyId: varchar("strategy_id").notNull(),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   day: integer("day").notNull(), // day number 1-90
   date: text("date").notNull(), // RFC3339 date
   equityMinor: text("equity_minor").notNull(), // strategy equity in minor units (starts at 1000 USDT = 1000000000)
@@ -90,8 +92,8 @@ export type StrategyPerformance = typeof strategyPerformance.$inferSelect;
 // ==================== POSITIONS ====================
 export const positions = pgTable("positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  strategyId: varchar("strategy_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   principal: text("principal").notNull().default("0"), // legacy field (keep for compatibility)
   currentValue: text("current_value").notNull().default("0"), // legacy field
   principalMinor: text("principal_minor").notNull().default("0"), // original invested amount
@@ -123,8 +125,8 @@ export type RedemptionStatusType = typeof RedemptionStatus[keyof typeof Redempti
 
 export const redemptionRequests = pgTable("redemption_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
-  strategyId: varchar("strategy_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   amountMinor: text("amount_minor"), // null means ALL principal
   requestedAt: timestamp("requested_at").defaultNow(),
   executeAt: timestamp("execute_at").notNull(), // next weekly window
@@ -141,7 +143,7 @@ export type RedemptionRequest = typeof redemptionRequests.$inferSelect;
 // All money actions create operation records
 export const operations = pgTable("operations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   type: text("type").notNull(), // DEPOSIT_USDT, DEPOSIT_CARD, WITHDRAW_USDT, INVEST, DAILY_PAYOUT, FX, SUBSCRIPTION, KYC, VAULT_TRANSFER
   status: text("status").notNull(), // pending, processing, completed, failed, cancelled
   asset: text("asset"),
@@ -149,7 +151,7 @@ export const operations = pgTable("operations", {
   fee: text("fee").default("0"),
   txHash: text("tx_hash"),
   providerRef: text("provider_ref"),
-  strategyId: varchar("strategy_id"),
+  strategyId: varchar("strategy_id").references(() => strategies.id),
   strategyName: text("strategy_name"),
   fromVault: text("from_vault"),
   toVault: text("to_vault"),
@@ -184,13 +186,13 @@ export const withdrawals = pgTable("withdrawals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   amountMinor: text("amount_minor").notNull(),
   feeMinor: text("fee_minor").notNull().default("0"),
   currency: text("currency").notNull().default("USDT"),
   address: text("address").notNull(),
   status: text("status").notNull().default("PENDING"),
-  operationId: varchar("operation_id"), // FK to operations.id (created when user submits)
+  operationId: varchar("operation_id").references(() => operations.id), // FK to operations.id (created when user submits)
   riskScore: integer("risk_score"),
   riskFlags: jsonb("risk_flags"), // e.g., ["high_amount", "new_address"]
   lastError: text("last_error"),
@@ -252,7 +254,7 @@ export type Quote = typeof quotes.$inferSelect;
 // ==================== SECURITY SETTINGS ====================
 export const securitySettings = pgTable("security_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().unique(),
+  userId: varchar("user_id").notNull().unique().references(() => users.id),
   contactVerified: boolean("contact_verified").default(false),
   consentAccepted: boolean("consent_accepted").default(false),
   kycStatus: text("kyc_status").default("pending"), // pending, approved, rejected
@@ -279,7 +281,7 @@ export type AddressStatusType = typeof AddressStatus[keyof typeof AddressStatus]
 
 export const whitelistAddresses = pgTable("whitelist_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   address: text("address").notNull(),
   label: text("label"),
   network: text("network").default("TRC20"),
@@ -321,7 +323,7 @@ export type PayoutInstruction = typeof payoutInstructions.$inferSelect;
 // Versioned consent records with audit trail
 export const consents = pgTable("consents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   version: text("version").notNull(), // e.g., "1.0", "2.0"
   documentType: text("document_type").notNull(), // "terms", "privacy", "combined"
   docHash: text("doc_hash").notNull(), // SHA-256 hash of document content
@@ -339,7 +341,7 @@ export type Consent = typeof consents.$inferSelect;
 // General purpose audit log for compliance tracking
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id"),
+  userId: varchar("user_id").references(() => users.id),
   event: text("event").notNull(), // CONSENT_ACCEPTED, LOGIN, LOGOUT, KYC_STARTED, etc.
   resourceType: text("resource_type"), // consent, user, operation, etc.
   resourceId: varchar("resource_id"),
@@ -368,7 +370,7 @@ export type KycStatusType = typeof KycStatus[keyof typeof KycStatus];
 
 export const kycApplicants = pgTable("kyc_applicants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().unique(),
+  userId: varchar("user_id").notNull().unique().references(() => users.id),
   status: text("status").notNull().default("NOT_STARTED"), // KycStatus values
   level: text("level").default("basic"), // basic, advanced
   providerRef: text("provider_ref"), // Sumsub applicant ID
@@ -411,7 +413,7 @@ export const KycTransitions: Record<KycStatusType, KycStatusType[]> = {
 // ==================== NOTIFICATIONS ====================
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
   type: text("type").notNull(), // operation, security, kyc, system
   title: text("title").notNull(),
   message: text("message").notNull(),
