@@ -932,6 +932,7 @@ export type SimSessionModeType = typeof SimSessionMode[keyof typeof SimSessionMo
 
 export const SimTradingStatus = {
   ACTIVE: "active",
+  LOADING_HISTORY: "loading_history",
   PAUSED_INSUFFICIENT_HISTORY: "paused_insufficient_history",
 } as const;
 

@@ -22,7 +22,7 @@ interface LiveSession {
   id: string;
   profileSlug: string;
   status: "created" | "running" | "paused" | "stopped" | "finished" | "failed";
-  tradingStatus?: "active" | "paused_insufficient_history";
+  tradingStatus?: "active" | "loading_history" | "warming_up" | "paused_insufficient_history";
   tradingPausedReason?: string | null;
   startMs: number;
   createdAt: string;
@@ -549,7 +549,12 @@ export default function LiveSessionView() {
   const statusCfg = statusConfig[session.status] || statusConfig.created;
   const isActive = session.status === "running" || session.status === "paused" || session.status === "created";
   const isTerminal = session.status === "stopped" || session.status === "finished" || session.status === "failed";
-  const tradingPaused = session.tradingStatus === "paused_insufficient_history";
+  const tradingPaused = session.tradingStatus && session.tradingStatus !== "active";
+  const tradingStatusMessage = (() => {
+    if (session.tradingPausedReason) return session.tradingPausedReason;
+    if (session.tradingStatus === "warming_up") return "Warming up strategy";
+    return "Loading history and warming up strategy";
+  })();
   
   const equityPositive = equityHistory.length >= 2 
     ? equityHistory[equityHistory.length - 1].value >= equityHistory[0].value 
@@ -584,7 +589,7 @@ export default function LiveSessionView() {
           <div className="flex items-center gap-2 text-sm text-warning">
             <AlertTriangle className="w-4 h-4" />
             <span>
-              Trading paused — {session.tradingPausedReason || "loading history and warming up strategy"}
+              Trading paused — {tradingStatusMessage}
             </span>
           </div>
         </Card>

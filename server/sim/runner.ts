@@ -132,8 +132,9 @@ class SessionRunnerManager extends EventEmitter {
           return { success: false, error: errorMessage };
         }
       } else {
-        tradingStatus = SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY;
-        tradingPausedReason = "Waiting for history to warm up strategy";
+        const hasWarmup = candles.length >= config.minBarsWarmup;
+        tradingStatus = hasWarmup ? SimTradingStatus.ACTIVE : SimTradingStatus.LOADING_HISTORY;
+        tradingPausedReason = hasWarmup ? null : "Loading history and warming up strategy";
       }
     } catch (err) {
       if (mode !== SimSessionMode.LAGGED_LIVE) {
@@ -142,7 +143,7 @@ class SessionRunnerManager extends EventEmitter {
         this.emit("statusChange", session.id, SimSessionStatus.FAILED);
         return { success: false, error: errorMessage };
       }
-      tradingStatus = SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY;
+      tradingStatus = SimTradingStatus.LOADING_HISTORY;
       tradingPausedReason = "History unavailable, waiting for data";
       candles = [];
     }
@@ -217,8 +218,8 @@ class SessionRunnerManager extends EventEmitter {
         if (state.mode === SimSessionMode.LAGGED_LIVE) {
           await this.updateTradingStatus(
             state,
-            SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY,
-            "Waiting for history to warm up strategy"
+            SimTradingStatus.LOADING_HISTORY,
+            "Loading history and warming up strategy"
           );
           this.scheduleTick(sessionId);
           return;
@@ -262,8 +263,8 @@ class SessionRunnerManager extends EventEmitter {
       const hasWarmup = (strategyState?.barIndex ?? 0) >= state.config.minBarsWarmup;
       await this.updateTradingStatus(
         state,
-        hasWarmup ? SimTradingStatus.ACTIVE : SimTradingStatus.PAUSED_INSUFFICIENT_HISTORY,
-        hasWarmup ? null : "Waiting for history to warm up strategy"
+        hasWarmup ? SimTradingStatus.ACTIVE : SimTradingStatus.LOADING_HISTORY,
+        hasWarmup ? null : "Loading history and warming up strategy"
       );
     }
 

@@ -7,6 +7,7 @@ import { formatMoney, type StrategyPerformance, VALID_TIMEFRAMES, type Timeframe
 import { loadCandles, alignToGrid } from "./marketData/loadCandles";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./marketData/utils";
 import { marketSimService } from "./market/marketSimService";
+import { historyCandleLoader } from "./market/historyLoader";
 import { ensureReplayClock, getDecisionNow, getSimLagMs, getSimNow, isSimEnabled } from "./market/replayClock";
 import { sessionRunner } from "./sim/runner";
 
@@ -342,8 +343,9 @@ export async function registerRoutes(
   if (isSimEnabled()) {
     try {
       await marketSimService.ensureStarted();
+      await historyCandleLoader.ensureStarted();
     } catch (error) {
-      console.error("Failed to start market sim service:", error);
+      console.error("Failed to start sim services:", error);
     }
   }
 
@@ -3916,6 +3918,10 @@ export async function registerRoutes(
       await ensureReplayClock();
       const lagMs = getSimLagMs();
       const decisionNow = getDecisionNow(lagMs);
+
+      if (isSimEnabled()) {
+        await historyCandleLoader.ensureStarted();
+      }
 
       const warmupBars = Math.max(
         (profile.defaultConfig as StrategyProfileConfig).minBarsWarmup || 200,

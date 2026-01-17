@@ -30,6 +30,8 @@ const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", 
 const PERSIST_INTERVAL_MS = 5_000;
 const DEFAULT_START_PRICE = 100;
 const MAX_PCT_MOVE_PER_SEC = 0.0015;
+const FEED_MODE = (process.env.SIM_FEED_MODE || "synthetic").toLowerCase();
+const USE_CANDLE_FEED = FEED_MODE !== "synthetic";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -150,14 +152,16 @@ class MarketSimService extends EventEmitter {
       let price: number | null = null;
       let mode: QuoteMode = "synthetic";
 
-      try {
-        const candle = await this.getCandleForSymbol(symbol, simNow);
-        if (candle) {
-          price = this.computePrice(candle, simNow);
-          mode = "candle";
+      if (USE_CANDLE_FEED) {
+        try {
+          const candle = await this.getCandleForSymbol(symbol, simNow);
+          if (candle) {
+            price = this.computePrice(candle, simNow);
+            mode = "candle";
+          }
+        } catch (error) {
+          console.error(`[marketSimService] candle lookup failed for ${symbol}:`, error);
         }
-      } catch (error) {
-        console.error(`[marketSimService] candle lookup failed for ${symbol}:`, error);
       }
 
       if (price === null) {
