@@ -16,7 +16,7 @@ import {
   pendingAdminActions,
   PendingActionStatus,
 } from "@shared/schema";
-import { eq, desc, and, lt, or, ilike } from "drizzle-orm";
+import { eq, desc, and, lt, or, ilike, inArray } from "drizzle-orm";
 import {
   AdminListQuery,
   encodeCursor,
@@ -121,24 +121,24 @@ adminRouter.get("/users", requirePermission("users.read"), async (req, res) => {
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit);
 
-    const kycStatuses = await Promise.all(
-      items.map(async (u) => {
-        const [kyc] = await db
-          .select({ status: kycApplicants.status })
-          .from(kycApplicants)
-          .where(eq(kycApplicants.userId, u.id))
-          .limit(1);
-        return kyc?.status || null;
-      })
-    );
+    const kycStatusMap = new Map<string, string | null>();
+    if (items.length > 0) {
+      const kycRows = await db
+        .select({ userId: kycApplicants.userId, status: kycApplicants.status })
+        .from(kycApplicants)
+        .where(inArray(kycApplicants.userId, items.map((u) => u.id)));
+      kycRows.forEach((row) => {
+        kycStatusMap.set(row.userId, row.status || null);
+      });
+    }
 
-    const result: AdminUserListItem[] = items.map((u, i) => ({
+    const result: AdminUserListItem[] = items.map((u) => ({
       id: u.id,
       email: u.email,
       firstName: u.firstName,
       lastName: u.lastName,
       createdAt: u.createdAt?.toISOString() || new Date().toISOString(),
-      kycStatus: kycStatuses[i],
+      kycStatus: kycStatusMap.get(u.id) || null,
       isActive: true,
     }));
 
@@ -719,21 +719,21 @@ adminRouter.get("/kyc/applicants", requirePermission("kyc.read"), async (req, re
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit);
 
-    const userEmails = await Promise.all(
-      items.map(async (k) => {
-        const [user] = await db
-          .select({ email: users.email })
-          .from(users)
-          .where(eq(users.id, k.userId))
-          .limit(1);
-        return user?.email || null;
-      })
-    );
+    const userEmailMap = new Map<string, string | null>();
+    if (items.length > 0) {
+      const userRows = await db
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(inArray(users.id, items.map((k) => k.userId)));
+      userRows.forEach((row) => {
+        userEmailMap.set(row.id, row.email || null);
+      });
+    }
 
-    const result: AdminKycApplicantListItem[] = items.map((k, i) => ({
+    const result: AdminKycApplicantListItem[] = items.map((k) => ({
       id: k.id,
       userId: k.userId,
-      email: userEmails[i],
+      email: userEmailMap.get(k.userId) || null,
       status: k.status,
       level: k.level,
       riskLevel: k.riskLevel,

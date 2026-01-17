@@ -196,66 +196,70 @@ async function startKycCanonical(params: StartKycParams): Promise<StartKycResult
     resourceId: applicant?.id,
   });
 
-  // Demo mode: auto-approve after 2 seconds
-  setTimeout(async () => {
-    try {
-      const currentApplicant = await storage.getKycApplicant(userId);
-      if (currentApplicant?.status === "IN_REVIEW") {
-        await storage.updateKycApplicant(userId, {
-          status: "APPROVED",
-          reviewedAt: new Date(),
-        });
-        await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
+  // Demo mode: auto-approve after 2 seconds (disabled in production)
+  if (!isProduction) {
+    setTimeout(async () => {
+      try {
+        const currentApplicant = await storage.getKycApplicant(userId);
+        if (currentApplicant?.status === "IN_REVIEW") {
+          await storage.updateKycApplicant(userId, {
+            status: "APPROVED",
+            reviewedAt: new Date(),
+          });
+          await storage.updateSecuritySettings(userId, { kycStatus: "approved" });
 
-        // Log audit event
-        await storage.createAuditLog({
-          userId,
-          event: "KYC_STATUS_CHANGED",
-          resourceType: "kyc",
-          resourceId: currentApplicant.id,
-          details: { previousStatus: "IN_REVIEW", newStatus: "APPROVED" },
-          ip: "system",
-          userAgent: "demo-auto-approve",
-        });
+          // Log audit event
+          await storage.createAuditLog({
+            userId,
+            event: "KYC_STATUS_CHANGED",
+            resourceType: "kyc",
+            resourceId: currentApplicant.id,
+            details: { previousStatus: "IN_REVIEW", newStatus: "APPROVED" },
+            ip: "system",
+            userAgent: "demo-auto-approve",
+          });
 
-        // Create notification
-        await storage.createNotification({
-          userId,
-          type: "kyc",
-          title: "KYC Approved",
-          message: "Your identity has been successfully verified.",
-          resourceType: "kyc",
-          resourceId: currentApplicant.id,
-        });
+          // Create notification
+          await storage.createNotification({
+            userId,
+            type: "kyc",
+            title: "KYC Approved",
+            message: "Your identity has been successfully verified.",
+            resourceType: "kyc",
+            resourceId: currentApplicant.id,
+          });
 
-        // Create operation record
-        await storage.createOperation({
-          userId,
-          type: "KYC",
-          status: "completed",
-          asset: null,
-          amount: null,
-          fee: null,
-          txHash: null,
-          providerRef: null,
-          strategyId: null,
-          strategyName: null,
-          fromVault: null,
-          toVault: null,
-          metadata: null,
-          reason: null,
-        });
+          // Create operation record
+          await storage.createOperation({
+            userId,
+            type: "KYC",
+            status: "completed",
+            asset: null,
+            amount: null,
+            fee: null,
+            txHash: null,
+            providerRef: null,
+            strategyId: null,
+            strategyName: null,
+            fromVault: null,
+            toVault: null,
+            metadata: null,
+            reason: null,
+          });
+        }
+      } catch (err) {
+        console.error("Demo KYC auto-approve error:", err);
       }
-    } catch (err) {
-      console.error("Demo KYC auto-approve error:", err);
-    }
-  }, 2000);
+    }, 2000);
+  }
 
   return {
     httpStatus: 200,
     success: true,
     status: "IN_REVIEW",
-    message: "KYC verification started. Demo mode will auto-approve in ~2 seconds.",
+    message: isProduction
+      ? "KYC verification started."
+      : "KYC verification started. Demo mode will auto-approve in ~2 seconds.",
   };
 }
 
@@ -2334,7 +2338,7 @@ export async function registerRoutes(
   // ==================== SUMSUB INTEGRATION (DEMO) ====================
 
   // GET /api/sumsub/access-token - Generate access token for SDK (demo mode)
-  app.get("/api/sumsub/access-token", isAuthenticated, async (req, res) => {
+  app.get("/api/sumsub/access-token", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       
@@ -2525,7 +2529,7 @@ export async function registerRoutes(
   });
 
   // POST /api/sumsub/demo-callback - Trigger a demo callback (for testing)
-  app.post("/api/sumsub/demo-callback", isAuthenticated, async (req, res) => {
+  app.post("/api/sumsub/demo-callback", isAuthenticated, devOnly, async (req, res) => {
     try {
       const userId = getUserId(req);
       
