@@ -9,6 +9,7 @@ import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./marketData
 import { marketSimService } from "./market/marketSimService";
 import { ensureReplayClock, getDecisionNow, getSimLagMs, getSimNow, isSimEnabled } from "./market/replayClock";
 import { sessionRunner } from "./sim/runner";
+import rateLimit from "express-rate-limit";
 
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
@@ -665,7 +666,16 @@ export async function registerRoutes(
   // MARKET DATA
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const MAX_CANDLES_PER_REQUEST = 35040; // ~1 year of 15m candles
+  const PUBLIC_MAX_CANDLES_PER_REQUEST = 2000;
+  const PUBLIC_MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  const publicMarketLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests" },
+  });
 
   const TIMEFRAME_MS: Record<Timeframe, number> = {
     "1m": 60 * 1000,
@@ -674,8 +684,8 @@ export async function registerRoutes(
     "1d": 24 * 60 * 60 * 1000,
   };
 
-  // GET /api/market/candles
-  app.get("/api/market/candles", async (req, res) => {
+  // GET /api/public/market/candles
+  app.get("/api/public/market/candles", publicMarketLimiter, async (req, res) => {
     try {
       const { symbol, timeframe, start, end, exchange } = req.query;
 
@@ -747,14 +757,25 @@ export async function registerRoutes(
         });
       }
 
-      // Validate max candles
-      const candleCount = (endMs - startMs) / tfMs;
-      if (candleCount > MAX_CANDLES_PER_REQUEST) {
+      const rangeMs = endMs - startMs;
+      if (rangeMs > PUBLIC_MAX_RANGE_MS) {
+        return res.status(413).json({
+          error: {
+            code: "RANGE_TOO_LARGE",
+            message: "Requested range exceeds 90 days",
+            details: { maxDays: 90 },
+          },
+        });
+      }
+
+      // Validate max candles (derived from timeframe)
+      const candleCount = rangeMs / tfMs;
+      if (candleCount > PUBLIC_MAX_CANDLES_PER_REQUEST) {
         return res.status(413).json({
           error: {
             code: "TOO_MANY_CANDLES",
-            message: `Requested ${candleCount} candles exceeds limit of ${MAX_CANDLES_PER_REQUEST}`,
-            details: { requested: candleCount, limit: MAX_CANDLES_PER_REQUEST },
+            message: `Requested ${candleCount} candles exceeds limit of ${PUBLIC_MAX_CANDLES_PER_REQUEST}`,
+            details: { requested: candleCount, limit: PUBLIC_MAX_CANDLES_PER_REQUEST },
           },
         });
       }
