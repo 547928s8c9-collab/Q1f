@@ -27,6 +27,8 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL (configured via `DATABASE_URL`)
 - **Schema**: Defined in `shared/schema.ts`
 - **Migrations**: Drizzle Kit
+- **Foreign Key Constraints**: All userId fields reference `users.id`, strategyId fields reference `strategies.id`, with RESTRICT behavior for data integrity
+- **Orphan Check Script**: `scripts/check-orphans.ts` validates referential integrity across 24 table/column combinations
 
 ### Authentication & Authorization
 - **Authentication**: Replit Auth (OIDC-based)
