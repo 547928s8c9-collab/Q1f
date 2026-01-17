@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import { Loader2, Search, CheckCircle, XCircle, AlertTriangle, Clock, ArrowLeft, Shield } from "lucide-react";
 import { Link } from "wouter";
 import type { AdminKycApplicantListItem, AdminKycApplicantDetail } from "@shared/admin/dto";
@@ -36,7 +37,7 @@ const STATUS_COLORS: Record<string, string> = {
   NOT_STARTED: "bg-muted text-muted-foreground",
   IN_REVIEW: "bg-warning/10 text-warning",
   APPROVED: "bg-positive/10 text-positive",
-  NEEDS_ACTION: "bg-accent/10 text-accent-foreground",
+  NEEDS_ACTION: "bg-brand/10 text-brand",
   REJECTED: "bg-destructive/10 text-destructive",
   ON_HOLD: "bg-muted text-muted-foreground",
 };
@@ -53,6 +54,7 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
 type DecisionType = "APPROVED" | "REJECTED" | "NEEDS_ACTION" | "ON_HOLD";
 
 export default function AdminKyc() {
+  useSetPageTitle("KYC Queue");
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");

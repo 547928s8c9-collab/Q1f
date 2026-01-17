@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, User, Zap } from "lucide-react";
+import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, Zap, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -36,7 +36,13 @@ const navItems: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-function AppSidebar() {
+const adminNavItems: NavItem[] = [
+  { href: "/admin/kyc", label: "KYC", icon: Shield },
+  { href: "/admin/withdrawals", label: "Withdrawals", icon: Wallet },
+  { href: "/", label: "Home", icon: Home },
+];
+
+function AppSidebar({ items }: { items: NavItem[] }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
@@ -49,7 +55,7 @@ function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {items.map((item) => {
                 const Icon = item.icon;
                 const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
                 return (
@@ -133,20 +139,20 @@ function TopBar() {
   );
 }
 
-function MobileBottomNav() {
+function MobileBottomNav({ items }: { items: NavItem[] }) {
   const [location] = useLocation();
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-pb">
-      <div className="flex justify-around items-center h-16 px-1">
-        {navItems.map((item) => {
+      <div className="flex items-center h-16 px-1">
+        {items.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.href} href={item.href} className="flex-1">
               <div
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[64px] transition-colors",
+                  "w-full min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 px-2 transition-colors",
                   isActive 
                     ? "text-primary" 
                     : "text-muted-foreground active:text-foreground"
@@ -174,6 +180,9 @@ interface AppShellProps {
 }
 
 function AppShellContent({ children }: AppShellProps) {
+  const [location] = useLocation();
+  const isAdmin = location.startsWith("/admin");
+  const currentNav = isAdmin ? adminNavItems : navItems;
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "4rem",
@@ -183,15 +192,15 @@ function AppShellContent({ children }: AppShellProps) {
     <SidebarProvider style={sidebarStyle}>
       <div className="flex min-h-screen w-full bg-background">
         <div className="hidden md:block">
-          <AppSidebar />
+          <AppSidebar items={currentNav} />
         </div>
         <div className="flex-1 flex flex-col min-h-screen w-full">
           <TopBar />
-          <GlobalBanner />
-          <main className="flex-1 pb-20 md:pb-0 overflow-auto">
+          {!isAdmin && <GlobalBanner />}
+          <main className={cn("flex-1 overflow-auto", "pb-bottom-nav md:pb-0")}>
             {children}
           </main>
-          <MobileBottomNav />
+          <MobileBottomNav items={currentNav} />
         </div>
       </div>
     </SidebarProvider>

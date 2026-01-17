@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
-type ChipVariant = "default" | "success" | "warning" | "danger" | "primary" | "outline";
+type ChipVariant = "default" | "success" | "warning" | "danger" | "primary" | "brand" | "outline";
 type ChipSize = "sm" | "md";
 
 interface ChipProps {
@@ -18,6 +18,7 @@ const variantClasses: Record<ChipVariant, string> = {
   warning: "bg-warning/10 text-warning",
   danger: "bg-danger/10 text-danger",
   primary: "bg-primary/10 text-primary",
+  brand: "bg-brand/10 text-brand",
   outline: "border border-border bg-transparent text-foreground",
 };
 

@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import {
   Loader2,
   Search,
@@ -86,6 +87,7 @@ function formatAmount(amountMinor: string, currency: string): string {
 }
 
 export default function AdminWithdrawals() {
+  useSetPageTitle("Withdrawals");
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");

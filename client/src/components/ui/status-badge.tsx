@@ -12,7 +12,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   },
   processing: {
     label: "Processing",
-    className: "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse",
+    className: "bg-primary/10 text-primary border-primary/20 animate-pulse",
   },
   completed: {
     label: "Completed",
@@ -48,7 +48,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
         "w-1.5 h-1.5 rounded-full mr-1.5",
         status === "processing" && "animate-pulse",
         status === "pending" && "bg-warning",
-        status === "processing" && "bg-blue-500",
+        status === "processing" && "bg-primary",
         status === "completed" && "bg-positive",
         status === "active" && "bg-positive",
         status === "failed" && "bg-negative",

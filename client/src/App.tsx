@@ -38,6 +38,7 @@ import LiveSessionDetail from "@/pages/live-sessions/detail";
 import LiveSessionView from "@/pages/live-sessions/session";
 import AdminKyc from "@/pages/admin/kyc";
 import AdminWithdrawals from "@/pages/admin/withdrawals";
+import UIKit from "@/pages/ui-kit";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRouter() {
@@ -67,6 +68,7 @@ function ProtectedRouter() {
           <Route path="/live-sessions/:slug" component={LiveSessionDetail} />
           <Route path="/admin/kyc" component={AdminKyc} />
           <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+          <Route path="/ui-kit" component={UIKit} />
           <Route component={NotFound} />
         </Switch>
       </AppShell>
