@@ -72,9 +72,13 @@ class SessionRunnerManager extends EventEmitter {
 
     const timeframe = session.timeframe as Timeframe;
     const tfMs = timeframeToMs(timeframe);
-    const mode = (session.mode as SimSessionModeType) || SimSessionMode.REPLAY;
+    const rawMode = session.mode || SimSessionMode.REPLAY;
+    const allowOracleExit = process.env.SIM_ALLOW_ORACLE_EXIT === "true" || rawMode === "oracle_backtest";
+    const mode = rawMode === "oracle_backtest"
+      ? SimSessionMode.REPLAY
+      : (rawMode as SimSessionModeType);
 
-    if (mode === SimSessionMode.LAGGED_LIVE && config.oracleExit) {
+    if (config.oracleExit && !allowOracleExit) {
       config.oracleExit = { ...config.oracleExit, enabled: false };
     }
 

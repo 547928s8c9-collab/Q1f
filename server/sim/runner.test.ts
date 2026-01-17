@@ -239,4 +239,60 @@ describe("SessionRunner control flow", () => {
     expect(sessionRunner.isRunning(session.id)).toBe(false);
   });
 });
+
+describe("SessionRunner look-ahead guard", () => {
+  const originalOracleEnv = process.env.SIM_ALLOW_ORACLE_EXIT;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    delete process.env.SIM_ALLOW_ORACLE_EXIT;
+
+    const candles = Array.from({ length: 20 }, (_, i) => makeCandle(i * 900000, 100 + i));
+    (loadCandles as any).mockResolvedValue({ candles, gaps: [] });
+
+    sessionRunner.setEventCallback(async () => {});
+    sessionRunner.setStatusChangeCallback(async () => {});
+  });
+
+  afterEach(() => {
+    if (originalOracleEnv === undefined) {
+      delete process.env.SIM_ALLOW_ORACLE_EXIT;
+    } else {
+      process.env.SIM_ALLOW_ORACLE_EXIT = originalOracleEnv;
+    }
+    vi.restoreAllMocks();
+  });
+
+  it("does not pass futureCandles in normal replay mode", async () => {
+    const futureArgs: (Candle[] | undefined)[] = [];
+    (createStrategy as any).mockReturnValue({
+      onCandle: vi.fn((_candle: Candle, futureCandles?: Candle[]) => {
+        futureArgs.push(futureCandles);
+        return [];
+      }),
+      getState: vi.fn(() => ({
+        barIndex: 0,
+        equity: 10000,
+        cash: 10000,
+        position: { side: "FLAT" },
+      })),
+      reset: vi.fn(),
+    });
+
+    const session = makeSession();
+    const config: StrategyProfileConfig = {
+      ...defaultConfig,
+      oracleExit: { ...defaultConfig.oracleExit, enabled: true },
+    };
+
+    await sessionRunner.startSession(session, config);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    sessionRunner.stop(session.id);
+
+    expect(futureArgs.length).toBeGreaterThan(0);
+    for (const arg of futureArgs) {
+      expect(arg).toBeUndefined();
+    }
+  });
+});
 });
