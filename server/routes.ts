@@ -10,7 +10,7 @@ import { sessionRunner } from "./sim/runner";
 
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
-import { balances, vaults, positions, operations, auditLogs } from "@shared/schema";
+import { balances, vaults, positions, operations, auditLogs, withdrawals } from "@shared/schema";
 
 // Invariant check: no negative balance
 function assertNonNegative(value: bigint, label: string): void {

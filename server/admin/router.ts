@@ -3,7 +3,7 @@ import { ensureRequestId } from "./middleware/requestId";
 import { adminAuth } from "./middleware/adminAuth";
 import { loadPermissions, requirePermission } from "./middleware/rbac";
 import { ok, fail, ErrorCodes } from "./http";
-import { db } from "../db";
+import { db, withTransaction } from "../db";
 import {
   users,
   kycApplicants,
@@ -1551,24 +1551,80 @@ adminRouter.post(
       };
     }
 
-    await db.update(pendingAdminActions)
-      .set({ status: PendingActionStatus.CANCELLED })
-      .where(and(
-        eq(pendingAdminActions.targetType, "withdrawal"),
-        eq(pendingAdminActions.targetId, withdrawalId),
-        eq(pendingAdminActions.status, PendingActionStatus.PENDING)
-      ));
+    // Use transaction for atomicity: refund balance + update withdrawal + update operation
+    const updated = await withTransaction(async (tx) => {
+      // Cancel any pending admin actions
+      await tx.update(pendingAdminActions)
+        .set({ status: PendingActionStatus.CANCELLED })
+        .where(and(
+          eq(pendingAdminActions.targetType, "withdrawal"),
+          eq(pendingAdminActions.targetId, withdrawalId),
+          eq(pendingAdminActions.status, PendingActionStatus.PENDING)
+        ));
 
-    const [updated] = await db.update(withdrawals)
-      .set({
-        status: "REJECTED",
-        rejectedBy: adminUserId,
-        rejectedAt: new Date(),
-        rejectionReason: reason,
-        updatedAt: new Date(),
-      })
-      .where(eq(withdrawals.id, withdrawalId))
-      .returning();
+      // Refund the balance to the user (amount + fee)
+      const refundAmount = BigInt(withdrawal.amountMinor) + BigInt(withdrawal.feeMinor);
+      const [currentBalance] = await tx.select().from(balances)
+        .where(and(eq(balances.userId, withdrawal.userId), eq(balances.asset, withdrawal.currency)));
+      
+      if (currentBalance) {
+        const newAvailable = BigInt(currentBalance.available) + refundAmount;
+        await tx.update(balances)
+          .set({ available: newAvailable.toString(), updatedAt: new Date() })
+          .where(eq(balances.id, currentBalance.id));
+      } else {
+        // Create balance if doesn't exist (shouldn't happen, but be safe)
+        await tx.insert(balances).values({
+          userId: withdrawal.userId,
+          asset: withdrawal.currency,
+          available: refundAmount.toString(),
+          locked: "0",
+        });
+      }
+
+      // Update withdrawal status to REJECTED
+      const [updatedWithdrawal] = await tx.update(withdrawals)
+        .set({
+          status: "REJECTED",
+          rejectedBy: adminUserId,
+          rejectedAt: new Date(),
+          rejectionReason: reason,
+          updatedAt: new Date(),
+        })
+        .where(eq(withdrawals.id, withdrawalId))
+        .returning();
+
+      // Update linked operation status to cancelled
+      if (withdrawal.operationId) {
+        await tx.update(operations)
+          .set({
+            status: "cancelled",
+            reason: `Withdrawal rejected: ${reason}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(operations.id, withdrawal.operationId));
+      }
+
+      // Create refund operation record
+      await tx.insert(operations).values({
+        userId: withdrawal.userId,
+        type: "WITHDRAW_REFUND",
+        status: "completed",
+        asset: withdrawal.currency,
+        amount: withdrawal.amountMinor,
+        fee: "0",
+        txHash: null,
+        reason: `Refund for rejected withdrawal: ${reason}`,
+        metadata: { 
+          originalWithdrawalId: withdrawalId,
+          originalOperationId: withdrawal.operationId,
+          refundedAmount: withdrawal.amountMinor,
+          refundedFee: withdrawal.feeMinor,
+        },
+      });
+
+      return updatedWithdrawal;
+    });
 
     await db.update(adminInboxItems)
       .set({
@@ -1586,13 +1642,13 @@ adminRouter.post(
       status: 200,
       body: {
         ok: true,
-        data: { withdrawalId: updated.id, status: updated.status },
+        data: { withdrawalId: updated.id, status: updated.status, refunded: true },
         requestId: ctx.requestId,
       },
       targetType: "withdrawal",
       targetId: updated.id,
       beforeJson: { status: withdrawal.status },
-      afterJson: { status: "REJECTED", rejectedBy: adminUserId, reason },
+      afterJson: { status: "REJECTED", rejectedBy: adminUserId, reason, refunded: true },
     };
   })
 );
