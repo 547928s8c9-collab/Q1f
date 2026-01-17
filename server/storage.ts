@@ -616,6 +616,7 @@ export class DatabaseStorage implements IStorage {
         or(
           ilike(operations.type, pattern),
           ilike(operations.status, pattern),
+          ilike(operations.amount, pattern),
           ilike(operations.txHash, pattern),
           ilike(operations.providerRef, pattern),
           ilike(operations.strategyName, pattern)
