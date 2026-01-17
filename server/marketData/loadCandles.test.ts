@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { loadCandles, findMissingRanges, buildGaps, alignToGrid } from "./loadCandles";
-import { storage } from "../storage";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import type { Candle, Timeframe } from "@shared/schema";
-import { BinanceSpotDataSource } from "../data/binanceSpot";
+import { describeWithDb } from "../test/utils/requireDb";
+import type { BinanceSpotDataSource } from "../data/binanceSpot";
+import type { loadCandles as loadCandlesFn } from "./loadCandles";
+import type { findMissingRanges as findMissingRangesFn } from "./loadCandles";
+import type { buildGaps as buildGapsFn } from "./loadCandles";
+import type { alignToGrid as alignToGridFn } from "./loadCandles";
+import type { storage as storageInstance } from "../storage";
 
 const HOUR_MS = 3600000;
 
@@ -17,6 +21,17 @@ function makeCandle(ts: number, overrides: Partial<Candle> = {}): Candle {
     ...overrides,
   };
 }
+
+let loadCandles!: typeof loadCandlesFn;
+let findMissingRanges!: typeof findMissingRangesFn;
+let buildGaps!: typeof buildGapsFn;
+let alignToGrid!: typeof alignToGridFn;
+let storage!: typeof storageInstance;
+describeWithDb("loadCandles db suites", () => {
+  beforeAll(async () => {
+    ({ loadCandles, findMissingRanges, buildGaps, alignToGrid } = await import("./loadCandles"));
+    ({ storage } = await import("../storage"));
+  });
 
 describe("alignToGrid", () => {
   it("aligns timestamp to grid", () => {
@@ -300,4 +315,5 @@ describe("loadCandles determinism", () => {
     expect(result.gaps.some((g) => g.startMs === 21 * HOUR_MS)).toBe(true);
     expect(result.source).toBe("cache+binance");
   });
+});
 });

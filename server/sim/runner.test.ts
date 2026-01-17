@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import type { SimSession, StrategyProfileConfig } from "../../shared/schema";
 import { SimSessionStatus } from "../../shared/schema";
+import { describeWithDb } from "../test/utils/requireDb";
 
 vi.mock("../marketData/loadCandles", () => ({
   loadCandles: vi.fn(),
@@ -14,9 +15,9 @@ vi.mock("../strategies/factory", () => ({
   })),
 }));
 
-import { sessionRunner } from "./runner";
-import { loadCandles } from "../marketData/loadCandles";
-import { createStrategy } from "../strategies/factory";
+import type { sessionRunner as sessionRunnerInstance } from "./runner";
+import type { loadCandles as loadCandlesFn } from "../marketData/loadCandles";
+import type { createStrategy as createStrategyFn } from "../strategies/factory";
 
 interface Candle {
   ts: number;
@@ -79,6 +80,16 @@ const defaultConfig: StrategyProfileConfig = {
   },
 };
 
+let sessionRunner!: typeof sessionRunnerInstance;
+let loadCandles!: typeof loadCandlesFn;
+let createStrategy!: typeof createStrategyFn;
+
+describeWithDb("SessionRunner db suites", () => {
+  beforeAll(async () => {
+    ({ sessionRunner } = await import("./runner"));
+    ({ loadCandles } = await import("../marketData/loadCandles"));
+    ({ createStrategy } = await import("../strategies/factory"));
+  });
 describe("SessionRunner seq uniqueness", () => {
   let collectedSeqs: number[] = [];
 
@@ -227,4 +238,5 @@ describe("SessionRunner control flow", () => {
     expect(stopped).toBe(true);
     expect(sessionRunner.isRunning(session.id)).toBe(false);
   });
+});
 });
