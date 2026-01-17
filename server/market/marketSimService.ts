@@ -31,7 +31,7 @@ class MarketSimService extends EventEmitter {
   private lastPersistAt = 0;
 
   async ensureStarted(): Promise<void> {
-    if (this.started || !isSimEnabled()) return;
+    if (this.started) return;
     await ensureReplayClock();
     await this.loadSymbols();
     await this.tick();
@@ -83,7 +83,7 @@ class MarketSimService extends EventEmitter {
   }
 
   private async tick(): Promise<void> {
-    if (!isSimEnabled() || this.symbols.length === 0) return;
+    if (this.symbols.length === 0) return;
 
     const simNow = getSimNow();
     const quotesToPersist: QuoteUpdate[] = [];

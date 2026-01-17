@@ -10,7 +10,7 @@ let realStartMs = 0;
 let simSpeed = DEFAULT_SPEED;
 let simLagMs = DEFAULT_LAG_MS;
 
-const simEnabled = process.env.SIM_ENABLED === "1";
+const simEnabled = process.env.SIM_ENABLED !== "0";
 
 function parseNumber(value: string | undefined, fallback: number): number {
   if (!value) return fallback;

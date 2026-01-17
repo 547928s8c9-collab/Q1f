@@ -3832,10 +3832,6 @@ export async function registerRoutes(
 
   // GET /api/market/quotes - Snapshot of latest simulated quotes
   app.get("/api/market/quotes", isAuthenticated, async (req, res) => {
-    if (!isSimEnabled()) {
-      return res.status(503).json({ error: "SIM_DISABLED" });
-    }
-
     await marketSimService.ensureStarted();
     const symbolsParam = req.query.symbols as string | undefined;
     const symbols = symbolsParam
@@ -3848,10 +3844,6 @@ export async function registerRoutes(
 
   // GET /api/market/stream - SSE stream of simulated quotes
   app.get("/api/market/stream", isAuthenticated, async (req, res) => {
-    if (!isSimEnabled()) {
-      return res.status(503).json({ error: "SIM_DISABLED" });
-    }
-
     await marketSimService.ensureStarted();
     const symbolsParam = req.query.symbols as string | undefined;
     const requestedSymbols = symbolsParam
