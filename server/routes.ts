@@ -864,15 +864,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid year or month" });
       }
 
-      // Get operations for the specified month
+      // Get operations for the specified month using DB-level date filtering
       const startDate = new Date(yearNum, monthNum - 1, 1);
       const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
 
-      const result = await storage.getOperations(userId, undefined, undefined, undefined, 1000);
-      const operations = result.operations.filter((op) => {
-        const opDate = op.createdAt ? new Date(op.createdAt) : null;
-        return opDate && opDate >= startDate && opDate <= endDate;
-      });
+      const operations = await storage.getOperationsByDate(userId, startDate, endDate);
 
       // Calculate summary
       let totalIn = BigInt(0);
@@ -930,19 +926,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid year or month" });
       }
 
-      // Get operations for the specified month
+      // Get operations for the specified month using DB-level date filtering
       const startDate = new Date(yearNum, monthNum - 1, 1);
       const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
 
-      const result = await storage.getOperations(userId, undefined, undefined, undefined, 1000);
-      const operations = result.operations.filter((op) => {
-        const opDate = op.createdAt ? new Date(op.createdAt) : null;
-        return opDate && opDate >= startDate && opDate <= endDate;
-      }).sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-      });
+      const operations = await storage.getOperationsByDate(userId, startDate, endDate);
 
       // Calculate summary
       let totalIn = BigInt(0);
