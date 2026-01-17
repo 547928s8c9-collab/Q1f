@@ -30,6 +30,7 @@ interface LiveSession {
   equity: number;
   tradesCount: number;
   streamUrl: string;
+  errorMessage?: string | null;
 }
 
 interface SimEvent {
@@ -459,6 +460,14 @@ export default function LiveSessionView() {
   const controlMutation = useMutation({
     mutationFn: async (action: "pause" | "resume" | "stop") => {
       const res = await apiRequest("POST", `/api/live-sessions/${id}/control`, { action });
+      if (!res.ok) {
+        let message = "Control action failed";
+        try {
+          const data = await res.json();
+          message = data?.error?.message || data?.error || message;
+        } catch {}
+        throw new Error(message);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -476,6 +485,14 @@ export default function LiveSessionView() {
   const startMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/live-sessions/${id}/start`, {});
+      if (!res.ok) {
+        let message = "Start failed";
+        try {
+          const data = await res.json();
+          message = data?.error?.message || data?.error || message;
+        } catch {}
+        throw new Error(message);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -539,6 +556,7 @@ export default function LiveSessionView() {
   const statusCfg = statusConfig[session.status] || statusConfig.created;
   const isActive = session.status === "running" || session.status === "paused" || session.status === "created";
   const isTerminal = session.status === "stopped" || session.status === "finished" || session.status === "failed";
+  const failureMessage = session.status === "failed" ? session.errorMessage : null;
   
   const equityPositive = equityHistory.length >= 2 
     ? equityHistory[equityHistory.length - 1].value >= equityHistory[0].value 
@@ -567,6 +585,13 @@ export default function LiveSessionView() {
           </div>
         }
       />
+
+      {failureMessage && (
+        <Card className="p-4 border border-danger/30 bg-danger/10 text-danger mb-4" data-testid="live-session-failed">
+          <p className="text-sm font-medium">Session failed to start</p>
+          <p className="text-sm text-danger/90 mt-1">{failureMessage}</p>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
         <Card className="p-4">
