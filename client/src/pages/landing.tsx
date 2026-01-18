@@ -1,8 +1,16 @@
+import { useState, type FormEvent } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine } from "lucide-react";
 
 export default function Landing() {
+  const [, navigate] = useLocation();
+  const [adminLogin, setAdminLogin] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [adminError, setAdminError] = useState("");
+
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
@@ -11,6 +19,17 @@ export default function Landing() {
   };
   const handleAdminLogin = () => {
     window.location.href = "/api/admin/login";
+  };
+  const handleAdminSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (adminLogin === "qwerty" && adminPassword === "qwerty") {
+      setAdminError("");
+      navigate("/admin/dashboard");
+      return;
+    }
+
+    setAdminError("Invalid login or password. Try qwerty/qwerty.");
   };
 
   return (
@@ -99,6 +118,43 @@ export default function Landing() {
               </CardHeader>
             </Card>
           </div>
+        </section>
+
+        <section className="container max-w-6xl mx-auto px-4 py-16">
+          <Card className="border-primary/20">
+            <CardHeader className="text-center">
+              <CardTitle>Admin Access</CardTitle>
+              <CardDescription>Use the test credentials to preview the admin dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="mx-auto flex w-full max-w-md flex-col gap-4" onSubmit={handleAdminSubmit}>
+                <div className="space-y-2">
+                  <Input
+                    data-testid="admin-login"
+                    placeholder="Login"
+                    value={adminLogin}
+                    onChange={(event) => setAdminLogin(event.target.value)}
+                  />
+                  <Input
+                    data-testid="admin-password"
+                    placeholder="Password"
+                    type="password"
+                    value={adminPassword}
+                    onChange={(event) => setAdminPassword(event.target.value)}
+                  />
+                </div>
+                <Button type="submit" data-testid="admin-login-submit">
+                  Admin Login
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">Test credentials: qwerty/qwerty</p>
+                {adminError ? (
+                  <p className="text-sm text-destructive text-center" role="alert">
+                    {adminError}
+                  </p>
+                ) : null}
+              </form>
+            </CardContent>
+          </Card>
         </section>
 
         <section className="container max-w-6xl mx-auto px-4 py-16">
