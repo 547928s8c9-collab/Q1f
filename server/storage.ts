@@ -20,9 +20,6 @@ import {
   notifications,
   idempotencyKeys,
   marketCandles,
-  strategyProfiles,
-  simSessions,
-  simEvents,
   AddressStatus,
   dbRowToCandle,
   // Admin tables
@@ -71,13 +68,6 @@ import {
   type IdempotencyKey,
   type InsertIdempotencyKey,
   type Candle,
-  type StrategyProfile,
-  type StrategyProfileConfig,
-  type StrategyProfileConfigSchema,
-  type SimSession,
-  type InsertSimSession,
-  type SimEvent,
-  type InsertSimEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -194,27 +184,6 @@ export interface IStorage {
   // Market Candles
   getCandlesFromCache(exchange: string, symbol: string, timeframe: string, startMs: number, endMs: number): Promise<Candle[]>;
   upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void>;
-
-  // Strategy Profiles
-  getStrategyProfiles(): Promise<StrategyProfile[]>;
-  getStrategyProfile(slug: string): Promise<StrategyProfile | undefined>;
-  getStrategyProfileById(id: string): Promise<StrategyProfile | undefined>;
-  seedStrategyProfiles(): Promise<void>;
-
-  // Sim Sessions
-  getSimSession(id: string): Promise<SimSession | undefined>;
-  getSimSessionsByUser(userId: string, status?: string): Promise<SimSession[]>;
-  createSimSession(session: InsertSimSession): Promise<SimSession>;
-  updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined>;
-  getSimSessionByIdempotencyKey(userId: string, idempotencyKey: string): Promise<SimSession | undefined>;
-  transitionSimSessionStatus(sessionId: string, fromStatuses: string[], toStatus: string): Promise<SimSession | undefined>;
-  resetRunningSessions(): Promise<number>;
-
-  // Sim Events
-  getSimEvents(sessionId: string, fromSeq?: number, limit?: number): Promise<SimEvent[]>;
-  insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent>;
-  updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void>;
-  getLastSimEventSeq(sessionId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1097,319 +1066,6 @@ export class DatabaseStorage implements IStorage {
     return Array.from(seen.values()).sort((a, b) => a.ts - b.ts);
   }
 
-  // ==================== STRATEGY PROFILES ====================
-  async getStrategyProfiles(): Promise<StrategyProfile[]> {
-    return db
-      .select()
-      .from(strategyProfiles)
-      .where(eq(strategyProfiles.isEnabled, true))
-      .orderBy(strategyProfiles.slug);
-  }
-
-  async getStrategyProfile(slug: string): Promise<StrategyProfile | undefined> {
-    const [profile] = await db
-      .select()
-      .from(strategyProfiles)
-      .where(eq(strategyProfiles.slug, slug));
-    return profile;
-  }
-
-  async getStrategyProfileById(id: string): Promise<StrategyProfile | undefined> {
-    const [profile] = await db
-      .select()
-      .from(strategyProfiles)
-      .where(eq(strategyProfiles.id, id));
-    return profile;
-  }
-
-  async seedStrategyProfiles(): Promise<void> {
-    const existing = await db.select().from(strategyProfiles);
-    if (existing.length > 0) {
-      console.log(`Strategy profiles already seeded (${existing.length} profiles)`);
-      return;
-    }
-
-    const baseConfigSchema: StrategyProfileConfigSchema = {
-      feesBps: { type: "number", label: "Fees (bps)", min: 0, max: 100, step: 1, default: 15 },
-      slippageBps: { type: "number", label: "Slippage (bps)", min: 0, max: 100, step: 1, default: 10 },
-      maxPositionPct: { type: "number", label: "Max Position %", min: 0.1, max: 1, step: 0.05, default: 0.9 },
-      minBarsWarmup: { type: "number", label: "Min Bars Warmup", min: 50, max: 1000, step: 10, default: 200 },
-      walkForward: {
-        enabled: { type: "boolean", label: "Walk-Forward Enabled", default: true },
-        lookbackBars: { type: "number", label: "Lookback Bars", min: 100, max: 5000, step: 50, default: 1000 },
-        recalibEveryBars: { type: "number", label: "Recalib Every Bars", min: 10, max: 500, step: 10, default: 100 },
-        minWinProb: { type: "number", label: "Min Win Probability", min: 0, max: 1, step: 0.01, default: 0.45 },
-        minEVBps: { type: "number", label: "Min EV (bps)", min: -100, max: 500, step: 5, default: 10 },
-      },
-      oracleExit: {
-        enabled: { type: "boolean", label: "Oracle Exit Enabled", default: false },
-        horizonBars: { type: "number", label: "Horizon Bars", min: 1, max: 100, step: 1, default: 12 },
-        penaltyBps: { type: "number", label: "Penalty (bps)", min: 0, max: 200, step: 5, default: 50 },
-        maxHoldBars: { type: "number", label: "Max Hold Bars", min: 1, max: 500, step: 10, default: 48 },
-      },
-    };
-
-    const profiles: Array<{
-      slug: string;
-      displayName: string;
-      symbol: string;
-      timeframe: string;
-      description: string;
-      tags: string[];
-      riskLevel: string;
-      defaultConfig: StrategyProfileConfig;
-    }> = [
-      {
-        slug: "btc_squeeze_breakout",
-        displayName: "Satoshi MicroPulse Live Session",
-        symbol: "BTCUSDT",
-        timeframe: "15m",
-        description: "Bollinger squeeze breakout + volume confirm; oracle-assisted exit (penalized) + walk-forward EV/win-prob filters.",
-        tags: ["breakout", "volatility", "oracle"],
-        riskLevel: "medium",
-        defaultConfig: {
-          feesBps: 15,
-          slippageBps: 10,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 1000, recalibEveryBars: 100, minWinProb: 0.48, minEVBps: 15 },
-          oracleExit: { enabled: true, horizonBars: 12, penaltyBps: 50, maxHoldBars: 48 },
-        },
-      },
-      {
-        slug: "eth_ema_revert",
-        displayName: "Ether QuantumTick Scalper Live Session",
-        symbol: "ETHUSDT",
-        timeframe: "15m",
-        description: "Mean-reversion to EMA(50) fair value + RSI oversold; filters by net EV; walk-forward thresholds.",
-        tags: ["mean-reversion", "scalping", "rsi"],
-        riskLevel: "medium",
-        defaultConfig: {
-          feesBps: 15,
-          slippageBps: 12,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 1000, recalibEveryBars: 100, minWinProb: 0.50, minEVBps: 12 },
-          oracleExit: { enabled: false, horizonBars: 12, penaltyBps: 50, maxHoldBars: 48 },
-        },
-      },
-      {
-        slug: "bnb_trend_pullback",
-        displayName: "BNB LatencyEdge MarketRunner Live Session",
-        symbol: "BNBUSDT",
-        timeframe: "1h",
-        description: "Uptrend pullback to EMA(20) with positive trend slope; fewer trades, smoother curve.",
-        tags: ["trend", "pullback", "ema"],
-        riskLevel: "low",
-        defaultConfig: {
-          feesBps: 12,
-          slippageBps: 8,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 1500, recalibEveryBars: 150, minWinProb: 0.52, minEVBps: 20 },
-          oracleExit: { enabled: false, horizonBars: 12, penaltyBps: 50, maxHoldBars: 72 },
-        },
-      },
-      {
-        slug: "sol_vol_burst",
-        displayName: "Solana WarpSpeed VolBurst Live Session",
-        symbol: "SOLUSDT",
-        timeframe: "15m",
-        description: "Volatility impulse (return percentile + volume burst); strict filters; higher fee/slippage; fast exits.",
-        tags: ["volatility", "momentum", "volume"],
-        riskLevel: "high",
-        defaultConfig: {
-          feesBps: 20,
-          slippageBps: 25,
-          maxPositionPct: 0.8,
-          minBarsWarmup: 250,
-          walkForward: { enabled: true, lookbackBars: 800, recalibEveryBars: 80, minWinProb: 0.45, minEVBps: 25 },
-          oracleExit: { enabled: false, horizonBars: 8, penaltyBps: 60, maxHoldBars: 24 },
-        },
-      },
-      {
-        slug: "xrp_keltner_revert",
-        displayName: "Ripple LiquidityWave SpreadCatcher Live Session",
-        symbol: "XRPUSDT",
-        timeframe: "1h",
-        description: "Keltner Channel range revert; entry at lower band if no breakout signs (volume control).",
-        tags: ["keltner", "range", "mean-reversion"],
-        riskLevel: "low",
-        defaultConfig: {
-          feesBps: 10,
-          slippageBps: 8,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 1200, recalibEveryBars: 120, minWinProb: 0.55, minEVBps: 15 },
-          oracleExit: { enabled: false, horizonBars: 12, penaltyBps: 50, maxHoldBars: 96 },
-        },
-      },
-      {
-        slug: "doge_fast_momo",
-        displayName: "Doge TickRunner Momentum Live Session",
-        symbol: "DOGEUSDT",
-        timeframe: "15m",
-        description: "Fast momentum EMA 9/21 cross + volume confirm; stricter EV filter; higher fee/slippage.",
-        tags: ["momentum", "ema-cross", "fast"],
-        riskLevel: "high",
-        defaultConfig: {
-          feesBps: 25,
-          slippageBps: 40,
-          maxPositionPct: 0.7,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 600, recalibEveryBars: 60, minWinProb: 0.42, minEVBps: 30 },
-          oracleExit: { enabled: false, horizonBars: 6, penaltyBps: 70, maxHoldBars: 18 },
-        },
-      },
-      {
-        slug: "ada_deep_revert",
-        displayName: "Cardano MicroGrid MeanRevert Live Session",
-        symbol: "ADAUSDT",
-        timeframe: "1h",
-        description: "Deep mean-reversion: strong deviation from EMA(200) + RSI oversold; rare but higher-quality entries.",
-        tags: ["mean-reversion", "deep", "rsi"],
-        riskLevel: "low",
-        defaultConfig: {
-          feesBps: 10,
-          slippageBps: 6,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 250,
-          walkForward: { enabled: true, lookbackBars: 2000, recalibEveryBars: 200, minWinProb: 0.58, minEVBps: 18 },
-          oracleExit: { enabled: false, horizonBars: 12, penaltyBps: 50, maxHoldBars: 120 },
-        },
-      },
-      {
-        slug: "trx_lowvol_band",
-        displayName: "Tron StableFlow NanoArb Live Session",
-        symbol: "TRXUSDT",
-        timeframe: "1h",
-        description: "Low-vol band capture: trade only under low ATR; Bollinger band touches; calm flow.",
-        tags: ["low-volatility", "bollinger", "stable"],
-        riskLevel: "low",
-        defaultConfig: {
-          feesBps: 10,
-          slippageBps: 5,
-          maxPositionPct: 0.9,
-          minBarsWarmup: 200,
-          walkForward: { enabled: true, lookbackBars: 1500, recalibEveryBars: 150, minWinProb: 0.60, minEVBps: 12 },
-          oracleExit: { enabled: false, horizonBars: 12, penaltyBps: 50, maxHoldBars: 96 },
-        },
-      },
-    ];
-
-    for (const p of profiles) {
-      await db.insert(strategyProfiles).values({
-        slug: p.slug,
-        displayName: p.displayName,
-        symbol: p.symbol,
-        timeframe: p.timeframe,
-        description: p.description,
-        profileKey: p.slug,
-        tags: p.tags,
-        riskLevel: p.riskLevel,
-        defaultConfig: p.defaultConfig,
-        configSchema: baseConfigSchema,
-        isEnabled: true,
-      });
-    }
-
-    console.log(`Seeded ${profiles.length} strategy profiles`);
-  }
-
-  // Sim Sessions
-  async getSimSession(id: string): Promise<SimSession | undefined> {
-    const [session] = await db.select().from(simSessions).where(eq(simSessions.id, id));
-    return session;
-  }
-
-  async getSimSessionsByUser(userId: string, status?: string): Promise<SimSession[]> {
-    if (status) {
-      return await db.select().from(simSessions)
-        .where(and(eq(simSessions.userId, userId), eq(simSessions.status, status)))
-        .orderBy(desc(simSessions.createdAt));
-    }
-    return await db.select().from(simSessions)
-      .where(eq(simSessions.userId, userId))
-      .orderBy(desc(simSessions.createdAt));
-  }
-
-  async createSimSession(session: InsertSimSession): Promise<SimSession> {
-    const [created] = await db.insert(simSessions).values(session).returning();
-    return created;
-  }
-
-  async updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined> {
-    const [updated] = await db.update(simSessions)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(simSessions.id, id))
-      .returning();
-    return updated;
-  }
-
-  async getSimSessionByIdempotencyKey(userId: string, idempotencyKey: string): Promise<SimSession | undefined> {
-    const [session] = await db.select().from(simSessions)
-      .where(and(eq(simSessions.userId, userId), eq(simSessions.idempotencyKey, idempotencyKey)));
-    return session;
-  }
-
-  // Sim Events
-  async getSimEvents(sessionId: string, fromSeq?: number, limit?: number): Promise<SimEvent[]> {
-    let query = db.select().from(simEvents)
-      .where(fromSeq !== undefined
-        ? and(eq(simEvents.sessionId, sessionId), gte(simEvents.seq, fromSeq))
-        : eq(simEvents.sessionId, sessionId))
-      .orderBy(simEvents.seq);
-
-    if (limit) {
-      query = query.limit(limit) as typeof query;
-    }
-
-    return await query;
-  }
-
-  async insertSimEvent(sessionId: string, seq: number, ts: number, type: string, payload: unknown): Promise<SimEvent> {
-    const [event] = await db.insert(simEvents).values({
-      sessionId,
-      seq,
-      ts,
-      type,
-      payload,
-    }).onConflictDoNothing().returning();
-    return event;
-  }
-
-  async updateSessionLastSeq(sessionId: string, lastSeq: number): Promise<void> {
-    await db.update(simSessions)
-      .set({ lastSeq, updatedAt: new Date() })
-      .where(eq(simSessions.id, sessionId));
-  }
-
-  async transitionSimSessionStatus(sessionId: string, fromStatuses: string[], toStatus: string): Promise<SimSession | undefined> {
-    const [updated] = await db.update(simSessions)
-      .set({ status: toStatus, updatedAt: new Date() })
-      .where(and(
-        eq(simSessions.id, sessionId),
-        inArray(simSessions.status, fromStatuses)
-      ))
-      .returning();
-    return updated;
-  }
-
-  async resetRunningSessions(): Promise<number> {
-    const result = await db.update(simSessions)
-      .set({ status: "paused", updatedAt: new Date() })
-      .where(eq(simSessions.status, "running"))
-      .returning();
-    return result.length;
-  }
-
-  async getLastSimEventSeq(sessionId: string): Promise<number> {
-    const [result] = await db.select({ maxSeq: sql<string>`COALESCE(MAX(${simEvents.seq}), 0)` })
-      .from(simEvents)
-      .where(eq(simEvents.sessionId, sessionId));
-    return parseInt(result?.maxSeq ?? "0", 10);
-  }
-
   // ==================== ADMIN RBAC SEED ====================
   async seedAdminRbac(): Promise<void> {
     const { SEED_ROLES, SEED_PERMISSIONS, SEED_ROLE_PERMISSIONS } = await import("@shared/schema");
@@ -1459,7 +1115,6 @@ export class DatabaseStorage implements IStorage {
 
 class MemoryStorage extends DatabaseStorage {
   private candleCache = new Map<string, Candle[]>();
-  private simSessionSeq = new Map<string, number>();
 
   private getCandleKey(exchange: string, symbol: string, timeframe: string) {
     return `${exchange}:${symbol}:${timeframe}`;
@@ -1488,17 +1143,6 @@ class MemoryStorage extends DatabaseStorage {
     const key = this.getCandleKey(exchange, symbol, timeframe);
     const candles = this.candleCache.get(key) ?? [];
     return candles.filter((c) => c.ts >= startMs && c.ts < endMs).sort((a, b) => a.ts - b.ts);
-  }
-
-  async updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined> {
-    if (updates.lastSeq !== undefined) {
-      this.simSessionSeq.set(id, updates.lastSeq);
-    }
-    return undefined;
-  }
-
-  async getLastSimEventSeq(sessionId: string): Promise<number> {
-    return this.simSessionSeq.get(sessionId) ?? 0;
   }
 }
 
