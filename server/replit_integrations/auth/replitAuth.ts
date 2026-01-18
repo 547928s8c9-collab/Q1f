@@ -108,6 +108,10 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
+    const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : null;
+    if (returnTo && returnTo.startsWith("/")) {
+      (req.session as { returnTo?: string }).returnTo = returnTo;
+    }
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
@@ -131,7 +135,10 @@ export async function setupAuth(app: Express) {
           console.error("[auth] Login error:", loginErr);
           return res.redirect("/api/login");
         }
-        return res.redirect("/");
+        const session = req.session as { returnTo?: string };
+        const returnTo = typeof session.returnTo === "string" ? session.returnTo : "/";
+        session.returnTo = undefined;
+        return res.redirect(returnTo);
       });
     })(req, res, next);
   });

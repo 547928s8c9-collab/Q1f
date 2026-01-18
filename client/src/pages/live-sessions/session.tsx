@@ -54,6 +54,13 @@ const statusConfig: Record<string, { color: string; chipVariant: "success" | "wa
   failed: { color: "text-negative", chipVariant: "danger", label: "Failed" },
 };
 
+const normalizePayload = (payload: Record<string, unknown>) => {
+  if (payload && "data" in payload && "type" in payload) {
+    return (payload as { data: Record<string, unknown> }).data;
+  }
+  return payload;
+};
+
 function EventFeed({ events }: { events: SimEvent[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -83,8 +90,10 @@ function EventFeed({ events }: { events: SimEvent[] }) {
       return payload.side === "buy" ? "text-positive" : "text-negative";
     }
     if (type === "equity") {
-      const change = payload.change as number;
-      return change >= 0 ? "text-positive" : "text-negative";
+      const drawdown = payload.drawdownPct as number | undefined;
+      if (typeof drawdown === "number") {
+        return drawdown > 0 ? "text-negative" : "text-positive";
+      }
     }
     return "text-muted-foreground";
   };
@@ -94,16 +103,26 @@ function EventFeed({ events }: { events: SimEvent[] }) {
       const side = payload.side as string;
       const price = payload.price as number;
       const qty = payload.qty as number;
-      return `${side?.toUpperCase()} ${qty} @ ${price?.toFixed(2)}`;
+      if (side && qty && price) {
+        return `${side?.toUpperCase()} ${qty} @ ${price?.toFixed(2)}`;
+      }
+      const entry = payload.entryPrice as number;
+      const exit = payload.exitPrice as number;
+      if (entry && exit) {
+        return `Entry ${entry.toFixed(2)} → Exit ${exit.toFixed(2)}`;
+      }
     }
     if (type === "equity") {
-      const value = payload.value as number;
-      const change = payload.change as number;
-      const sign = change >= 0 ? "+" : "";
-      return `$${value?.toFixed(2)} (${sign}${change?.toFixed(2)}%)`;
+      const value = (payload.equity as number) ?? (payload.value as number);
+      const drawdown = payload.drawdownPct as number | undefined;
+      if (typeof drawdown === "number") {
+        return `$${value?.toFixed(2)} (DD ${drawdown.toFixed(2)}%)`;
+      }
+      return `$${value?.toFixed(2)}`;
     }
     if (type === "candle") {
-      const close = payload.close as number;
+      const candle = payload.candle as { close?: number } | undefined;
+      const close = (payload.close as number | undefined) ?? candle?.close;
       return `Close: ${close?.toFixed(2)}`;
     }
     if (type === "status") {
@@ -123,13 +142,15 @@ function EventFeed({ events }: { events: SimEvent[] }) {
           Waiting for events...
         </div>
       ) : (
-        events.slice(-50).map((event) => (
+        events.slice(-50).map((event) => {
+          const normalizedPayload = normalizePayload(event.payload);
+          return (
           <div
             key={event.seq}
             className="flex items-center gap-2 p-2 rounded-md bg-muted/30 text-sm"
             data-testid={`event-${event.seq}`}
           >
-            <span className={getEventColor(event.type, event.payload)}>
+            <span className={getEventColor(event.type, normalizedPayload)}>
               {getEventIcon(event.type)}
             </span>
             <span className="text-xs text-muted-foreground font-mono">
@@ -138,11 +159,12 @@ function EventFeed({ events }: { events: SimEvent[] }) {
             <span className="text-xs font-medium uppercase text-muted-foreground w-12">
               {event.type}
             </span>
-            <span className={`flex-1 truncate ${getEventColor(event.type, event.payload)}`}>
-              {formatPayload(event.type, event.payload)}
+            <span className={`flex-1 truncate ${getEventColor(event.type, normalizedPayload)}`}>
+              {formatPayload(event.type, normalizedPayload)}
             </span>
           </div>
-        ))
+        );
+        })
       )}
     </div>
   );
@@ -205,16 +227,20 @@ export default function LiveSessionView() {
         setEvents((prev) => [...prev.slice(-200), event]);
 
         if (event.type === "candle") {
+          const normalizedPayload = normalizePayload(event.payload);
+          const candle = (normalizedPayload.candle as { ts?: number; close?: number } | undefined) ?? normalizedPayload;
           setCurrentCandle({
-            ts: event.ts,
-            close: event.payload.close as number,
+            ts: (candle.ts ?? event.ts) as number,
+            close: (candle.close ?? normalizedPayload.close) as number,
           });
         }
 
         if (event.type === "equity") {
+          const normalizedPayload = normalizePayload(event.payload);
+          const equityValue = (normalizedPayload.equity ?? normalizedPayload.value) as number;
           setEquityHistory((prev) => [
             ...prev.slice(-100),
-            { value: event.payload.value as number },
+            { value: equityValue },
           ]);
         }
 

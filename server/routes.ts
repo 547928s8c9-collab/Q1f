@@ -1081,19 +1081,42 @@ export async function registerRoutes(
           .where(and(eq(positions.userId, userId), eq(positions.strategyId, strategyId)));
         
         if (existingPos) {
+          const existingPrincipalMinor = BigInt(existingPos.principalMinor || "0");
+          const existingPrincipalLegacy = BigInt(existingPos.principal || "0");
+          const basePrincipalMinor = existingPrincipalMinor > 0n
+            ? existingPrincipalMinor
+            : existingPrincipalLegacy * 1_000_000n;
+
+          const existingCurrentMinor = BigInt(existingPos.investedCurrentMinor || "0");
+          const existingCurrentLegacy = BigInt(existingPos.currentValue || "0");
+          const baseCurrentMinor = existingCurrentMinor > 0n
+            ? existingCurrentMinor
+            : existingCurrentLegacy * 1_000_000n;
+
+          const newPrincipalMinor = basePrincipalMinor + BigInt(amount);
+          const newInvestedCurrentMinor = baseCurrentMinor + BigInt(amount);
+          const principalLegacy = (newPrincipalMinor / 1_000_000n).toString();
+          const currentLegacy = (newInvestedCurrentMinor / 1_000_000n).toString();
+
           await tx.update(positions)
             .set({
-              principal: (BigInt(existingPos.principal) + BigInt(amount)).toString(),
-              currentValue: (BigInt(existingPos.currentValue) + BigInt(amount)).toString(),
+              principal: principalLegacy,
+              currentValue: currentLegacy,
+              principalMinor: newPrincipalMinor.toString(),
+              investedCurrentMinor: newInvestedCurrentMinor.toString(),
               updatedAt: new Date(),
             })
             .where(eq(positions.id, existingPos.id));
         } else {
+          const principalMinor = BigInt(amount);
+          const principalLegacy = (principalMinor / 1_000_000n).toString();
           await tx.insert(positions).values({
             userId,
             strategyId,
-            principal: amount,
-            currentValue: amount,
+            principal: principalLegacy,
+            currentValue: principalLegacy,
+            principalMinor: principalMinor.toString(),
+            investedCurrentMinor: principalMinor.toString(),
           });
         }
 
@@ -1138,6 +1161,26 @@ export async function registerRoutes(
       const responseBody = { success: true, operation: { id: operation.id } };
       if (lock.acquired) {
         await completeIdempotency(lock.keyId, operation.id, 200, responseBody);
+      }
+      try {
+        const [balancesSnapshot, positionsSnapshot] = await Promise.all([
+          storage.getBalances(userId),
+          storage.getPositions(userId),
+        ]);
+        const usdtBalance = balancesSnapshot.find((b) => b.asset === "USDT");
+        const totalBalance = BigInt(usdtBalance?.available || "0") + BigInt(usdtBalance?.locked || "0");
+        const totalInvested = positionsSnapshot.reduce((acc, pos) => {
+          const investedMinor = BigInt(pos.investedCurrentMinor || "0");
+          if (investedMinor > 0n) {
+            return acc + investedMinor;
+          }
+          return acc + (BigInt(pos.currentValue || "0") * 1_000_000n);
+        }, 0n);
+        const totalPortfolio = (totalBalance + totalInvested).toString();
+        const today = new Date().toISOString().split("T")[0];
+        await storage.createPortfolioSeries({ userId, date: today, value: totalPortfolio });
+      } catch (seriesError) {
+        console.error("Portfolio series update error:", seriesError);
       }
       res.json(responseBody);
     } catch (error) {
@@ -3449,10 +3492,23 @@ export async function registerRoutes(
     // Track current sequence
     let currentSeq = fromSeq;
     
+    const normalizePayload = (payload: unknown) => {
+      if (payload && typeof payload === "object" && "type" in payload && "data" in payload) {
+        return (payload as { data: unknown }).data;
+      }
+      return payload;
+    };
+
     // First, send any missed events from DB
     const missedEvents = await storage.getSimEvents(sessionId, fromSeq, 1000);
     for (const event of missedEvents) {
-      res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+      const message = {
+        seq: event.seq,
+        ts: event.ts,
+        type: event.type,
+        payload: normalizePayload(event.payload),
+      };
+      res.write(`id: ${event.seq}\ndata: ${JSON.stringify(message)}\n\n`);
       currentSeq = event.seq + 1;
     }
     
@@ -3462,13 +3518,25 @@ export async function registerRoutes(
     if (isActive) {
       const eventHandler = (_sid: string, event: { seq: number; type: string; payload: unknown }) => {
         if (event.seq >= currentSeq) {
-          res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+          const message = {
+            seq: event.seq,
+            ts: Date.now(),
+            type: event.type,
+            payload: normalizePayload(event.payload),
+          };
+          res.write(`id: ${event.seq}\ndata: ${JSON.stringify(message)}\n\n`);
           currentSeq = event.seq + 1;
         }
       };
       
       const statusHandler = (_sid: string, status: string) => {
-        res.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
+        const message = {
+          seq: currentSeq,
+          ts: Date.now(),
+          type: "status",
+          payload: { status },
+        };
+        res.write(`data: ${JSON.stringify(message)}\n\n`);
         if (status === SimSessionStatus.FINISHED || 
             status === SimSessionStatus.FAILED || 
             status === SimSessionStatus.STOPPED) {
@@ -3497,7 +3565,13 @@ export async function registerRoutes(
       req.on("close", cleanup);
     } else {
       // No active runner - just send current status and close
-      res.write(`event: status\ndata: ${JSON.stringify({ status: session.status })}\n\n`);
+      const message = {
+        seq: currentSeq,
+        ts: Date.now(),
+        type: "status",
+        payload: { status: session.status },
+      };
+      res.write(`data: ${JSON.stringify(message)}\n\n`);
       clearInterval(heartbeatInterval);
       res.end();
     }

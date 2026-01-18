@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { PageHeader } from "@/components/ui/page-header";
@@ -223,6 +223,8 @@ export default function LiveSessionDetail() {
   const { data: profile, isLoading, error } = useQuery<StrategyProfile>({
     queryKey: ["/api/strategy-profiles", slug],
     enabled: !!slug,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   useSetPageTitle(profile?.displayName || "Strategy Details");
@@ -231,6 +233,21 @@ export default function LiveSessionDetail() {
     if (!profile) return {};
     return { ...profile.defaultConfig, ...configOverride };
   }, [profile, configOverride]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
+    const minBarsWarmup = (profile.defaultConfig?.minBarsWarmup as number | undefined) ?? 200;
+    const minRangeMs = (minBarsWarmup + 10) * tfMs;
+    setStartDate((prev) => {
+      const end = endDate ?? new Date();
+      const currentStart = prev ?? new Date(end.getTime() - minRangeMs);
+      if (end.getTime() - currentStart.getTime() < minRangeMs) {
+        return new Date(end.getTime() - minRangeMs);
+      }
+      return currentStart;
+    });
+  }, [profile, endDate]);
 
   const handleConfigChange = (path: string, value: unknown) => {
     const parts = path.split(".");
@@ -255,8 +272,13 @@ export default function LiveSessionDetail() {
       if (!profile || !startDate || !endDate) throw new Error("Missing required fields");
       
       const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
+      const minBarsWarmup = (profile.defaultConfig?.minBarsWarmup as number | undefined) ?? 200;
+      const minRangeMs = (minBarsWarmup + 10) * tfMs;
       const startMs = Math.floor(startDate.getTime() / tfMs) * tfMs;
       const endMs = Math.floor(endDate.getTime() / tfMs) * tfMs;
+      if (endMs - startMs < minRangeMs) {
+        throw new Error(`Selected range is too short. Minimum is ${(minBarsWarmup + 10)} bars.`);
+      }
 
       const configHash = JSON.stringify(configOverride).split("").reduce((a, b) => {
         a = ((a << 5) - a) + b.charCodeAt(0);

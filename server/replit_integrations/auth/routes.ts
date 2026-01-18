@@ -10,6 +10,9 @@ export function registerAuthRoutes(app: Express): void {
   // Demo login - creates a demo session for preview purposes
   app.get("/api/demo-login", async (req: any, res) => {
     try {
+      const returnTo = typeof req.query.returnTo === "string" && req.query.returnTo.startsWith("/")
+        ? req.query.returnTo
+        : "/";
       // Check if demo user exists, create if not
       let user = await authStorage.getUser(DEMO_USER_ID);
       if (!user) {
@@ -66,7 +69,7 @@ export function registerAuthRoutes(app: Express): void {
             return res.status(500).json({ error: "Failed to save session" });
           }
           console.log("Demo login successful, session saved for user:", DEMO_USER_ID);
-          res.redirect("/");
+          res.redirect(returnTo);
         });
       });
     } catch (error) {

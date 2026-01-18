@@ -150,6 +150,8 @@ export default function LiveSessions() {
 
   const { data, isLoading, error } = useQuery<ProfilesResponse>({
     queryKey: ["/api/strategy-profiles"],
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const profiles = data?.profiles || [];
