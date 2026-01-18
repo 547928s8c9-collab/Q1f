@@ -3,6 +3,9 @@ import type { MarketDataSource } from "./loadCandles";
 import { normalizeSymbol } from "./utils";
 
 const BASE_BUCKET_MS = 60_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 64;
+const MAX_CANDLES_PER_REQUEST = 50_000;
 const TIMEFRAME_MS: Record<Timeframe, number> = {
   "1m": 60_000,
   "15m": 15 * 60_000,
@@ -155,6 +158,22 @@ const PRESETS: Record<string, SymbolPreset> = {
   },
 };
 
+const dayCache = new Map<string, Candle[]>();
+
+function getDayKey(symbol: string, timeframe: Timeframe, dayBucket: number): string {
+  return `${symbol}:${timeframe}:${dayBucket}`;
+}
+
+function setDayCache(key: string, candles: Candle[]): void {
+  if (dayCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = dayCache.keys().next().value;
+    if (oldestKey) {
+      dayCache.delete(oldestKey);
+    }
+  }
+  dayCache.set(key, candles);
+}
+
 function hashToSeed(input: string): number {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
@@ -281,14 +300,38 @@ function buildCandle(symbol: string, ts: number, stepMs: number): Candle {
   return { ts, open, high, low, close, volume };
 }
 
+function getDayCandles(symbol: string, timeframe: Timeframe, dayBucket: number, stepMs: number): Candle[] {
+  const key = getDayKey(symbol, timeframe, dayBucket);
+  const cached = dayCache.get(key);
+  if (cached) return cached;
+
+  const dayStart = dayBucket * DAY_MS;
+  const dayEnd = dayStart + DAY_MS;
+  const candles: Candle[] = [];
+  for (let ts = dayStart; ts < dayEnd; ts += stepMs) {
+    candles.push(buildCandle(symbol, ts, stepMs));
+  }
+  setDayCache(key, candles);
+  return candles;
+}
+
 export const syntheticDataSource: MarketDataSource = {
   async fetchCandles(symbol: string, timeframe: Timeframe, startMs: number, endMs: number): Promise<Candle[]> {
     const stepMs = TIMEFRAME_MS[timeframe];
     const alignedStart = Math.floor(startMs / stepMs) * stepMs;
     const alignedEnd = Math.floor(endMs / stepMs) * stepMs;
+    const totalCandles = Math.max(0, Math.floor((alignedEnd - alignedStart) / stepMs));
+    const cappedCandles = Math.min(totalCandles, MAX_CANDLES_PER_REQUEST);
+
     const candles: Candle[] = [];
-    for (let ts = alignedStart; ts < alignedEnd; ts += stepMs) {
-      candles.push(buildCandle(symbol, ts, stepMs));
+    for (let i = 0; i < cappedCandles; i++) {
+      const ts = alignedStart + i * stepMs;
+      const dayBucket = Math.floor(ts / DAY_MS);
+      const dayStart = dayBucket * DAY_MS;
+      const dayCandles = getDayCandles(symbol, timeframe, dayBucket, stepMs);
+      const index = Math.floor((ts - dayStart) / stepMs);
+      const candle = dayCandles[index] ?? buildCandle(symbol, ts, stepMs);
+      candles.push(candle);
     }
     return candles;
   },
