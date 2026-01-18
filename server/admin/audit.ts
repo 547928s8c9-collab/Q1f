@@ -138,7 +138,14 @@ export function requireIdempotencyKey(
   next();
 }
 
-export function wrapMutation<T>(
+type MutationResponseBody = {
+  ok: boolean;
+  requestId: string;
+  data?: unknown;
+  error?: { code: string; message: string; details?: unknown };
+};
+
+export function wrapMutation(
   actionType: string,
   handler: (
     req: Request,
@@ -150,7 +157,7 @@ export function wrapMutation<T>(
       ip: string;
       userAgent: string;
     }
-  ) => Promise<{ status: number; body: T; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown; reason?: string }>
+  ) => Promise<{ status: number; body: MutationResponseBody; targetType?: string; targetId?: string; beforeJson?: unknown; afterJson?: unknown; reason?: string }>
 ) {
   return async (req: Request, res: Response): Promise<void> => {
     const adminUserId = res.locals.adminUserId!;

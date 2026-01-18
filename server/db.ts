@@ -3,13 +3,15 @@ import pg from "pg";
 import * as schema from "@shared/schema";
 
 const { Pool } = pg;
+const databaseUrl = process.env.DATABASE_URL;
+const isTest = process.env.NODE_ENV === "test";
 
-if (!process.env.DATABASE_URL) {
+if (!databaseUrl && !isTest) {
   throw new Error("DATABASE_URL must be set");
 }
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl ?? "postgres://localhost:5432/postgres",
   // Add retry and connection settings for production stability
   connectionTimeoutMillis: 10000,
   idleTimeoutMillis: 30000,

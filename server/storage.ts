@@ -1457,4 +1457,51 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+class MemoryStorage extends DatabaseStorage {
+  private candleCache = new Map<string, Candle[]>();
+  private simSessionSeq = new Map<string, number>();
+
+  private getCandleKey(exchange: string, symbol: string, timeframe: string) {
+    return `${exchange}:${symbol}:${timeframe}`;
+  }
+
+  async upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void> {
+    const key = this.getCandleKey(exchange, symbol, timeframe);
+    const existing = this.candleCache.get(key) ?? [];
+    const candleMap = new Map<number, Candle>(existing.map((c) => [c.ts, c]));
+
+    for (const candle of candles) {
+      candleMap.set(candle.ts, { ...candle });
+    }
+
+    const merged = Array.from(candleMap.values()).sort((a, b) => a.ts - b.ts);
+    this.candleCache.set(key, merged);
+  }
+
+  async getCandlesFromCache(
+    exchange: string,
+    symbol: string,
+    timeframe: string,
+    startMs: number,
+    endMs: number
+  ): Promise<Candle[]> {
+    const key = this.getCandleKey(exchange, symbol, timeframe);
+    const candles = this.candleCache.get(key) ?? [];
+    return candles.filter((c) => c.ts >= startMs && c.ts < endMs).sort((a, b) => a.ts - b.ts);
+  }
+
+  async updateSimSession(id: string, updates: Partial<SimSession>): Promise<SimSession | undefined> {
+    if (updates.lastSeq !== undefined) {
+      this.simSessionSeq.set(id, updates.lastSeq);
+    }
+    return undefined;
+  }
+
+  async getLastSimEventSeq(sessionId: string): Promise<number> {
+    return this.simSessionSeq.get(sessionId) ?? 0;
+  }
+}
+
+const useMemoryStorage = process.env.NODE_ENV === "test";
+
+export const storage = useMemoryStorage ? new MemoryStorage() : new DatabaseStorage();
