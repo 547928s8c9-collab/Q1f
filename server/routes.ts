@@ -352,10 +352,9 @@ export async function registerRoutes(
   // Mount Admin API router
   app.use("/api/admin", adminRouter);
 
-  // Ensure core strategy data exists for live sessions and investing
+  // Ensure core strategy data exists for investing
   try {
     await storage.seedStrategies();
-    await storage.seedStrategyProfiles();
   } catch (error) {
     console.error("Seed strategies error:", error);
   }
