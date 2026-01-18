@@ -2,7 +2,7 @@ import type { Candle, GapInfo, LoadCandlesResult, Timeframe } from "@shared/sche
 import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
 import { cryptoCompare } from "../data/cryptoCompare";
-import { binanceSpot } from "../data/binanceSpot";
+import { syntheticDataSource } from "./syntheticDataSource";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
 
 function log(msg: string, category?: string, meta?: object) {
@@ -31,11 +31,19 @@ export interface LoadCandlesParams {
   dataSource?: MarketDataSource;
   maxBars?: number;
   allowLargeRange?: boolean;
+  preferSynthetic?: boolean;
+}
+
+function getDefaultExchange(exchange: string | undefined, preferSynthetic: boolean | undefined): string {
+  if (exchange) return exchange;
+  if (preferSynthetic) return "sim";
+  if (process.env.MARKET_DATA_MODE === "synthetic") return "sim";
+  return "cryptocompare";
 }
 
 export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandlesResult> {
   const {
-    exchange = "cryptocompare",
+    exchange: exchangeParam,
     symbol: rawSymbol,
     timeframe: rawTimeframe,
     startMs,
@@ -43,9 +51,11 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
     dataSource,
     maxBars = DEFAULT_MAX_BARS,
     allowLargeRange = false,
+    preferSynthetic = false,
   } = params;
+  const exchange = getDefaultExchange(exchangeParam, preferSynthetic);
   const resolvedDataSource =
-    dataSource ?? (exchange === "binance_spot" ? binanceSpot : cryptoCompare);
+    dataSource ?? (exchange === "sim" ? syntheticDataSource : cryptoCompare);
 
   const symbol = normalizeSymbol(rawSymbol);
   const timeframe = normalizeTimeframe(rawTimeframe as string);

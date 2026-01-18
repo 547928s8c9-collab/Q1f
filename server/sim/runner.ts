@@ -176,6 +176,7 @@ class SessionRunnerManager extends EventEmitter {
         timeframe,
         startMs: initialCursorMs,
         endMs: loadEndMs,
+        preferSynthetic: true,
       });
       
       if (result.gaps && result.gaps.length > 0) {
@@ -346,6 +347,7 @@ class SessionRunnerManager extends EventEmitter {
         timeframe,
         startMs: state.cursorMs,
         endMs: Math.min(fetchEndMs, state.cursorMs + tfMs * CANDLE_BATCH_SIZE),
+        preferSynthetic: true,
       });
 
       if (result.candles.length === 0) {
