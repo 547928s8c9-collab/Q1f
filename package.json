@@ -8,7 +8,10 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test": "NODE_ENV=test vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:all": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -93,10 +93,12 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   const gaps = buildGaps(allCandles, alignedStart, alignedEnd, stepMs);
 
+  const sourceLabel = dataSource ? "binance" : exchange;
+
   return {
     candles: allCandles,
     gaps,
-    source: usedNetwork ? `cache+${exchange}` : "cache",
+    source: usedNetwork ? `cache+${sourceLabel}` : "cache",
   };
 }
 

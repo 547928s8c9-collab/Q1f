@@ -149,6 +149,9 @@ class SessionRunnerManager extends EventEmitter {
   }
 
   private getTickInterval(state: RunnerState): number {
+    if (process.env.NODE_ENV === "test") {
+      return 1;
+    }
     if (state.mode === SimSessionMode.REPLAY) {
       return state.session.replayMsPerCandle || 15000;
     }

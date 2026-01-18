@@ -1001,7 +1001,11 @@ export const simSessions = pgTable("sim_sessions", {
   index("sim_sessions_user_status_idx").on(table.userId, table.status),
 ]);
 
-export const insertSimSessionSchema = createInsertSchema(simSessions).omit({ id: true, lastSeq: true, createdAt: true, updatedAt: true });
+export const insertSimSessionSchema = createInsertSchema(simSessions)
+  .omit({ id: true, lastSeq: true, createdAt: true, updatedAt: true })
+  .extend({
+    configOverrides: z.custom<Partial<StrategyProfileConfig>>().nullable().optional(),
+  });
 export type InsertSimSession = z.infer<typeof insertSimSessionSchema>;
 export type SimSession = typeof simSessions.$inferSelect;
 
