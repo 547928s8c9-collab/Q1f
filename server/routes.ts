@@ -3005,6 +3005,8 @@ export async function registerRoutes(
   const MAX_CANDLES = 50000;
   const MIN_SPEED = 1;
   const MAX_SPEED = 200;
+  const LIVE_SESSION_LAG_MS = 15 * 60 * 1000;
+  const LIVE_SESSION_WARMUP_CANDLES = 300;
 
   // GET /api/strategy-profiles - List enabled profiles with stable ordering
   app.get("/api/strategy-profiles", async (_req, res) => {
@@ -3047,6 +3049,77 @@ export async function registerRoutes(
       });
     } catch (error) {
       console.error("Get strategy profile error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  // POST /api/live-sessions/start-all - Start live sessions for all enabled profiles
+  app.post("/api/live-sessions/start-all", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const profiles = await storage.getStrategyProfiles();
+      const now = new Date();
+      const hourKey = [
+        now.getUTCFullYear(),
+        String(now.getUTCMonth() + 1).padStart(2, "0"),
+        String(now.getUTCDate()).padStart(2, "0"),
+        String(now.getUTCHours()).padStart(2, "0"),
+      ].join("");
+
+      const sessions: Array<{ profileSlug: string; sessionId: string }> = [];
+
+      for (const profile of profiles) {
+        const tfMs = SIM_TIMEFRAME_MS[profile.timeframe];
+        if (!tfMs) {
+          return res.status(400).json({
+            error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
+          });
+        }
+
+        const idempotencyKey = `live-start-all-${profile.slug}-${hourKey}`;
+        const existing = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
+        if (existing) {
+          sessions.push({ profileSlug: profile.slug, sessionId: existing.id });
+          continue;
+        }
+
+        const fetchEndMs = Date.now() - LIVE_SESSION_LAG_MS;
+        const rawStartMs = fetchEndMs - tfMs * LIVE_SESSION_WARMUP_CANDLES;
+        const startMs = Math.floor(rawStartMs / tfMs) * tfMs;
+
+        const session = await storage.createSimSession({
+          userId,
+          profileSlug: profile.slug,
+          symbol: profile.symbol,
+          timeframe: profile.timeframe,
+          startMs,
+          endMs: null,
+          speed: 1,
+          mode: "lagged_live",
+          lagMs: LIVE_SESSION_LAG_MS,
+          replayMsPerCandle: 15000,
+          configOverrides: null,
+          status: SimSessionStatus.CREATED,
+          idempotencyKey,
+        });
+
+        const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
+        if (!startResult.success) {
+          await storage.updateSimSession(session.id, {
+            status: SimSessionStatus.FAILED,
+            errorMessage: startResult.error,
+          });
+          return res.status(400).json({
+            error: { code: "START_FAILED", message: startResult.error },
+          });
+        }
+
+        sessions.push({ profileSlug: profile.slug, sessionId: session.id });
+      }
+
+      res.status(201).json({ sessions });
+    } catch (error) {
+      console.error("Start all live sessions error:", error);
       res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
