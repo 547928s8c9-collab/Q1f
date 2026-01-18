@@ -33,6 +33,8 @@ export default function InvestConfirm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
       toast({
         title: "Investment successful",
         description: `You've invested in ${strategy?.name}`,

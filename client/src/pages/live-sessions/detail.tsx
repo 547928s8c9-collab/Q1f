@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { PageHeader } from "@/components/ui/page-header";
@@ -219,6 +219,7 @@ export default function LiveSessionDetail() {
   const [speed, setSpeed] = useState(10);
   const [configOverride, setConfigOverride] = useState<Record<string, unknown>>({});
   const [gaps, setGaps] = useState<GapInfo[]>([]);
+  const hasAdjustedRange = useRef(false);
 
   const { data: profile, isLoading, error } = useQuery<StrategyProfile>({
     queryKey: ["/api/strategy-profiles", slug],
@@ -226,6 +227,18 @@ export default function LiveSessionDetail() {
   });
 
   useSetPageTitle(profile?.displayName || "Strategy Details");
+
+  useEffect(() => {
+    if (!profile || !startDate || !endDate || hasAdjustedRange.current) return;
+    const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
+    const minBarsWarmup = Number(profile.defaultConfig?.minBarsWarmup ?? 200);
+    const minRangeMs = (minBarsWarmup + 10) * tfMs;
+    const currentRange = endDate.getTime() - startDate.getTime();
+    if (currentRange < minRangeMs) {
+      setStartDate(new Date(endDate.getTime() - minRangeMs));
+    }
+    hasAdjustedRange.current = true;
+  }, [profile, startDate, endDate]);
 
   const mergedConfig = useMemo(() => {
     if (!profile) return {};
@@ -257,6 +270,13 @@ export default function LiveSessionDetail() {
       const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
       const startMs = Math.floor(startDate.getTime() / tfMs) * tfMs;
       const endMs = Math.floor(endDate.getTime() / tfMs) * tfMs;
+      const minBarsWarmup = Number(profile.defaultConfig?.minBarsWarmup ?? 200);
+      const minBarsRequired = minBarsWarmup + 10;
+      const candleCount = (endMs - startMs) / tfMs;
+
+      if (candleCount < minBarsRequired) {
+        throw new Error(`Range must include at least ${minBarsRequired} candles for strategy warmup.`);
+      }
 
       const configHash = JSON.stringify(configOverride).split("").reduce((a, b) => {
         a = ((a << 5) - a) + b.charCodeAt(0);
