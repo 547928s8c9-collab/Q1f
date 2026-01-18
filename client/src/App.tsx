@@ -34,9 +34,6 @@ import SmartStart from "@/pages/onboarding/smart-start";
 import SmartStartResults from "@/pages/onboarding/smart-start-results";
 import Inbox from "@/pages/inbox";
 import Dashboard from "@/pages/dashboard";
-import LiveSessions from "@/pages/live-sessions/index";
-import LiveSessionDetail from "@/pages/live-sessions/detail";
-import LiveSessionView from "@/pages/live-sessions/session";
 import AdminKyc from "@/pages/admin/kyc";
 import AdminWithdrawals from "@/pages/admin/withdrawals";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -65,9 +62,6 @@ function ProtectedRouter() {
           <Route path="/statements" component={Statements} />
           <Route path="/status" component={StatusPage} />
           <Route path="/inbox" component={Inbox} />
-          <Route path="/live-sessions" component={LiveSessions} />
-          <Route path="/live-sessions/session/:id" component={LiveSessionView} />
-          <Route path="/live-sessions/:slug" component={LiveSessionDetail} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/kyc" component={AdminKyc} />
