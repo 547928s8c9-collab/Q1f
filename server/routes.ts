@@ -4072,6 +4072,85 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/live-sessions/start-all", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const profiles = await storage.getStrategyProfiles();
+      if (profiles.length === 0) {
+        return res.status(404).json({
+          error: { code: "PROFILE_NOT_FOUND", message: "No strategy profiles available" },
+        });
+      }
+
+      await ensureReplayClock();
+      const lagMs = getSimLagMs();
+      const decisionNow = getDecisionNow(lagMs);
+      const timeBucket = new Date().toISOString().slice(0, 13);
+
+      const results: Array<{ profileSlug: string; sessionId: string }> = [];
+
+      for (const profile of profiles) {
+        const tfMs = SIM_TIMEFRAME_MS[profile.timeframe];
+        if (!tfMs) {
+          throw new Error(`Unknown timeframe: ${profile.timeframe}`);
+        }
+
+        const warmupBars = Math.max(
+          (profile.defaultConfig as StrategyProfileConfig).minBarsWarmup || 200,
+          100
+        );
+        const warmupStart = decisionNow - tfMs * (warmupBars + LIVE_WARMUP_BUFFER_BARS);
+        const alignedStart = alignToGrid(warmupStart, tfMs);
+        const symbol = normalizeSymbol(profile.symbol);
+        const idempotencyKey = `start-all:${profile.slug}:${timeBucket}`;
+
+        let session = await storage.getSimSessionByIdempotencyKey(userId, idempotencyKey);
+        if (!session) {
+          await ensureLiveSessionWarmupCandles({
+            symbol,
+            timeframe: profile.timeframe,
+            startMs: alignedStart,
+            warmupBars,
+          });
+
+          session = await storage.createSimSession({
+            userId,
+            profileSlug: profile.slug,
+            symbol,
+            timeframe: profile.timeframe,
+            startMs: alignedStart,
+            endMs: null,
+            speed: LIVE_SESSION_DEFAULT_SPEED,
+            mode: "lagged_live",
+            lagMs,
+            replayMsPerCandle: 1000,
+            configOverrides: null,
+            status: SimSessionStatus.CREATED,
+            idempotencyKey,
+          });
+        }
+
+        if (!sessionRunner.isRunning(session.id) && session.status !== SimSessionStatus.RUNNING) {
+          const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
+          if (!startResult.success) {
+            await storage.updateSimSession(session.id, {
+              status: SimSessionStatus.FAILED,
+              errorMessage: startResult.error,
+            });
+            throw new Error(startResult.error || "Failed to start session");
+          }
+        }
+
+        results.push({ profileSlug: profile.slug, sessionId: session.id });
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Start all live sessions error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
   app.post("/api/live-sessions/:id/start", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
