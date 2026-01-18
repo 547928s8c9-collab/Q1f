@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { formatMoney, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus, AddressStatus } from "@shared/schema";
+import { formatMoney, VALID_TIMEFRAMES, type Timeframe, SimSessionStatus, SimSessionMode, AddressStatus } from "@shared/schema";
 import { registerExtractedRoutes } from "./routes/index";
 import { loadCandles } from "./marketData/loadCandles";
 import { sessionRunner } from "./sim/runner";
@@ -3002,9 +3002,64 @@ export async function registerRoutes(
     "1d": 24 * 60 * 60 * 1000,
   };
 
+  const WARMUP_BUFFER_BARS = 50;
   const MAX_CANDLES = 50000;
   const MIN_SPEED = 1;
   const MAX_SPEED = 200;
+
+  const alignToTimeframe = (ts: number, tfMs: number) => Math.floor(ts / tfMs) * tfMs;
+
+  const ensureWarmupCandles = async (profile: { symbol: string; timeframe: string; defaultConfig: { minBarsWarmup?: number } }, startMs: number) => {
+    const tfMs = SIM_TIMEFRAME_MS[profile.timeframe];
+    if (!tfMs) {
+      throw new Error(`Unknown timeframe: ${profile.timeframe}`);
+    }
+
+    const alignedStart = alignToTimeframe(startMs, tfMs);
+    const minBarsWarmup = Math.max(0, Number(profile.defaultConfig.minBarsWarmup ?? 0) || 0);
+    const endMs = alignedStart + tfMs * (minBarsWarmup + WARMUP_BUFFER_BARS);
+
+    const candleResult = await loadCandles({
+      exchange: "sim",
+      symbol: profile.symbol,
+      timeframe: profile.timeframe as Timeframe,
+      startMs: alignedStart,
+      endMs,
+      allowLargeRange: true,
+    });
+
+    if (candleResult.gaps && candleResult.gaps.length > 0) {
+      console.error("Live session warmup gaps detected", {
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        gaps: candleResult.gaps,
+      });
+      return {
+        ok: false as const,
+        alignedStart,
+        minBarsWarmup,
+        candlesLoaded: candleResult.candles.length,
+        gaps: candleResult.gaps,
+      };
+    }
+
+    if (candleResult.candles.length < minBarsWarmup) {
+      return {
+        ok: false as const,
+        alignedStart,
+        minBarsWarmup,
+        candlesLoaded: candleResult.candles.length,
+        gaps: [] as const,
+      };
+    }
+
+    return {
+      ok: true as const,
+      alignedStart,
+      minBarsWarmup,
+      candlesLoaded: candleResult.candles.length,
+    };
+  };
 
   // GET /api/strategy-profiles - List enabled profiles with stable ordering
   app.get("/api/strategy-profiles", async (_req, res) => {
@@ -3103,8 +3158,194 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== LIVE SESSIONS ====================
+
+  // POST /api/live-sessions - Create and start a live session
+  app.post("/api/live-sessions", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const schema = z.object({
+        profileSlug: z.string().min(1),
+        startMs: z.number().int().positive(),
+        speed: z.number().int().min(MIN_SPEED).max(MAX_SPEED).optional().default(1),
+        lagMs: z.number().int().min(60000).max(3600000).optional().default(900000),
+        configOverride: z.record(z.unknown()).optional(),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid request body",
+            details: parsed.error.errors,
+          },
+        });
+      }
+
+      const { profileSlug, startMs, speed, lagMs, configOverride } = parsed.data;
+
+      const profile = await storage.getStrategyProfile(profileSlug);
+      if (!profile) {
+        return res.status(404).json({
+          error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" },
+        });
+      }
+      if (!profile.isEnabled) {
+        return res.status(400).json({
+          error: { code: "PROFILE_DISABLED", message: "Strategy profile is disabled" },
+        });
+      }
+
+      if (!SIM_TIMEFRAME_MS[profile.timeframe]) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
+        });
+      }
+
+      const warmupResult = await ensureWarmupCandles(profile, startMs);
+      if (!warmupResult.ok) {
+        return res.status(422).json({
+          error: {
+            code: warmupResult.gaps.length > 0 ? "MARKET_DATA_GAPS" : "INSUFFICIENT_WARMUP_CANDLES",
+            message: warmupResult.gaps.length > 0
+              ? "Market data has gaps in the warmup range"
+              : "Not enough candles for warmup window",
+            gaps: warmupResult.gaps.length > 0 ? warmupResult.gaps : undefined,
+          },
+        });
+      }
+
+      const session = await storage.createSimSession({
+        userId,
+        profileSlug,
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        startMs: warmupResult.alignedStart,
+        endMs: null,
+        speed,
+        mode: SimSessionMode.LAGGED_LIVE,
+        lagMs,
+        replayMsPerCandle: 15000,
+        configOverrides: configOverride as any,
+        status: SimSessionStatus.CREATED,
+      });
+
+      console.log("[live-session] start", {
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        candlesLoaded: warmupResult.candlesLoaded,
+        minBarsWarmup: warmupResult.minBarsWarmup,
+      });
+
+      const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
+      if (!startResult.success) {
+        await storage.updateSimSession(session.id, {
+          status: SimSessionStatus.FAILED,
+          errorMessage: startResult.error,
+        });
+        return res.status(400).json({
+          error: { code: "START_FAILED", message: startResult.error },
+        });
+      }
+
+      res.status(201).json({
+        sessionId: session.id,
+        status: SimSessionStatus.RUNNING,
+        streamUrl: `/api/sim/sessions/${session.id}/stream`,
+      });
+    } catch (error) {
+      console.error("Create live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
+  // POST /api/live-sessions/:id/start - Start an existing live session
+  app.post("/api/live-sessions/:id/start", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const sessionId = req.params.id;
+
+      const session = await storage.getSimSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: { code: "SESSION_NOT_FOUND", message: "Session not found" } });
+      }
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: { code: "FORBIDDEN", message: "Access denied" } });
+      }
+
+      const profile = await storage.getStrategyProfile(session.profileSlug);
+      if (!profile) {
+        return res.status(404).json({
+          error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" },
+        });
+      }
+      if (!profile.isEnabled) {
+        return res.status(400).json({
+          error: { code: "PROFILE_DISABLED", message: "Strategy profile is disabled" },
+        });
+      }
+      if (!SIM_TIMEFRAME_MS[profile.timeframe]) {
+        return res.status(400).json({
+          error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
+        });
+      }
+
+      const warmupResult = await ensureWarmupCandles(profile, session.startMs);
+      if (!warmupResult.ok) {
+        return res.status(422).json({
+          error: {
+            code: warmupResult.gaps.length > 0 ? "MARKET_DATA_GAPS" : "INSUFFICIENT_WARMUP_CANDLES",
+            message: warmupResult.gaps.length > 0
+              ? "Market data has gaps in the warmup range"
+              : "Not enough candles for warmup window",
+            gaps: warmupResult.gaps.length > 0 ? warmupResult.gaps : undefined,
+          },
+        });
+      }
+
+      if (warmupResult.alignedStart !== session.startMs) {
+        await storage.updateSimSession(session.id, { startMs: warmupResult.alignedStart });
+      }
+
+      console.log("[live-session] start", {
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        candlesLoaded: warmupResult.candlesLoaded,
+        minBarsWarmup: warmupResult.minBarsWarmup,
+      });
+
+      const startResult = await sessionRunner.startSession(
+        warmupResult.alignedStart !== session.startMs
+          ? { ...session, startMs: warmupResult.alignedStart }
+          : session,
+        profile.defaultConfig
+      );
+
+      if (!startResult.success) {
+        await storage.updateSimSession(session.id, {
+          status: SimSessionStatus.FAILED,
+          errorMessage: startResult.error,
+        });
+        return res.status(400).json({
+          error: { code: "START_FAILED", message: startResult.error },
+        });
+      }
+
+      res.json({
+        sessionId: session.id,
+        status: SimSessionStatus.RUNNING,
+        streamUrl: `/api/sim/sessions/${session.id}/stream`,
+      });
+    } catch (error) {
+      console.error("Start live session error:", error);
+      res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
+    }
+  });
+
   // ==================== SIMULATION SESSIONS ====================
-  
+
   // Configure session runner callbacks for event persistence
   sessionRunner.setEventCallback(async (sessionId, event) => {
     await storage.insertSimEvent(sessionId, event.seq, event.ts, event.type, event.payload);

@@ -79,7 +79,7 @@ class SessionRunnerManager extends EventEmitter {
 
     let fetchEndMs: number;
     if (mode === SimSessionMode.LAGGED_LIVE) {
-      fetchEndMs = Date.now() - (session.lagMs || 900_000);
+      fetchEndMs = initialCursorMs + tfMs * CANDLE_BATCH_SIZE;
     } else {
       fetchEndMs = session.endMs ?? (session.startMs + tfMs * CANDLE_BATCH_SIZE);
     }
@@ -87,6 +87,7 @@ class SessionRunnerManager extends EventEmitter {
     let candles: Candle[];
     try {
       const result = await loadCandles({
+        exchange: "sim",
         symbol: session.symbol,
         timeframe,
         startMs: initialCursorMs,
@@ -219,7 +220,7 @@ class SessionRunnerManager extends EventEmitter {
 
     let fetchEndMs: number;
     if (state.mode === SimSessionMode.LAGGED_LIVE) {
-      fetchEndMs = Date.now() - (state.session.lagMs || 900_000);
+      fetchEndMs = state.cursorMs + tfMs * CANDLE_BATCH_SIZE;
     } else {
       if (state.session.endMs && state.cursorMs >= state.session.endMs) {
         return false;
@@ -233,6 +234,7 @@ class SessionRunnerManager extends EventEmitter {
 
     try {
       const result = await loadCandles({
+        exchange: "sim",
         symbol: state.session.symbol,
         timeframe,
         startMs: state.cursorMs,
