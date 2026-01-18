@@ -1,7 +1,7 @@
 import type { Candle as BaseCandle } from "@shared/schema";
 
 export type { Candle } from "@shared/schema";
-export type Timeframe = "15m" | "1h";
+export type Timeframe = "15m" | "1h" | "1d";
 
 export const STRATEGY_PROFILE_SLUGS = [
   "btc_squeeze_breakout",

@@ -41,6 +41,7 @@ function timeframeToMs(tf: Timeframe): number {
   const map: Record<Timeframe, number> = {
     "15m": 900_000,
     "1h": 3_600_000,
+    "1d": 86_400_000,
   };
   return map[tf] || 900_000;
 }
