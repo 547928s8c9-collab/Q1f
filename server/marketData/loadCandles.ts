@@ -1,7 +1,8 @@
 import type { Candle, GapInfo, LoadCandlesResult, Timeframe } from "@shared/schema";
 import { VALID_TIMEFRAMES } from "@shared/schema";
 import { storage } from "../storage";
-import { cryptoCompare, CryptoCompareDataSource } from "../data/cryptoCompare";
+import { cryptoCompare } from "../data/cryptoCompare";
+import { syntheticDataSource } from "./syntheticDataSource";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
 
 function log(msg: string, category?: string, meta?: object) {
@@ -31,20 +32,29 @@ export interface LoadCandlesParams {
   allowLargeRange?: boolean;
 }
 
+export function getDefaultExchange(): string {
+  const mode = (process.env.MARKET_DATA_MODE ?? "").toLowerCase();
+  if (mode === "synthetic" || mode === "sim") {
+    return "sim";
+  }
+  return "cryptocompare";
+}
+
 export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandlesResult> {
   const {
-    exchange = "cryptocompare",
+    exchange = getDefaultExchange(),
     symbol: rawSymbol,
     timeframe: rawTimeframe,
     startMs,
     endMs,
-    dataSource = cryptoCompare,
+    dataSource,
     maxBars = DEFAULT_MAX_BARS,
     allowLargeRange = false,
   } = params;
 
   const symbol = normalizeSymbol(rawSymbol);
   const timeframe = normalizeTimeframe(rawTimeframe as string);
+  const resolvedDataSource = dataSource ?? (exchange === "sim" ? syntheticDataSource : cryptoCompare);
 
   const stepMs = TIMEFRAME_MS[timeframe];
   const alignedStart = alignToGrid(startMs, stepMs);
@@ -68,7 +78,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   if (missingRanges.length > 0) {
     usedNetwork = true;
-    await fetchAndStoreRanges(exchange, symbol, timeframe, missingRanges, dataSource);
+    await fetchAndStoreRanges(exchange, symbol, timeframe, missingRanges, resolvedDataSource);
   }
 
   let allCandles = await storage.getCandlesFromCache(exchange, symbol, timeframe, alignedStart, alignedEnd);
@@ -77,7 +87,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   if (stillMissing.length > 0) {
     usedNetwork = true;
-    await fetchAndStoreRanges(exchange, symbol, timeframe, stillMissing, dataSource);
+    await fetchAndStoreRanges(exchange, symbol, timeframe, stillMissing, resolvedDataSource);
     allCandles = await storage.getCandlesFromCache(exchange, symbol, timeframe, alignedStart, alignedEnd);
   }
 
