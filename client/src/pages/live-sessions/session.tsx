@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { PageHeader } from "@/components/ui/page-header";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CandlestickChart, type CandlestickMarker } from "@/components/charts/candlestick-chart";
 import { Sparkline } from "@/components/charts/sparkline";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import type { Candle } from "@shared/schema";
 import { 
   Activity, Play, Pause, Square, Clock, TrendingUp, 
   TrendingDown, Wifi, WifiOff, RefreshCw, Loader2,
@@ -21,6 +23,8 @@ import { format } from "date-fns";
 interface SimSession {
   id: string;
   profileSlug: string;
+  symbol: string;
+  timeframe: string;
   status: "created" | "running" | "paused" | "stopped" | "finished" | "failed";
   config: Record<string, unknown>;
   startMs: number;
@@ -57,6 +61,22 @@ const statusConfig: Record<string, { color: string; chipVariant: "success" | "wa
   failed: { color: "text-negative", chipVariant: "danger", label: "Failed" },
 };
 
+const TIMEFRAME_MS: Record<string, number> = {
+  "15m": 15 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+};
+
+const MAX_CANDLES = 200;
+const MAX_MARKERS = 200;
+
+const getPayloadData = (payload: SimEvent["payload"]) => {
+  if (payload && typeof payload === "object" && "data" in payload) {
+    return (payload as { data?: Record<string, unknown> }).data || {};
+  }
+  return (payload as Record<string, unknown>) || {};
+};
+
 function EventFeed({ events }: { events: SimEvent[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -79,13 +99,6 @@ function EventFeed({ events }: { events: SimEvent[] }) {
       default:
         return <Activity className="w-3.5 h-3.5" />;
     }
-  };
-
-  const getPayloadData = (payload: SimEvent["payload"]) => {
-    if (payload && typeof payload === "object" && "data" in payload) {
-      return (payload as { data?: Record<string, unknown> }).data || {};
-    }
-    return (payload as Record<string, unknown>) || {};
   };
 
   const getEventColor = (type: string, payload: SimEvent["payload"]) => {
@@ -180,6 +193,8 @@ export default function LiveSessionView() {
   const [equityHistory, setEquityHistory] = useState<Array<{ value: number }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [currentCandle, setCurrentCandle] = useState<{ ts: number; close: number } | null>(null);
+  const [candles, setCandles] = useState<Candle[]>([]);
+  const [tradeMarkers, setTradeMarkers] = useState<CandlestickMarker[]>([]);
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastSeqRef = useRef(0);
@@ -204,32 +219,107 @@ export default function LiveSessionView() {
 
   useSetPageTitle(session ? `Session ${session.profileSlug}` : "Live Session");
 
+  const timeframeMs = useMemo(
+    () => TIMEFRAME_MS[session?.timeframe ?? "15m"] ?? 15 * 60 * 1000,
+    [session?.timeframe]
+  );
+
+  const mergeCandles = useCallback((incoming: Candle[]) => {
+    if (!incoming.length) return;
+    setCandles((prev) => {
+      const map = new Map(prev.map((candle) => [candle.ts, candle]));
+      incoming.forEach((candle) => map.set(candle.ts, candle));
+      return Array.from(map.values())
+        .sort((a, b) => a.ts - b.ts)
+        .slice(-MAX_CANDLES);
+    });
+  }, []);
+
+  const updateLatestCandle = useCallback((incoming: Candle) => {
+    setCandles((prev) => {
+      if (prev.length === 0) return [incoming];
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (incoming.ts === last.ts) {
+        next[next.length - 1] = incoming;
+      } else if (incoming.ts > last.ts) {
+        next.push(incoming);
+      } else {
+        const index = next.findIndex((candle) => candle.ts === incoming.ts);
+        if (index >= 0) {
+          next[index] = incoming;
+        } else {
+          next.push(incoming);
+          next.sort((a, b) => a.ts - b.ts);
+        }
+      }
+      return next.slice(-MAX_CANDLES);
+    });
+  }, []);
+
   const handleSimEvent = useCallback((event: SimEvent) => {
     lastSeqRef.current = event.seq;
     setEvents((prev) => [...prev.slice(-200), event]);
 
     if (event.type === "candle") {
-      const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
-      const candle = data.candle as { ts?: number; close?: number } | undefined;
+      const data = getPayloadData(event.payload);
+      const candle = data.candle as Candle | undefined;
       const ts = candle?.ts ?? event.ts;
       const close = candle?.close;
       if (typeof ts === "number" && typeof close === "number") {
         setCurrentCandle({ ts, close });
       }
+      if (candle) {
+        updateLatestCandle(candle as Candle);
+      }
     }
 
     if (event.type === "equity") {
-      const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
+      const data = getPayloadData(event.payload);
       const equity = data.equity as number | undefined;
       if (typeof equity === "number") {
         setEquityHistory((prev) => [...prev.slice(-100), { value: equity }]);
       }
     }
 
+    if (event.type === "trade") {
+      const data = getPayloadData(event.payload);
+      const entryPrice = data.entryPrice as number | undefined;
+      const exitPrice = data.exitPrice as number | undefined;
+      const holdBars = data.holdBars as number | undefined;
+      const netPnl = data.netPnl as number | undefined;
+      const exitTs = event.ts;
+      const entryTs = typeof holdBars === "number" ? exitTs - holdBars * timeframeMs : undefined;
+      const entryMarker = typeof entryTs === "number" && typeof entryPrice === "number"
+        ? {
+            time: entryTs,
+            position: "belowBar",
+            color: "hsl(var(--success))",
+            shape: "arrowUp",
+            text: `Entry ${entryPrice.toFixed(2)}`,
+          }
+        : null;
+      const exitMarker = typeof exitPrice === "number"
+        ? {
+            time: exitTs,
+            position: "aboveBar",
+            color: netPnl !== undefined && netPnl < 0 ? "hsl(var(--danger))" : "hsl(var(--success))",
+            shape: "arrowDown",
+            text: `Exit ${exitPrice.toFixed(2)}`,
+          }
+        : null;
+      setTradeMarkers((prev) => {
+        const next = [...prev];
+        if (entryMarker) next.push(entryMarker);
+        if (exitMarker) next.push(exitMarker);
+        return next.slice(-MAX_MARKERS);
+      });
+    }
+
     if (event.type === "status") {
       refetch();
     }
-  }, [refetch]);
+  }, [refetch, timeframeMs, updateLatestCandle]);
 
   const connectSSE = useCallback(() => {
     if (!id || !session) return;
@@ -310,6 +400,30 @@ export default function LiveSessionView() {
       }
     };
   }, [session?.status, connectSSE]);
+
+  useEffect(() => {
+    if (!session?.symbol || !session?.timeframe) return;
+    const tfMs = TIMEFRAME_MS[session.timeframe] ?? 15 * 60 * 1000;
+    const endMs = session.endMs || Date.now();
+    const startMs = Math.max(session.startMs, endMs - tfMs * MAX_CANDLES);
+    const params = new URLSearchParams({
+      symbol: session.symbol,
+      timeframe: session.timeframe,
+      startMs: startMs.toString(),
+      endMs: endMs.toString(),
+      exchange: "sim",
+    });
+
+    apiRequest("GET", `/api/market/candles?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data: { data?: { candles?: Candle[] } }) => {
+        const incoming = data?.data?.candles ?? [];
+        mergeCandles(incoming);
+      })
+      .catch((err: Error) => {
+        console.error("Failed to fetch market candles:", err);
+      });
+  }, [mergeCandles, session?.symbol, session?.timeframe, session?.startMs, session?.endMs]);
 
   const controlMutation = useMutation({
     mutationFn: async (action: "pause" | "resume" | "stop") => {
@@ -438,6 +552,31 @@ export default function LiveSessionView() {
           </div>
           <p className="text-lg font-semibold tabular-nums">{session.speed}x</p>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="lg:col-span-3">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-medium">Market Candles</h3>
+                <p className="text-xs text-muted-foreground">
+                  {session.symbol} · {session.timeframe}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {candles.length} candles
+              </span>
+            </div>
+            {candles.length > 0 ? (
+              <CandlestickChart candles={candles} markers={tradeMarkers} showVolume />
+            ) : (
+              <div className="h-80 flex items-center justify-center text-muted-foreground text-sm">
+                Loading candles...
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
