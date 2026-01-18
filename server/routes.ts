@@ -3191,6 +3191,9 @@ export async function registerRoutes(
           error: { code: "INVALID_TIMEFRAME", message: `Unknown timeframe: ${profile.timeframe}` },
         });
       }
+
+      const minBarsWarmup = Number(profile.defaultConfig?.minBarsWarmup ?? 200);
+      const minBarsRequired = minBarsWarmup + 10;
       
       // Validate alignment to timeframe grid
       if (startMs % tfMs !== 0) {
@@ -3218,6 +3221,15 @@ export async function registerRoutes(
             error: {
               code: "RANGE_TOO_LARGE",
               message: `Range exceeds maximum ${MAX_CANDLES} candles (requested: ${candleCount})`,
+            },
+          });
+        }
+        if (candleCount < minBarsRequired) {
+          return res.status(400).json({
+            error: {
+              code: "INSUFFICIENT_CANDLES",
+              message: `Range must include at least ${minBarsRequired} candles for warmup`,
+              details: { requested: candleCount, minimum: minBarsRequired },
             },
           });
         }
@@ -3449,10 +3461,14 @@ export async function registerRoutes(
     // Track current sequence
     let currentSeq = fromSeq;
     
+    const writeSimEvent = (event: { seq: number; ts: number; type: string; payload: unknown }) => {
+      res.write(`id: ${event.seq}\nevent: message\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+
     // First, send any missed events from DB
     const missedEvents = await storage.getSimEvents(sessionId, fromSeq, 1000);
     for (const event of missedEvents) {
-      res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+      writeSimEvent({ seq: event.seq, ts: event.ts, type: event.type, payload: event.payload });
       currentSeq = event.seq + 1;
     }
     
@@ -3460,15 +3476,15 @@ export async function registerRoutes(
     const isActive = sessionRunner.isRunning(sessionId);
     
     if (isActive) {
-      const eventHandler = (_sid: string, event: { seq: number; type: string; payload: unknown }) => {
+      const eventHandler = (_sid: string, event: { seq: number; ts: number; type: string; payload: unknown }) => {
         if (event.seq >= currentSeq) {
-          res.write(`id: ${event.seq}\nevent: ${event.type}\ndata: ${JSON.stringify(event.payload)}\n\n`);
+          writeSimEvent(event);
           currentSeq = event.seq + 1;
         }
       };
       
       const statusHandler = (_sid: string, status: string) => {
-        res.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
+        res.write(`event: session_status\ndata: ${JSON.stringify({ status })}\n\n`);
         if (status === SimSessionStatus.FINISHED || 
             status === SimSessionStatus.FAILED || 
             status === SimSessionStatus.STOPPED) {
@@ -3477,7 +3493,7 @@ export async function registerRoutes(
       };
       
       // Listen to emitter events (filtered by sessionId)
-      const wrappedEventHandler = (sid: string, event: { seq: number; type: string; payload: unknown }) => {
+      const wrappedEventHandler = (sid: string, event: { seq: number; ts: number; type: string; payload: unknown }) => {
         if (sid === sessionId) eventHandler(sid, event);
       };
       const wrappedStatusHandler = (sid: string, status: string) => {
@@ -3497,7 +3513,7 @@ export async function registerRoutes(
       req.on("close", cleanup);
     } else {
       // No active runner - just send current status and close
-      res.write(`event: status\ndata: ${JSON.stringify({ status: session.status })}\n\n`);
+      res.write(`event: session_status\ndata: ${JSON.stringify({ status: session.status })}\n\n`);
       clearInterval(heartbeatInterval);
       res.end();
     }

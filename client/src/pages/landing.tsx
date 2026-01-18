@@ -6,6 +6,12 @@ export default function Landing() {
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
+  const handleDemoLogin = () => {
+    window.location.href = "/api/demo-login";
+  };
+  const handleAdminLogin = () => {
+    window.location.href = "/api/admin/login";
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -18,6 +24,12 @@ export default function Landing() {
             <span className="text-xl font-semibold tracking-tight">ZEON</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleDemoLogin} data-testid="button-demo-header">
+              Demo Access
+            </Button>
+            <Button variant="outline" onClick={handleAdminLogin} data-testid="button-admin-login-header">
+              Admin Login
+            </Button>
             <Button onClick={handleLogin} data-testid="button-login-header">
               Sign In
             </Button>
@@ -40,6 +52,9 @@ export default function Landing() {
               <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
                 Get Started
                 <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+              <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
+                Demo Access
               </Button>
             </div>
           </div>
@@ -96,6 +111,9 @@ export default function Landing() {
               <Button size="lg" onClick={handleLogin} data-testid="button-sign-in-cta">
                 Sign In to Continue
                 <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+              <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-cta">
+                Try Demo
               </Button>
             </CardContent>
           </Card>

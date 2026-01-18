@@ -159,6 +159,7 @@ function InvestFlow({
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/overview"] });
       toast({
         title: "Investment successful",
         description: `${formatMoney(minorAmount, "USDT")} USDT invested in ${selectedStrategy?.name}`,

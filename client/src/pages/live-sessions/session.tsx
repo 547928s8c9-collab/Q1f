@@ -38,9 +38,12 @@ interface SimSession {
 
 interface SimEvent {
   seq: number;
-  type: "candle" | "trade" | "equity" | "status" | "error";
+  type: "candle" | "signal" | "order" | "fill" | "trade" | "equity" | "status" | "error";
   ts: number;
-  payload: Record<string, unknown>;
+  payload: {
+    type?: string;
+    data?: Record<string, unknown>;
+  } | Record<string, unknown>;
 }
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
@@ -78,36 +81,56 @@ function EventFeed({ events }: { events: SimEvent[] }) {
     }
   };
 
-  const getEventColor = (type: string, payload: Record<string, unknown>) => {
+  const getPayloadData = (payload: SimEvent["payload"]) => {
+    if (payload && typeof payload === "object" && "data" in payload) {
+      return (payload as { data?: Record<string, unknown> }).data || {};
+    }
+    return (payload as Record<string, unknown>) || {};
+  };
+
+  const getEventColor = (type: string, payload: SimEvent["payload"]) => {
+    const data = getPayloadData(payload);
     if (type === "trade") {
-      return payload.side === "buy" ? "text-positive" : "text-negative";
+      const netPnl = data.netPnl as number | undefined;
+      if (typeof netPnl === "number") {
+        return netPnl >= 0 ? "text-positive" : "text-negative";
+      }
+      return "text-muted-foreground";
     }
     if (type === "equity") {
-      const change = payload.change as number;
-      return change >= 0 ? "text-positive" : "text-negative";
+      const drawdown = data.drawdownPct as number | undefined;
+      if (typeof drawdown === "number") {
+        return drawdown > 0 ? "text-negative" : "text-positive";
+      }
+      return "text-muted-foreground";
     }
     return "text-muted-foreground";
   };
 
-  const formatPayload = (type: string, payload: Record<string, unknown>) => {
+  const formatPayload = (type: string, payload: SimEvent["payload"]) => {
+    const data = getPayloadData(payload);
     if (type === "trade") {
-      const side = payload.side as string;
-      const price = payload.price as number;
-      const qty = payload.qty as number;
-      return `${side?.toUpperCase()} ${qty} @ ${price?.toFixed(2)}`;
+      const qty = data.qty as number | undefined;
+      const entryPrice = data.entryPrice as number | undefined;
+      const exitPrice = data.exitPrice as number | undefined;
+      const netPnl = data.netPnl as number | undefined;
+      const pnlDisplay = typeof netPnl === "number" ? `PnL ${netPnl.toFixed(2)}` : "Trade executed";
+      const priceDisplay = entryPrice && exitPrice ? `${entryPrice.toFixed(2)} → ${exitPrice.toFixed(2)}` : "Order filled";
+      return `${qty?.toFixed?.(4) ?? qty ?? "-"} @ ${priceDisplay} · ${pnlDisplay}`;
     }
     if (type === "equity") {
-      const value = payload.value as number;
-      const change = payload.change as number;
-      const sign = change >= 0 ? "+" : "";
-      return `$${value?.toFixed(2)} (${sign}${change?.toFixed(2)}%)`;
+      const equity = data.equity as number | undefined;
+      const drawdown = data.drawdownPct as number | undefined;
+      const drawdownDisplay = typeof drawdown === "number" ? `DD ${drawdown.toFixed(2)}%` : "Equity update";
+      return `${equity ? `$${equity.toFixed(2)}` : "Equity"} · ${drawdownDisplay}`;
     }
     if (type === "candle") {
-      const close = payload.close as number;
-      return `Close: ${close?.toFixed(2)}`;
+      const candle = data.candle as { close?: number } | undefined;
+      const close = candle?.close ?? (data.close as number | undefined);
+      return `Close: ${close?.toFixed(2) ?? "-"}`;
     }
     if (type === "status") {
-      return payload.status as string;
+      return (data.message as string) || "Status update";
     }
     return JSON.stringify(payload).slice(0, 50);
   };
@@ -165,17 +188,48 @@ export default function LiveSessionView() {
   const { data: session, isLoading, error, refetch } = useQuery<SimSession>({
     queryKey: ["/api/sim/sessions", id],
     enabled: !!id,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) => {
       const data = query.state.data;
       const isTerminal = data?.status === "stopped" || data?.status === "finished" || data?.status === "failed";
       if (isTerminal) {
         return false;
       }
+      if (data?.status === "paused") {
+        return 10000;
+      }
       return 3000;
     },
   });
 
   useSetPageTitle(session ? `Session ${session.profileSlug}` : "Live Session");
+
+  const handleSimEvent = useCallback((event: SimEvent) => {
+    lastSeqRef.current = event.seq;
+    setEvents((prev) => [...prev.slice(-200), event]);
+
+    if (event.type === "candle") {
+      const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
+      const candle = data.candle as { ts?: number; close?: number } | undefined;
+      const ts = candle?.ts ?? event.ts;
+      const close = candle?.close;
+      if (typeof ts === "number" && typeof close === "number") {
+        setCurrentCandle({ ts, close });
+      }
+    }
+
+    if (event.type === "equity") {
+      const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
+      const equity = data.equity as number | undefined;
+      if (typeof equity === "number") {
+        setEquityHistory((prev) => [...prev.slice(-100), { value: equity }]);
+      }
+    }
+
+    if (event.type === "status") {
+      refetch();
+    }
+  }, [refetch]);
 
   const connectSSE = useCallback(() => {
     if (!id || !session) return;
@@ -193,38 +247,39 @@ export default function LiveSessionView() {
       setConnectionStatus("connected");
     };
 
-    es.onmessage = (e) => {
+    const parseEvent = (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        
-        if (data.type === "heartbeat") return;
-        
-        const event = data as SimEvent;
-        lastSeqRef.current = event.seq;
-        
-        setEvents((prev) => [...prev.slice(-200), event]);
+        if (!data) return;
 
-        if (event.type === "candle") {
-          setCurrentCandle({
-            ts: event.ts,
-            close: event.payload.close as number,
-          });
-        }
+        const seq = typeof data.seq === "number"
+          ? data.seq
+          : Number(e.lastEventId || 0);
+        const type = data.type as SimEvent["type"];
+        const ts = typeof data.ts === "number" ? data.ts : Date.now();
+        const payload = data.payload ?? data;
 
-        if (event.type === "equity") {
-          setEquityHistory((prev) => [
-            ...prev.slice(-100),
-            { value: event.payload.value as number },
-          ]);
-        }
+        if (typeof seq !== "number" || Number.isNaN(seq)) return;
+        if (!type) return;
 
-        if (event.type === "status") {
-          refetch();
-        }
+        handleSimEvent({ seq, ts, type, payload });
       } catch (err) {
         console.error("Failed to parse SSE event:", err);
       }
     };
+
+    es.onmessage = parseEvent;
+
+    es.addEventListener("session_status", (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data);
+        if (data?.status) {
+          refetch();
+        }
+      } catch (err) {
+        console.error("Failed to parse session status:", err);
+      }
+    });
 
     es.onerror = () => {
       setConnectionStatus("disconnected");

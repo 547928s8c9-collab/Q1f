@@ -107,8 +107,32 @@ export async function setupAuth(app: Express) {
   passport.serializeUser((user: Express.User, cb) => cb(null, user));
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
+  const getSafeReturnTo = (value: unknown): string | null => {
+    if (typeof value !== "string") return null;
+    if (!value.startsWith("/")) return null;
+    if (value.startsWith("//")) return null;
+    return value;
+  };
+
   app.get("/api/login", (req, res, next) => {
     ensureStrategy(req.hostname);
+    const returnTo = getSafeReturnTo(req.query.returnTo);
+    if (returnTo && req.session) {
+      const session = req.session as typeof req.session & { returnTo?: string };
+      session.returnTo = returnTo;
+    }
+    passport.authenticate(`replitauth:${req.hostname}`, {
+      prompt: "login consent",
+      scope: ["openid", "email", "profile", "offline_access"],
+    })(req, res, next);
+  });
+
+  app.get("/api/admin/login", (req, res, next) => {
+    ensureStrategy(req.hostname);
+    if (req.session) {
+      const session = req.session as typeof req.session & { returnTo?: string };
+      session.returnTo = "/admin";
+    }
     passport.authenticate(`replitauth:${req.hostname}`, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
@@ -131,7 +155,12 @@ export async function setupAuth(app: Express) {
           console.error("[auth] Login error:", loginErr);
           return res.redirect("/api/login");
         }
-        return res.redirect("/");
+        const session = req.session as typeof req.session & { returnTo?: string };
+        const returnTo = getSafeReturnTo(session?.returnTo);
+        if (session?.returnTo) {
+          delete session.returnTo;
+        }
+        return res.redirect(returnTo || "/");
       });
     })(req, res, next);
   });
