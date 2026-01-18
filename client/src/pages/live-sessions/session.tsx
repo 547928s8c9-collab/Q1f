@@ -8,6 +8,7 @@ import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Sparkline } from "@/components/charts/sparkline";
+import { CandlestickChart, type CandleDatum, type CandleMarker } from "@/components/charts/candlestick-chart";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -21,10 +22,12 @@ import { format } from "date-fns";
 interface SimSession {
   id: string;
   profileSlug: string;
+  symbol: string;
+  timeframe: string;
   status: "created" | "running" | "paused" | "stopped" | "finished" | "failed";
   config: Record<string, unknown>;
   startMs: number;
-  endMs: number;
+  endMs: number | null;
   speed: number;
   lastSeq: number;
   progress?: {
@@ -44,6 +47,36 @@ interface SimEvent {
 }
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
+
+interface CandleEventPayload {
+  candle: CandleDatum;
+  barIndex: number;
+}
+
+interface TradeEventPayload {
+  side: "LONG";
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  grossPnl: number;
+  fees: number;
+  netPnl: number;
+  holdBars: number;
+  reason: string;
+}
+
+const TIMEFRAME_MS: Record<string, number> = {
+  "15m": 900000,
+  "1h": 3600000,
+  "1d": 86400000,
+};
+
+const getPayloadData = (payload: Record<string, unknown>) => {
+  if ("data" in payload && payload.data && typeof payload.data === "object") {
+    return payload.data as Record<string, unknown>;
+  }
+  return payload;
+};
 
 const statusConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger" | "default"; label: string }> = {
   created: { color: "text-muted-foreground", chipVariant: "default", label: "Created" },
@@ -79,37 +112,44 @@ function EventFeed({ events }: { events: SimEvent[] }) {
   };
 
   const getEventColor = (type: string, payload: Record<string, unknown>) => {
+    const payloadData = getPayloadData(payload);
     if (type === "trade") {
-      return payload.side === "buy" ? "text-positive" : "text-negative";
+      const netPnl = payloadData.netPnl as number | undefined;
+      return netPnl !== undefined && netPnl < 0 ? "text-negative" : "text-positive";
     }
     if (type === "equity") {
-      const change = payload.change as number;
-      return change >= 0 ? "text-positive" : "text-negative";
+      return "text-muted-foreground";
     }
     return "text-muted-foreground";
   };
 
   const formatPayload = (type: string, payload: Record<string, unknown>) => {
+    const payloadData = getPayloadData(payload);
     if (type === "trade") {
-      const side = payload.side as string;
-      const price = payload.price as number;
-      const qty = payload.qty as number;
-      return `${side?.toUpperCase()} ${qty} @ ${price?.toFixed(2)}`;
+      const entry = payloadData.entryPrice as number;
+      const exit = payloadData.exitPrice as number;
+      const qty = payloadData.qty as number;
+      if (entry !== undefined && exit !== undefined) {
+        return `LONG ${qty?.toFixed(4)} @ ${entry?.toFixed(2)} → ${exit?.toFixed(2)}`;
+      }
+      const price = payloadData.price as number;
+      return `TRADE ${qty?.toFixed(4)} @ ${price?.toFixed(2)}`;
     }
     if (type === "equity") {
-      const value = payload.value as number;
-      const change = payload.change as number;
-      const sign = change >= 0 ? "+" : "";
-      return `$${value?.toFixed(2)} (${sign}${change?.toFixed(2)}%)`;
+      const equity = (payloadData.equity as number | undefined) ?? (payloadData.value as number | undefined);
+      return `$${equity?.toFixed(2)}`;
     }
     if (type === "candle") {
-      const close = payload.close as number;
+      const candle = "candle" in payloadData
+        ? (payloadData.candle as CandleDatum | undefined)
+        : ("open" in payloadData ? (payloadData as CandleDatum) : undefined);
+      const close = candle?.close;
       return `Close: ${close?.toFixed(2)}`;
     }
     if (type === "status") {
-      return payload.status as string;
+      return (payloadData.message as string) || (payload.status as string);
     }
-    return JSON.stringify(payload).slice(0, 50);
+    return JSON.stringify(payloadData).slice(0, 50);
   };
 
   return (
@@ -157,6 +197,8 @@ export default function LiveSessionView() {
   const [equityHistory, setEquityHistory] = useState<Array<{ value: number }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
   const [currentCandle, setCurrentCandle] = useState<{ ts: number; close: number } | null>(null);
+  const [candles, setCandles] = useState<CandleDatum[]>([]);
+  const [tradeMarkers, setTradeMarkers] = useState<CandleMarker[]>([]);
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const lastSeqRef = useRef(0);
@@ -173,6 +215,35 @@ export default function LiveSessionView() {
       }
       return 3000;
     },
+  });
+
+  const candleRange = useCallback(() => {
+    if (!session?.timeframe) return null;
+    const tfMs = TIMEFRAME_MS[session.timeframe] ?? 900000;
+    const endBase = session.endMs ?? Date.now();
+    const alignedEnd = Math.floor(endBase / tfMs) * tfMs;
+    const alignedStart = Math.floor(session.startMs / tfMs) * tfMs;
+    const startCandidate = alignedEnd - tfMs * 200;
+    const start = Math.max(alignedStart, startCandidate);
+    if (start >= alignedEnd) {
+      return { start: alignedEnd - tfMs * 200, end: alignedEnd };
+    }
+    return { start, end: alignedEnd };
+  }, [session?.endMs, session?.startMs, session?.timeframe]);
+
+  const range = candleRange();
+
+  const candlesQuery = useQuery<{ candles: CandleDatum[] }>({
+    queryKey: [
+      "/api/market/candles",
+      {
+        symbol: session?.symbol?.toUpperCase(),
+        timeframe: session?.timeframe,
+        start: range?.start?.toString(),
+        end: range?.end?.toString(),
+      },
+    ],
+    enabled: !!session?.symbol && !!session?.timeframe && !!range?.start && !!range?.end,
   });
 
   useSetPageTitle(session ? `Session ${session.profileSlug}` : "Live Session");
@@ -204,18 +275,67 @@ export default function LiveSessionView() {
         
         setEvents((prev) => [...prev.slice(-200), event]);
 
+        const payloadData = getPayloadData(event.payload);
+
         if (event.type === "candle") {
-          setCurrentCandle({
-            ts: event.ts,
-            close: event.payload.close as number,
-          });
+          const candlePayload = payloadData as CandleEventPayload | CandleDatum | undefined;
+          const candle = candlePayload && "candle" in candlePayload
+            ? candlePayload.candle
+            : candlePayload && "open" in candlePayload
+              ? candlePayload
+              : undefined;
+          if (candle) {
+            setCurrentCandle({ ts: candle.ts, close: candle.close });
+            setCandles((prev) => {
+              if (prev.length === 0) return [candle];
+              const last = prev[prev.length - 1];
+              if (last.ts === candle.ts) {
+                return [...prev.slice(0, -1), candle];
+              }
+              if (last.ts < candle.ts) {
+                return [...prev, candle].slice(-300);
+              }
+              return prev;
+            });
+          }
+        }
+
+        if (event.type === "trade") {
+          const trade = payloadData as TradeEventPayload | undefined;
+          if (trade && session?.timeframe) {
+            const tfMs = TIMEFRAME_MS[session.timeframe] ?? 900000;
+            const entryTime = typeof trade.holdBars === "number"
+              ? event.ts - trade.holdBars * tfMs
+              : event.ts;
+            setTradeMarkers((prev) => [
+              ...prev.slice(-100),
+              {
+                time: entryTime,
+                position: "belowBar",
+                color: "#22c55e",
+                shape: "arrowUp",
+                text: `Entry ${trade.entryPrice.toFixed(2)}`,
+              },
+              {
+                time: event.ts,
+                position: "aboveBar",
+                color: trade.netPnl >= 0 ? "#22c55e" : "#ef4444",
+                shape: "arrowDown",
+                text: `Exit ${trade.exitPrice.toFixed(2)}`,
+              },
+            ]);
+          }
         }
 
         if (event.type === "equity") {
-          setEquityHistory((prev) => [
-            ...prev.slice(-100),
-            { value: event.payload.value as number },
-          ]);
+          const equity = (payloadData as { equity?: number; value?: number } | undefined)?.equity
+            ?? (payloadData as { equity?: number; value?: number } | undefined)?.value;
+          if (equity !== undefined) {
+            setEquityHistory((prev) => [
+              ...prev.slice(-100),
+              { value: equity },
+            ]);
+          }
         }
 
         if (event.type === "status") {
@@ -239,6 +359,16 @@ export default function LiveSessionView() {
       }
     };
   }, [id, session, refetch]);
+
+  useEffect(() => {
+    if (!candlesQuery.data?.candles) return;
+    const initialCandles = candlesQuery.data.candles.slice(-200);
+    setCandles(initialCandles);
+    if (initialCandles.length > 0) {
+      const last = initialCandles[initialCandles.length - 1];
+      setCurrentCandle({ ts: last.ts, close: last.close });
+    }
+  }, [candlesQuery.data?.candles]);
 
   useEffect(() => {
     const shouldConnect = session && (session.status === "running" || session.status === "paused" || session.status === "created");
@@ -389,12 +519,17 @@ export default function LiveSessionView() {
         <div className="lg:col-span-2">
           <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium">Event Feed</h3>
+              <div>
+                <h3 className="font-medium">Market Candles</h3>
+                <p className="text-xs text-muted-foreground">
+                  {session.symbol} · {session.timeframe}
+                </p>
+              </div>
               <span className="text-xs text-muted-foreground">
-                {events.length} events
+                {candles.length} candles
               </span>
             </div>
-            <EventFeed events={events} />
+            <CandlestickChart candles={candles} markers={tradeMarkers} height={360} />
           </Card>
         </div>
 
@@ -415,6 +550,43 @@ export default function LiveSessionView() {
           ) : (
             <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
               Waiting for equity data...
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="lg:col-span-2">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium">Event Feed</h3>
+              <span className="text-xs text-muted-foreground">
+                {events.length} events
+              </span>
+            </div>
+            <EventFeed events={events} />
+          </Card>
+        </div>
+
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium">Session Snapshot</h3>
+            <span className="text-xs text-muted-foreground">Last candle</span>
+          </div>
+          {currentCandle ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Time</span>
+                <span className="tabular-nums">{format(new Date(currentCandle.ts), "MMM d, HH:mm")}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Close</span>
+                <span className="tabular-nums text-foreground">{currentCandle.close.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
+              Waiting for candle data...
             </div>
           )}
         </Card>
