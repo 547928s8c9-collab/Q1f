@@ -1095,8 +1095,8 @@ export async function registerRoutes(
 
           const newPrincipalMinor = basePrincipalMinor + BigInt(amount);
           const newInvestedCurrentMinor = baseCurrentMinor + BigInt(amount);
-          const principalLegacy = (newPrincipalMinor / 1_000_000n).toString();
-          const currentLegacy = (newInvestedCurrentMinor / 1_000_000n).toString();
+          const principalLegacy = newPrincipalMinor.toString();
+          const currentLegacy = newInvestedCurrentMinor.toString();
 
           await tx.update(positions)
             .set({
@@ -1109,7 +1109,7 @@ export async function registerRoutes(
             .where(eq(positions.id, existingPos.id));
         } else {
           const principalMinor = BigInt(amount);
-          const principalLegacy = (principalMinor / 1_000_000n).toString();
+          const principalLegacy = principalMinor.toString();
           await tx.insert(positions).values({
             userId,
             strategyId,
