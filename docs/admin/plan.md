@@ -183,9 +183,9 @@
 
 ---
 
-### S6: Strategies & Trading Sessions Viewer
+### S6: Strategies Viewer
 
-**Goal:** Admin can view strategy catalog, user positions, and simulation session timelines (read-only).
+**Goal:** Admin can view strategy catalog and user positions (read-only).
 
 **DB Changes:**
 - None
@@ -194,28 +194,20 @@
 - `GET /api/admin/strategies` — list all strategies with stats
 - `GET /api/admin/strategies/:id` — strategy detail with aggregate positions
 - `GET /api/admin/positions` — list positions across users `?strategyId=`
-- `GET /api/admin/sim-sessions` — list sim sessions `?userId=&status=`
-- `GET /api/admin/sim-sessions/:id` — session detail with events
 
 **UI Pages/Components:**
 - `/admin/strategies` — table: name, risk tier, total AUM, active positions count
 - `/admin/strategies/:id` — detail with position breakdown chart
-- `/admin/sim-sessions` — table: user, profile, status, start/end
-- `/admin/sim-sessions/:id` — timeline view of events
 
 **DoD:**
 - [ ] Strategies show aggregate investedCurrentMinor across all positions
 - [ ] Positions list supports pagination, filter by strategy
-- [ ] Sim sessions show status badge (RUNNING/PAUSED/STOPPED/FINISHED)
-- [ ] Events timeline shows seq, type, timestamp, payload preview
 - [ ] All endpoints read-only, no mutations
 - [ ] Requires `view_strategies` permission
 
 **Edge Cases:**
 - Strategy with 0 positions → show "No active positions"
-- Sim session with 10k+ events → paginate, lazy load
 - Deleted user's positions → still visible with "User deleted" badge
-- Running session → auto-refresh every 5s
 
 ---
 

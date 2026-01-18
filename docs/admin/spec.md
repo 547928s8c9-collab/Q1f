@@ -15,7 +15,6 @@
 3. **Money Operations** — Read-only ledger view, approve pending withdrawals, create correction operations with audit trail
 4. **Vault Management** — View vault states, manage auto-sweep settings, override goal configurations
 5. **Strategy Management** — Pause/resume strategies, adjust risk limits, manage visibility and eligibility
-6. **Trading Sessions (Simulation)** — Monitor sim_sessions, view events, handle failed sessions
 7. **Incidents & Status** — Publish/schedule status banners, manage incidents lifecycle
 8. **Exports & Reports** — Generate CSV exports, monthly statements, compliance reports
 9. **Access Control (RBAC)** — Manage admin roles and permissions
@@ -26,7 +25,6 @@
 1. **No refactoring of server/routes.ts** — Admin API will be separate (`/api/admin/*`)
 2. **No changes to existing money flow logic** — Admin actions create new operations, never mutate directly
 3. **No user-facing features** — This spec covers admin-only functionality
-4. **No live trading integration** — sim_sessions remain simulation-only, no real exchange connections
 
 ---
 
@@ -57,10 +55,6 @@
 │   ├── /admin/strategies         # Strategy list with controls
 │   └── /admin/strategies/:id     # Strategy detail, risk settings
 │
-├── Trading Sessions
-│   ├── /admin/sim-sessions       # Simulation session list
-│   └── /admin/sim-sessions/:id   # Session detail, events, controls
-│
 ├── Notifications
 │   └── /admin/inbox              # Admin action queue (pending items)
 │
@@ -86,7 +80,6 @@
 | Users & KYC | Users, KYC Queue | Users, Shield |
 | Money | Operations, Withdrawals, Corrections | Wallet, ArrowUpRight |
 | Assets | Vaults, Strategies | Vault, TrendingUp |
-| Sessions | Trading Sessions | Play |
 | Ops | Inbox, Incidents, Status | Bell, AlertTriangle |
 | Compliance | Audit, Exports | FileSearch, Download |
 | Access | Roles, Permissions | Lock |
@@ -122,8 +115,6 @@
 | | strategies.pause | Pause/resume strategies |
 | | strategies.risk_limits | Modify risk limits (ddLimitPct, etc.) |
 | | strategies.visibility | Change strategy visibility/eligibility |
-| **Sim Sessions** | sim.read | View simulation sessions |
-| | sim.control | Start/stop/cancel sessions |
 | **Incidents** | incidents.read | View incidents |
 | | incidents.publish | Create/publish incidents |
 | | incidents.resolve | Resolve incidents |
@@ -151,8 +142,6 @@
 | strategies.pause | ✓ | ✓ | - | - | - |
 | strategies.risk_limits | ✓ | ✓ | - | - | - |
 | strategies.visibility | ✓ | ✓ | - | - | - |
-| sim.read | ✓ | ✓ | ✓ | ✓ | ✓ |
-| sim.control | ✓ | ✓ | - | - | - |
 | incidents.read | ✓ | ✓ | ✓ | ✓ | ✓ |
 | incidents.publish | ✓ | ✓ | - | - | - |
 | incidents.resolve | ✓ | ✓ | - | - | - |
@@ -307,24 +296,6 @@
 - `ddLimitPct: integer` (0 = disabled)
 - `autoPauseEnabled: boolean`
 
-### E.5 Sim Session Lifecycle (Existing)
-
-```
-    CREATED ────► RUNNING ◄────► PAUSED
-                     │
-                     ├────► FINISHED (normal completion)
-                     ├────► STOPPED (user/admin stopped)
-                     └────► FAILED (error)
-```
-
-**Existing Statuses (SimSessionStatus):**
-| Status | Description |
-|--------|-------------|
-| created | Session created, not started |
-| running | Actively processing candles |
-| paused | Temporarily paused |
-| stopped | Manually stopped |
-| finished | Completed successfully |
 | failed | Error during execution |
 
 ---
@@ -338,7 +309,6 @@
 | WITHDRAWAL_PENDING | operations (WITHDRAW_USDT, status=pending) | high | Withdrawals awaiting approval |
 | KYC_REVIEW | kyc_applicants (status=IN_REVIEW) | high | KYC submissions to review |
 | KYC_ON_HOLD | kyc_applicants (status=ON_HOLD) | medium | KYC cases on hold |
-| SIM_FAILED | sim_sessions (status=failed) | low | Failed simulation sessions |
 | SWEEP_FAILED | audit_logs (event contains SWEEP + error) | medium | Failed auto-sweep attempts |
 | INCIDENT_DRAFT | incidents (status=draft) | medium | Unpublished incidents |
 | BALANCE_ASSERTION | audit_logs (INVARIANT_VIOLATION) | critical | Negative balance attempts |
@@ -354,7 +324,7 @@ interface AdminQueueItem {
   
   // Context
   userId?: string;
-  resourceType: string;     // operation, kyc_applicant, sim_session, etc.
+  resourceType: string;     // operation, kyc_applicant, etc.
   resourceId: string;
   
   // Assignment
@@ -417,16 +387,7 @@ interface AdminQueueItem {
 - Admin idempotency keys stored with `adminUserId` for attribution
 - Audit log includes idempotency key for traceability
 
-### G.3 Simulation Boundary
-
-**INVARIANT: sim_sessions/sim_events never affect real balances**
-
-- Simulation runs use separate tables: `sim_sessions`, `sim_events`
-- No foreign keys to `balances`, `operations`, or `vaults`
-- Simulation P&L is derived/analytics data, not ledger data
-- Admin can view/control sessions but cannot "materialize" sim results to real balances
-
-### G.4 Audit Requirements
+### G.3 Audit Requirements
 
 Every admin mutation MUST create audit_log with:
 - `userId`: affected user (if applicable)
@@ -456,8 +417,8 @@ Withdrawal approval queue, approve/decline flow, 4-eyes for large amounts.
 ### Slice 5: Corrections & Ledger Tools
 Correction operation creation with dual approval, ledger reconciliation views.
 
-### Slice 6: Strategies & Sessions
-Strategy pause/resume controls, risk limit management, sim_session monitoring.
+### Slice 6: Strategies
+Strategy pause/resume controls, risk limit management.
 
 ### Slice 7: Incidents & Status Page
 Incident CRUD, status banner publishing, scheduled incidents.
