@@ -176,6 +176,9 @@ export interface IStorage {
   // All positions (for jobs)
   getAllPositions(): Promise<Position[]>;
 
+  // Legacy simulation compatibility
+  resetRunningSessions(): Promise<void>;
+
   // Idempotency Keys
   getIdempotencyKey(userId: string, key: string, endpoint: string): Promise<IdempotencyKey | undefined>;
   createIdempotencyKey(data: InsertIdempotencyKey): Promise<IdempotencyKey>;
@@ -978,6 +981,10 @@ export class DatabaseStorage implements IStorage {
   // Get all positions (for job processing)
   async getAllPositions(): Promise<Position[]> {
     return db.select().from(positions);
+  }
+
+  async resetRunningSessions(): Promise<void> {
+    return;
   }
 
   // Idempotency Keys
