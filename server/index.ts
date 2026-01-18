@@ -199,11 +199,6 @@ app.get("/api/metrics", (req, res) => {
 
   await registerRoutes(httpServer, app);
 
-  const resetCount = await storage.resetRunningSessions();
-  if (resetCount > 0) {
-    log(`Reset ${resetCount} running simulation sessions to paused state`, "sim");
-  }
-
   app.use(errorHandler);
 
   // importantly only setup vite in development and after
