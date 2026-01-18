@@ -353,6 +353,14 @@ export async function registerRoutes(
   // Mount Admin API router
   app.use("/api/admin", adminRouter);
 
+  // Ensure core strategy data exists for live sessions and investing
+  try {
+    await storage.seedStrategies();
+    await storage.seedStrategyProfiles();
+  } catch (error) {
+    console.error("Seed strategies error:", error);
+  }
+
   // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {
     try {
@@ -1081,10 +1089,17 @@ export async function registerRoutes(
           .where(and(eq(positions.userId, userId), eq(positions.strategyId, strategyId)));
         
         if (existingPos) {
+          const newLegacyPrincipal = (BigInt(existingPos.principal || "0") + BigInt(amount)).toString();
+          const newLegacyCurrent = (BigInt(existingPos.currentValue || "0") + BigInt(amount)).toString();
+          const newPrincipalMinor = (BigInt(existingPos.principalMinor || existingPos.principal || "0") + BigInt(amount)).toString();
+          const newInvestedCurrentMinor = (BigInt(existingPos.investedCurrentMinor || existingPos.currentValue || "0") + BigInt(amount)).toString();
+
           await tx.update(positions)
             .set({
-              principal: (BigInt(existingPos.principal) + BigInt(amount)).toString(),
-              currentValue: (BigInt(existingPos.currentValue) + BigInt(amount)).toString(),
+              principal: newLegacyPrincipal,
+              currentValue: newLegacyCurrent,
+              principalMinor: newPrincipalMinor,
+              investedCurrentMinor: newInvestedCurrentMinor,
               updatedAt: new Date(),
             })
             .where(eq(positions.id, existingPos.id));
@@ -1094,6 +1109,8 @@ export async function registerRoutes(
             strategyId,
             principal: amount,
             currentValue: amount,
+            principalMinor: amount,
+            investedCurrentMinor: amount,
           });
         }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { PageHeader } from "@/components/ui/page-header";
@@ -219,7 +219,6 @@ export default function LiveSessionDetail() {
   const [speed, setSpeed] = useState(10);
   const [configOverride, setConfigOverride] = useState<Record<string, unknown>>({});
   const [gaps, setGaps] = useState<GapInfo[]>([]);
-  const hasAdjustedRange = useRef(false);
 
   const { data: profile, isLoading, error } = useQuery<StrategyProfile>({
     queryKey: ["/api/strategy-profiles", slug],
@@ -229,7 +228,7 @@ export default function LiveSessionDetail() {
   useSetPageTitle(profile?.displayName || "Strategy Details");
 
   useEffect(() => {
-    if (!profile || !startDate || !endDate || hasAdjustedRange.current) return;
+    if (!profile || !startDate || !endDate) return;
     const tfMs = TIMEFRAME_MS[profile.timeframe] || 900000;
     const minBarsWarmup = Number(profile.defaultConfig?.minBarsWarmup ?? 200);
     const minRangeMs = (minBarsWarmup + 10) * tfMs;
@@ -237,7 +236,6 @@ export default function LiveSessionDetail() {
     if (currentRange < minRangeMs) {
       setStartDate(new Date(endDate.getTime() - minRangeMs));
     }
-    hasAdjustedRange.current = true;
   }, [profile, startDate, endDate]);
 
   const mergedConfig = useMemo(() => {
