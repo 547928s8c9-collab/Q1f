@@ -33,7 +33,9 @@ interface RunnerState {
   mode: SimSessionModeType;
 }
 
-const CANDLE_BATCH_SIZE = 100;
+// Batch size must be larger than maxMinBarsWarmup + 10 to ensure sufficient warmup data
+// Most strategies require 200-250 warmup bars, so 300 provides headroom
+const CANDLE_BATCH_SIZE = 300;
 
 function timeframeToMs(tf: Timeframe): number {
   const map: Record<Timeframe, number> = {
