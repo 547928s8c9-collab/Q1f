@@ -93,9 +93,6 @@ async function seed() {
     await storage.seedStrategies();
     console.log("Strategies seeded successfully");
 
-    await storage.seedStrategyProfiles();
-    console.log("Strategy profiles seeded successfully");
-
     await storage.seedAdminRbac();
     console.log("Admin RBAC (roles, permissions, mappings) seeded successfully");
 
