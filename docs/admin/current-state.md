@@ -23,8 +23,6 @@
 │   │   ├── executor.ts              # Strategy executor (backtest/simulation)
 │   │   ├── indicators.ts            # Technical indicators (EMA, Keltner, ATR, etc.)
 │   │   └── types.ts                 # Strategy types
-│   ├── sim/                         # Live Session simulation runner
-│   │   └── runner.ts                # SessionRunner singleton (SSE streaming)
 │   ├── marketData/                  # Market data loading (Binance spot)
 │   └── data/                        # Binance API integration
 │
@@ -55,7 +53,6 @@
 │       ├── activity/                # Operations list, receipt
 │       ├── settings/                # General, security settings
 │       ├── onboarding/              # Welcome, verify, consent, kyc, smart-start
-│       ├── live-sessions/           # Session list, detail, player
 │       ├── inbox.tsx, statements.tsx, status.tsx
 │       └── not-found.tsx
 │
@@ -92,15 +89,10 @@
 | `notifications` | Inbox notifications | userId, type (transaction/kyc/security/system), title, message, isRead, ctaLabel, ctaUrl |
 | `idempotency_keys` | Request deduplication | userId, idempotencyKey, endpoint, operationId, responseStatus, responseBody |
 | `market_candles` | OHLCV candle data | exchange, symbol, timeframe, ts, open, high, low, close, volume |
-| `strategy_profiles` | Simulation strategy configs | slug, displayName, symbol, timeframe, profileKey, defaultConfig, configSchema |
-| `sim_sessions` | Live session simulation runs | userId, profileSlug, symbol, timeframe, startMs, endMs, speed, status, lastSeq |
-| `sim_events` | Simulation events (trades, etc.) | sessionId, seq, ts, type, payload |
 
 ### Key Indexes
 - `idempotency_user_key_endpoint_idx` - unique (userId, idempotencyKey, endpoint)
 - `market_candles_unique_idx` - unique (exchange, symbol, timeframe, ts)
-- `sim_sessions_user_idempotency_idx` - unique (userId, idempotencyKey)
-- `sim_events_session_seq_idx` - unique (sessionId, seq)
 
 ---
 
@@ -186,12 +178,6 @@
 |--------|------|------|---------|
 | GET | /api/strategy-profiles | - | List strategy profiles |
 | GET | /api/strategy-profiles/:slug | - | Profile detail |
-| POST | /api/sim/sessions | ✓ | Create simulation session |
-| GET | /api/sim/sessions | ✓ | List user sessions |
-| GET | /api/sim/sessions/:id | ✓ | Session detail |
-| GET | /api/sim/sessions/:id/events | ✓ | Get events |
-| POST | /api/sim/sessions/:id/control | ✓ | Pause/resume/stop |
-| GET | /api/sim/sessions/:id/stream | ✓ | SSE event stream |
 
 ### Jobs (Dev/Admin)
 | Method | Path | Auth | Purpose |
@@ -313,22 +299,6 @@ NOT_STARTED → IN_REVIEW → APPROVED (terminal)
                        → ON_HOLD → IN_REVIEW/REJECTED
 ```
 
-### 4.8 Live Session Simulation Flow
-```
-User → POST /api/sim/sessions
-  ├── Create session (status=created)
-  ├── SessionRunner.start(sessionId)
-  │   ├── Load candles from cache/Binance
-  │   ├── Run strategy executor
-  │   ├── Emit events → sim_events table
-  │   └── SSE stream to client
-  └── User controls: pause/resume/stop
-
-Session Status: created → running ↔ paused → stopped/finished/failed
-```
-
----
-
 ## 5. Status Enums (Centralized)
 
 | Entity | Enum | Values | Location |
@@ -337,7 +307,6 @@ Session Status: created → running ↔ paused → stopped/finished/failed
 | Redemption | RedemptionStatus | PENDING, EXECUTED, CANCELLED | shared/schema.ts:116-120 |
 | KYC | KycStatus | NOT_STARTED, IN_REVIEW, APPROVED, NEEDS_ACTION, REJECTED, ON_HOLD | shared/schema.ts:307-314 |
 | Address | AddressStatus | PENDING_ACTIVATION, ACTIVE, DISABLED | shared/schema.ts:223-227 |
-| SimSession | SimSessionStatus | created, running, paused, stopped, finished, failed | shared/schema.ts:843-850 |
 | Payout | PayoutFrequency | DAILY, MONTHLY | shared/schema.ts:247-250 |
 
 ---
@@ -364,9 +333,6 @@ Session Status: created → running ↔ paused → stopped/finished/failed
 | /statements | Statements | Monthly statements |
 | /status | StatusPage | System status |
 | /inbox | Inbox | Notifications |
-| /live-sessions | LiveSessions | Session list |
-| /live-sessions/:slug | LiveSessionDetail | Profile detail |
-| /live-sessions/session/:id | LiveSessionView | Session player |
 
 ### Onboarding Routes
 | Path | Component | Purpose |
@@ -401,7 +367,6 @@ Session Status: created → running ↔ paused → stopped/finished/failed
 3. **Jobs are Unauthenticated** - /api/jobs/* endpoints have no auth (dev only)
 4. **No 4-Eyes Approval** - Large operations don't require dual approval
 5. **No Step-Up Auth** - Sensitive ops don't require re-auth
-6. **SIM ≠ REAL separation** - sim_sessions/sim_events are separate, but no explicit REAL/SIM labels in UI
 7. **No Rate Limiting** - API endpoints lack rate limiting
 8. **Manual Corrections** - No correction operation type for ledger fixes
 
@@ -420,7 +385,6 @@ Session Status: created → running ↔ paused → stopped/finished/failed
 - `server/replit_integrations/auth/` - Replit OIDC integration
 
 ### Simulation
-- `server/sim/runner.ts` - SessionRunner for live sessions
 - `server/strategies/executor.ts` - Strategy backtest engine
 - `server/strategies/profiles/` - 8 strategy profile implementations
 
