@@ -38,7 +38,7 @@ This guide explains how to set up and bootstrap the ZEON environment for local d
 
 ## Available Database Scripts
 
-- `npm run db:push`: Syncs the `shared/schema.ts` with the database (use for migrations).
+- `npm run db:push`: Syncs the `shared/schema.ts` with the database (use for migrations). If you are upgrading from an older schema, manually drop the legacy `sim_sessions`, `sim_events`, and `strategy_profiles` tables (plus related indexes) since `db:push` will not remove them automatically.
 - `npm run db:seed`: Clears and re-seeds the database with fresh demo data.
 - `npm run check`: Runs TypeScript compiler check.
 
