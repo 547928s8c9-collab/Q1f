@@ -8,6 +8,7 @@ import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Sparkline } from "@/components/charts/sparkline";
+import { CandlestickChart, type CandleMarker, type MarketCandle } from "@/components/charts/candlestick-chart";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -44,15 +45,6 @@ interface MarketQuote {
   symbol: string;
   ts: number;
   price: number;
-}
-
-interface MarketCandle {
-  ts: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
 }
 
 interface MarketQuotesResponse {
@@ -180,53 +172,6 @@ function EventFeed({ events }: { events: SimEvent[] }) {
   );
 }
 
-function CandleChart({ candles }: { candles: MarketCandle[] }) {
-  if (!candles || candles.length === 0) {
-    return (
-      <div className="h-52 flex items-center justify-center text-muted-foreground text-sm">
-        Waiting for candles...
-      </div>
-    );
-  }
-
-  const highs = candles.map((c) => c.high);
-  const lows = candles.map((c) => c.low);
-  const maxHigh = Math.max(...highs);
-  const minLow = Math.min(...lows);
-  const range = Math.max(1e-6, maxHigh - minLow);
-
-  const height = 100;
-  const candleSpacing = 3;
-  const width = candles.length * candleSpacing;
-
-  const scaleY = (value: number) => height - ((value - minLow) / range) * height;
-
-  return (
-    <div className="h-52 w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
-        {candles.map((candle, index) => {
-          const x = index * candleSpacing + 1;
-          const openY = scaleY(candle.open);
-          const closeY = scaleY(candle.close);
-          const highY = scaleY(candle.high);
-          const lowY = scaleY(candle.low);
-          const up = candle.close >= candle.open;
-          const color = up ? "#22c55e" : "#ef4444";
-          const bodyY = Math.min(openY, closeY);
-          const bodyH = Math.max(1, Math.abs(closeY - openY));
-
-          return (
-            <g key={candle.ts}>
-              <line x1={x} x2={x} y1={highY} y2={lowY} stroke={color} strokeWidth={1} />
-              <rect x={x - 1} y={bodyY} width={2} height={bodyH} fill={color} />
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
 function formatSymbol(symbol?: string): string {
   if (!symbol) return "";
   if (symbol.includes("/")) return symbol;
@@ -241,7 +186,6 @@ export default function LiveSessionView() {
   const [events, setEvents] = useState<SimEvent[]>([]);
   const [equityHistory, setEquityHistory] = useState<Array<{ value: number }>>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected");
-  const [currentCandle, setCurrentCandle] = useState<{ ts: number; close: number } | null>(null);
   const [marketStatus, setMarketStatus] = useState<ConnectionStatus>("disconnected");
   const [latestQuote, setLatestQuote] = useState<MarketQuote | null>(null);
   const [candles, setCandles] = useState<MarketCandle[]>([]);
@@ -274,7 +218,7 @@ export default function LiveSessionView() {
   });
 
   const { data: candleSnapshot } = useQuery<MarketCandlesResponse>({
-    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: session?.timeframe, limit: 120 }],
+    queryKey: ["/api/market/candles", { symbol: primarySymbol, timeframe: session?.timeframe, limit: 200 }],
     enabled: !!primarySymbol && !!session?.timeframe,
     refetchInterval: false,
   });
@@ -284,34 +228,24 @@ export default function LiveSessionView() {
     return TIMEFRAME_MS[session.timeframe] || 900_000;
   }, [session?.timeframe]);
 
-  const applyQuoteToCandles = useCallback((prev: MarketCandle[], quote: MarketQuote) => {
-    if (!prev || prev.length === 0) return prev;
-    const candleStart = Math.floor(quote.ts / timeframeMs) * timeframeMs;
-    const last = prev[prev.length - 1];
-    if (last && last.ts === candleStart) {
-      const updated = {
-        ...last,
-        close: quote.price,
-        high: Math.max(last.high, quote.price),
-        low: Math.min(last.low, quote.price),
-      };
-      return [...prev.slice(0, -1), updated];
+  const applyCandleUpdate = useCallback((prev: MarketCandle[], candle: MarketCandle) => {
+    if (!candle) return prev;
+    const next = [...prev];
+    const idx = next.findIndex((item) => item.ts === candle.ts);
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], ...candle };
+    } else if (next.length === 0 || candle.ts > next[next.length - 1].ts) {
+      next.push(candle);
+    } else {
+      const insertAt = next.findIndex((item) => item.ts > candle.ts);
+      if (insertAt === -1) {
+        next.push(candle);
+      } else {
+        next.splice(insertAt, 0, candle);
+      }
     }
-    if (last && candleStart > last.ts) {
-      return [
-        ...prev,
-        {
-          ts: candleStart,
-          open: quote.price,
-          high: quote.price,
-          low: quote.price,
-          close: quote.price,
-          volume: 0,
-        },
-      ].slice(-120);
-    }
-    return prev;
-  }, [timeframeMs]);
+    return next.slice(-200);
+  }, []);
 
   useSetPageTitle(session ? `Session ${session.profileSlug}` : "Live Session");
 
@@ -343,12 +277,9 @@ export default function LiveSessionView() {
         const data = (event.payload as { data?: Record<string, unknown> })?.data || {};
 
         if (event.type === "candle") {
-          const candle = data.candle as { close?: number } | undefined;
-          if (candle?.close !== undefined) {
-            setCurrentCandle({
-              ts: event.ts,
-              close: candle.close,
-            });
+          const candle = data.candle as MarketCandle | undefined;
+          if (candle) {
+            setCandles((prev) => applyCandleUpdate(prev, candle));
           }
         }
 
@@ -410,7 +341,7 @@ export default function LiveSessionView() {
 
   useEffect(() => {
     if (candleSnapshot?.data?.candles) {
-      setCandles(candleSnapshot.data.candles);
+      setCandles(candleSnapshot.data.candles.slice(-200));
     }
   }, [candleSnapshot]);
 
@@ -439,7 +370,6 @@ export default function LiveSessionView() {
       try {
         const quote = JSON.parse((e as MessageEvent).data) as MarketQuote;
         setLatestQuote(quote);
-        setCandles((prev) => applyQuoteToCandles(prev, quote));
       } catch (err) {
         console.error("Failed to parse market quote:", err);
       }
@@ -455,7 +385,41 @@ export default function LiveSessionView() {
       es.close();
       marketSourceRef.current = null;
     };
-  }, [session?.id, session?.symbols?.join(","), applyQuoteToCandles]);
+  }, [session?.id, session?.symbols?.join(",")]);
+
+  const tradeMarkers = useMemo(() => {
+    const markers: CandleMarker[] = [];
+    const seen = new Set<string>();
+    for (const event of events) {
+      if (event.type !== "trade") continue;
+      const payload = event.payload as { data?: Record<string, unknown> };
+      const data = payload?.data || {};
+      const holdBars = Number(data.holdBars ?? 0);
+      const entryTs = event.ts - holdBars * timeframeMs;
+      const entryKey = `${event.seq}-entry`;
+      if (!seen.has(entryKey) && Number.isFinite(entryTs)) {
+        seen.add(entryKey);
+        markers.push({
+          ts: entryTs,
+          position: "below",
+          shape: "arrowUp",
+          text: "Entry",
+        });
+      }
+      const exitKey = `${event.seq}-exit`;
+      if (!seen.has(exitKey)) {
+        seen.add(exitKey);
+        const pnl = Number(data.netPnl ?? 0);
+        markers.push({
+          ts: event.ts,
+          position: "above",
+          shape: "arrowDown",
+          text: pnl >= 0 ? "Exit +" : "Exit -",
+        });
+      }
+    }
+    return markers;
+  }, [events, timeframeMs]);
 
   const controlMutation = useMutation({
     mutationFn: async (action: "pause" | "resume" | "stop") => {
@@ -644,7 +608,7 @@ export default function LiveSessionView() {
                 {primarySymbol || "—"} · {session.timeframe}
               </span>
             </div>
-            <CandleChart candles={candles} />
+            <CandlestickChart candles={candles} markers={tradeMarkers} height={320} />
           </Card>
 
           <Card className="p-5">
