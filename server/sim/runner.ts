@@ -36,6 +36,7 @@ interface RunnerState {
 
 const CANDLE_BATCH_SIZE = 100;
 const STATE_VERSION = 1;
+const RUNNER_MARKET_EXCHANGE = "sim";
 
 function isStateSnapshot(value: unknown): value is SimSessionStateSnapshot {
   if (!value || typeof value !== "object") return false;
@@ -162,8 +163,12 @@ class SessionRunnerManager extends EventEmitter {
 
     let fetchEndMs: number;
     if (mode === SimSessionMode.LAGGED_LIVE) {
-      await ensureReplayClock();
-      fetchEndMs = getDecisionNow(session.lagMs || 900_000);
+      if (RUNNER_MARKET_EXCHANGE === "sim") {
+        fetchEndMs = initialCursorMs + tfMs * initialLoadBars;
+      } else {
+        await ensureReplayClock();
+        fetchEndMs = getDecisionNow(session.lagMs || 900_000);
+      }
     } else {
       fetchEndMs = session.endMs ?? (session.startMs + tfMs * initialLoadBars);
     }
@@ -172,6 +177,7 @@ class SessionRunnerManager extends EventEmitter {
     let candles: Candle[];
     try {
       const result = await loadCandles({
+        exchange: RUNNER_MARKET_EXCHANGE,
         symbol: session.symbol,
         timeframe,
         startMs: initialCursorMs,
@@ -187,6 +193,10 @@ class SessionRunnerManager extends EventEmitter {
       }
 
       candles = result.candles;
+
+      console.log(
+        `[sim.runner] startSession symbol=${session.symbol} timeframe=${timeframe} candlesLoaded=${candles.length} minBarsWarmup=${minBarsWarmup}`
+      );
       
       if (candles.length < minBarsWarmup + 10) {
         console.warn(
@@ -328,8 +338,12 @@ class SessionRunnerManager extends EventEmitter {
 
     let fetchEndMs: number;
     if (state.mode === SimSessionMode.LAGGED_LIVE) {
-      await ensureReplayClock();
-      fetchEndMs = getDecisionNow(state.session.lagMs || 900_000);
+      if (RUNNER_MARKET_EXCHANGE === "sim") {
+        fetchEndMs = state.cursorMs + tfMs * CANDLE_BATCH_SIZE;
+      } else {
+        await ensureReplayClock();
+        fetchEndMs = getDecisionNow(state.session.lagMs || 900_000);
+      }
     } else {
       if (state.session.endMs && state.cursorMs >= state.session.endMs) {
         return false;
@@ -343,6 +357,7 @@ class SessionRunnerManager extends EventEmitter {
 
     try {
       const result = await loadCandles({
+        exchange: RUNNER_MARKET_EXCHANGE,
         symbol: state.session.symbol,
         timeframe,
         startMs: state.cursorMs,

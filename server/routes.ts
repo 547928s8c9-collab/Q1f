@@ -3937,6 +3937,32 @@ export async function registerRoutes(
 
   const LIVE_SESSION_DEFAULT_SPEED = 10;
   const LIVE_WARMUP_BUFFER_BARS = 20;
+  const LIVE_WARMUP_PREFETCH_BUFFER_BARS = 50;
+
+  async function ensureLiveSessionWarmupCandles(params: {
+    symbol: string;
+    timeframe: string;
+    startMs: number;
+    warmupBars: number;
+  }): Promise<void> {
+    const { symbol, timeframe, startMs, warmupBars } = params;
+    const tfMs = SIM_TIMEFRAME_MS[timeframe];
+    if (!tfMs) {
+      throw new Error(`Unknown timeframe: ${timeframe}`);
+    }
+    const endMs = startMs + tfMs * (warmupBars + LIVE_WARMUP_PREFETCH_BUFFER_BARS);
+    const result = await loadCandles({
+      exchange: "sim",
+      symbol,
+      timeframe,
+      startMs,
+      endMs,
+      allowLargeRange: true,
+    });
+    if (result.gaps && result.gaps.length > 0) {
+      throw new Error(`Warmup data gaps detected: ${result.gaps.length}`);
+    }
+  }
 
   app.post("/api/live-sessions", isAuthenticated, async (req, res) => {
     try {
@@ -4006,6 +4032,20 @@ export async function registerRoutes(
 
       const symbol = normalizeSymbol(symbols && symbols.length > 0 ? symbols[0] : profile.symbol);
 
+      try {
+        await ensureLiveSessionWarmupCandles({
+          symbol,
+          timeframe: profile.timeframe,
+          startMs: alignedStart,
+          warmupBars,
+        });
+      } catch (error) {
+        console.error("Live session warmup failed:", error);
+        return res.status(500).json({
+          error: { code: "WARMUP_FAILED", message: "Warmup candles unavailable" },
+        });
+      }
+
       const session = await storage.createSimSession({
         userId,
         profileSlug: profile.slug,
@@ -4052,6 +4092,27 @@ export async function registerRoutes(
       const profile = await storage.getStrategyProfile(session.profileSlug);
       if (!profile) {
         return res.status(404).json({ error: { code: "PROFILE_NOT_FOUND", message: "Strategy profile not found" } });
+      }
+
+      try {
+        await ensureLiveSessionWarmupCandles({
+          symbol: session.symbol,
+          timeframe: session.timeframe,
+          startMs: session.startMs,
+          warmupBars: Math.max(
+            (profile.defaultConfig as StrategyProfileConfig).minBarsWarmup || 200,
+            100
+          ),
+        });
+      } catch (error) {
+        console.error("Live session warmup failed:", error);
+        await storage.updateSimSession(session.id, {
+          status: SimSessionStatus.FAILED,
+          errorMessage: "Warmup candles unavailable",
+        });
+        return res.status(500).json({
+          error: { code: "WARMUP_FAILED", message: "Warmup candles unavailable" },
+        });
       }
 
       const startResult = await sessionRunner.startSession(session, profile.defaultConfig);
