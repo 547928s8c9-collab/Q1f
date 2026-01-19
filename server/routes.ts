@@ -16,6 +16,7 @@ import {
 } from "./config";
 import { registerExtractedRoutes } from "./routes/index";
 import { loadCandles } from "./marketData/loadCandles";
+import { buildSimulatedEquity } from "./lib/simulated-equity";
 
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
@@ -429,6 +430,18 @@ export async function registerRoutes(
         storage.getWhitelistAddresses(userId),
       ]);
 
+      const uniqueStrategyIds = Array.from(new Set(positions.map((p) => p.strategyId)));
+      const performanceEntries = await Promise.all(
+        uniqueStrategyIds.map(async (strategyId) => ({
+          strategyId,
+          performance: await storage.getStrategyPerformance(strategyId, 90),
+        }))
+      );
+      const performanceByStrategy = new Map(
+        performanceEntries.map(({ strategyId, performance }) => [strategyId, performance])
+      );
+      const simulatedEquity = buildSimulatedEquity(positions, performanceByStrategy);
+
       // Consent version (should match the constants in consent routes)
       const REQUIRED_CONSENT_VERSION = "1.0";
       const hasAcceptedConsent = !!latestConsent;
@@ -438,14 +451,11 @@ export async function registerRoutes(
       const kycApplicantStatus = kycApplicant?.status || "NOT_STARTED";
       const isKycApproved = kycApplicantStatus === "APPROVED";
 
-      // Calculate invested amounts
-      const invested = positions.reduce(
-        (acc, p) => ({
-          current: (BigInt(acc.current) + BigInt(p.currentValue)).toString(),
-          principal: (BigInt(acc.principal) + BigInt(p.principal)).toString(),
-        }),
-        { current: "0", principal: "0" }
-      );
+      // Calculate invested amounts from simulated equity snapshots
+      const invested = {
+        current: simulatedEquity.totalCurrentMinor.toString(),
+        principal: simulatedEquity.totalPrincipalMinor.toString(),
+      };
 
       const latestBtc = btcQuotes[btcQuotes.length - 1];
       const latestEth = ethQuotes[ethQuotes.length - 1];
@@ -485,6 +495,9 @@ export async function registerRoutes(
 
       const usdtBalance = balances.find((b) => b.asset === "USDT");
       const rubBalance = balances.find((b) => b.asset === "RUB");
+      const realCashMinor = BigInt(usdtBalance?.available || "0")
+        + BigInt(usdtBalance?.locked || "0")
+        + vaults.reduce((sum, v) => sum + BigInt(v.asset === "USDT" ? (v.balance || "0") : "0"), 0n);
 
       // Build vault data with goals
       const buildVaultData = (vault: typeof vaults[0] | undefined) => {
@@ -573,7 +586,12 @@ export async function registerRoutes(
           profit: buildVaultData(vaultMap.profit),
           taxes: buildVaultData(vaultMap.taxes),
         },
-        portfolioSeries: portfolioSeries.map((s) => ({ date: s.date, value: s.value })),
+        portfolioSeries: simulatedEquity.series.length > 0
+          ? simulatedEquity.series.map((point) => ({
+            date: point.date,
+            value: (realCashMinor + BigInt(point.equityMinor)).toString(),
+          }))
+          : portfolioSeries.map((s) => ({ date: s.date, value: s.value })),
         quotes: {
           "BTC/USDT": {
             price: latestBtc?.price || "67500",
