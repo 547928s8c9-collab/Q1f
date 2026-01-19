@@ -16,9 +16,9 @@ interface StrategyCardProps {
 }
 
 const riskConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string }> = {
-  LOW: { color: "bg-positive/10 text-positive", chipVariant: "success", icon: Shield, label: "Low" },
-  CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Medium" },
-  HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "High" },
+  LOW: { color: "bg-positive/10 text-positive", chipVariant: "success", icon: Shield, label: "Low Risk" },
+  CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Core Risk" },
+  HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "High Risk" },
 };
 
 function toMajorUnits(minorUnits: string, decimals: number = 6): number {
@@ -73,7 +73,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails 
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-foreground truncate">{strategy.name}</h3>
             <Chip variant={config.chipVariant} size="sm" className="mt-1">
-              {config.label} Risk
+              {config.label}
             </Chip>
           </div>
         </div>
@@ -89,7 +89,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails 
       {hasSparkline && (
         <div className="mb-4 bg-muted/30 rounded-lg p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">30-day performance</span>
+            <span className="text-xs text-muted-foreground">30-Day Performance</span>
             <span className={cn("text-xs font-medium tabular-nums", isPositive ? "text-positive" : "text-negative")}>
               {isPositive ? "+" : ""}{((sparklineData[sparklineData.length - 1].value / sparklineData[0].value - 1) * 100).toFixed(1)}%
             </span>
