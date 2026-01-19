@@ -571,6 +571,31 @@ export interface Candle {
   volume: number;
 }
 
+export interface InvestTrade {
+  id: string;
+  entryTs: number;
+  exitTs: number;
+  entryPrice: number;
+  exitPrice: number;
+  qty: number;
+  netPnl: number;
+  netPnlPct: number;
+  holdBars: number;
+  reason: string;
+}
+
+export interface InvestMetrics {
+  totalTrades: number;
+  winRatePct: number;
+  netPnl: number;
+  netPnlPct: number;
+  grossPnl: number;
+  fees: number;
+  avgHoldBars: number;
+  profitFactor: number;
+  avgTradePnl: number;
+}
+
 // Gap info for data quality reporting
 export interface GapInfo {
   startMs: number;

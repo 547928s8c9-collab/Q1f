@@ -8,6 +8,7 @@ import { registerStatementsRoutes } from "./statements";
 import { registerSecurityRoutes } from "./security";
 import { registerNotificationsRoutes } from "./notifications";
 import { registerAnalyticsRoutes } from "./analytics";
+import { registerInvestRoutes } from "./invest";
 
 export function registerExtractedRoutes(deps: RouteDeps): void {
   // Register routes in the same order as original file
@@ -18,6 +19,7 @@ export function registerExtractedRoutes(deps: RouteDeps): void {
   registerSecurityRoutes(deps);
   registerNotificationsRoutes(deps);
   registerAnalyticsRoutes(deps);
+  registerInvestRoutes(deps);
 }
 
 export type { RouteDeps };
