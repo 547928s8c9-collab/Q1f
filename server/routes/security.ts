@@ -259,7 +259,7 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
   });
 
   // POST /api/security/whitelist/toggle (protected)
-  app.post("/api/security/whitelist/toggle", isAuthenticated, async (req, res) => {
+  app.post("/api/security/whitelist/toggle", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
@@ -351,7 +351,7 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
   });
 
   // POST /api/security/address-delay (protected)
-  app.post("/api/security/address-delay", isAuthenticated, async (req, res) => {
+  app.post("/api/security/address-delay", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ delay: z.number().min(0).max(24) });
@@ -370,7 +370,7 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
   });
 
   // POST /api/security/anti-phishing (protected)
-  app.post("/api/security/anti-phishing", isAuthenticated, async (req, res) => {
+  app.post("/api/security/anti-phishing", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ code: z.string().min(1).max(20) });
@@ -389,7 +389,7 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
   });
 
   // POST /api/security/auto-sweep (protected)
-  app.post("/api/security/auto-sweep", isAuthenticated, async (req, res) => {
+  app.post("/api/security/auto-sweep", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const schema = z.object({ enabled: z.boolean() });
