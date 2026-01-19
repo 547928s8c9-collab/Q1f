@@ -37,6 +37,7 @@ import Dashboard from "@/pages/dashboard";
 import AdminKyc from "@/pages/admin/kyc";
 import AdminWithdrawals from "@/pages/admin/withdrawals";
 import AdminDashboard from "@/pages/admin/dashboard";
+import TelegramMiniApp from "@/pages/tg";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRouter() {
@@ -118,7 +119,11 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <AuthenticatedApp />
+          <Switch>
+            <Route path="/tg" component={TelegramMiniApp} />
+            <Route path="/telegram" component={TelegramMiniApp} />
+            <Route component={AuthenticatedApp} />
+          </Switch>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
