@@ -556,6 +556,112 @@ export const insertMarketCandleSchema = createInsertSchema(marketCandles).omit({
 export type InsertMarketCandle = z.infer<typeof insertMarketCandleSchema>;
 export type MarketCandle = typeof marketCandles.$inferSelect;
 
+// ==================== SYNTHETIC CANDLES ====================
+// OHLCV candles for simulations/synthetic data
+// ts = start-of-candle UTC milliseconds
+export const syntheticCandles = pgTable("synthetic_candles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("sim"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  open: text("open").notNull(),
+  high: text("high").notNull(),
+  low: text("low").notNull(),
+  close: text("close").notNull(),
+  volume: text("volume").notNull(),
+}, (table) => [
+  uniqueIndex("synthetic_candles_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("synthetic_candles_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertSyntheticCandleSchema = createInsertSchema(syntheticCandles).omit({ id: true });
+export type InsertSyntheticCandle = z.infer<typeof insertSyntheticCandleSchema>;
+export type SyntheticCandle = typeof syntheticCandles.$inferSelect;
+
+// ==================== SIM TRADES ====================
+export const simTrades = pgTable("sim_trades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("sim"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  side: text("side").notNull(), // LONG
+  qty: text("qty").notNull(), // base units as string
+  entryPrice: text("entry_price").notNull(),
+  exitPrice: text("exit_price").notNull(),
+  grossPnlMinor: text("gross_pnl_minor").notNull(),
+  feesMinor: text("fees_minor").notNull(),
+  netPnlMinor: text("net_pnl_minor").notNull(),
+  holdBars: integer("hold_bars").notNull(),
+  reason: text("reason"),
+}, (table) => [
+  uniqueIndex("sim_trades_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("sim_trades_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertSimTradeSchema = createInsertSchema(simTrades).omit({ id: true });
+export type InsertSimTrade = z.infer<typeof insertSimTradeSchema>;
+export type SimTrade = typeof simTrades.$inferSelect;
+
+// ==================== SIM POSITIONS ====================
+export const simPositions = pgTable("sim_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("sim"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  side: text("side").notNull(), // LONG | FLAT
+  qty: text("qty").notNull(),
+  entryPrice: text("entry_price").notNull(),
+  entryTs: bigint("entry_ts", { mode: "number" }).notNull(),
+  entryBarIndex: integer("entry_bar_index").notNull(),
+}, (table) => [
+  uniqueIndex("sim_positions_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("sim_positions_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertSimPositionSchema = createInsertSchema(simPositions).omit({ id: true });
+export type InsertSimPosition = z.infer<typeof insertSimPositionSchema>;
+export type SimPosition = typeof simPositions.$inferSelect;
+
+// ==================== SIM EQUITY SNAPSHOTS ====================
+export const simEquitySnapshots = pgTable("sim_equity_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("sim"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  equityMinor: text("equity_minor").notNull(),
+  cashMinor: text("cash_minor").notNull(),
+  positionValueMinor: text("position_value_minor").notNull(),
+  drawdownBps: integer("drawdown_bps").notNull().default(0),
+}, (table) => [
+  uniqueIndex("sim_equity_snapshots_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("sim_equity_snapshots_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertSimEquitySnapshotSchema = createInsertSchema(simEquitySnapshots).omit({ id: true });
+export type InsertSimEquitySnapshot = z.infer<typeof insertSimEquitySnapshotSchema>;
+export type SimEquitySnapshot = typeof simEquitySnapshots.$inferSelect;
+
+// ==================== BENCHMARK SERIES ====================
+export const benchmarkSeries = pgTable("benchmark_series", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("sim"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  valueMinor: text("value_minor").notNull(),
+}, (table) => [
+  uniqueIndex("benchmark_series_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("benchmark_series_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+]);
+
+export const insertBenchmarkSeriesSchema = createInsertSchema(benchmarkSeries).omit({ id: true });
+export type InsertBenchmarkSeries = z.infer<typeof insertBenchmarkSeriesSchema>;
+export type BenchmarkSeries = typeof benchmarkSeries.$inferSelect;
+
 // ==================== MARKET DATA TYPES ====================
 // Timeframe validation
 export const VALID_TIMEFRAMES = ["15m", "1h", "1d"] as const;
