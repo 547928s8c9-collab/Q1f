@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { getNetReceiveMinor, getTotalDeductMinor, getMaxWithdrawableMinor, meetsMinimumWithdrawal } from "@/lib/withdrawal";
 import { formatMoney, parseMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import {
@@ -25,7 +26,7 @@ export default function Withdraw() {
   const [address, setAddress] = useState("");
   const [selectedWhitelist, setSelectedWhitelist] = useState<string>("");
 
-  const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
+  const { data: bootstrap } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });
 
@@ -35,11 +36,15 @@ export default function Withdraw() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: { amount: string; address: string }) => {
-      return apiRequest("POST", "/api/withdraw/usdt", data);
+      const idempotencyKey = crypto.randomUUID();
+      return apiRequest("POST", "/api/withdraw/usdt", data, {
+        headers: { "Idempotency-Key": idempotencyKey },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       toast({
         title: "Withdrawal initiated",
         description: "Your withdrawal is being processed",
@@ -59,12 +64,30 @@ export default function Withdraw() {
 
   const availableBalance = bootstrap?.balances.USDT.available || "0";
   const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
+  const minWithdrawalMinor = bootstrap?.config?.minWithdrawal || "0";
+  const networkFeeMinor = bootstrap?.config?.networkFee || NETWORK_FEE_MINOR;
+  const totalDeductMinor = getTotalDeductMinor(amountInMinor, networkFeeMinor);
   const isValidAmount = BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
+  const meetsMinimum = meetsMinimumWithdrawal(amountInMinor, minWithdrawalMinor);
+  const hasEnoughForFee = BigInt(availableBalance) >= BigInt(totalDeductMinor);
   const finalAddress = selectedWhitelist || address;
-  const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
+  const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && meetsMinimum && hasEnoughForFee && finalAddress.length > 30 && !withdrawMutation.isPending;
 
   const activeWhitelist = whitelist?.filter((w) => w.status === AddressStatus.ACTIVE) || [];
   const whitelistEnabled = bootstrap?.security.whitelistEnabled;
+
+  const maxWithdrawableMinor = useMemo(
+    () => getMaxWithdrawableMinor(availableBalance, networkFeeMinor),
+    [availableBalance, networkFeeMinor],
+  );
+  const uiMinWithdrawal = useMemo(() => formatMoney(minWithdrawalMinor, "USDT"), [minWithdrawalMinor]);
+  const uiNetworkFee = useMemo(() => formatMoney(networkFeeMinor, "USDT"), [networkFeeMinor]);
+  const uiMaxWithdrawable = useMemo(() => formatMoney(maxWithdrawableMinor, "USDT"), [maxWithdrawableMinor]);
+  const uiYouReceive = useMemo(() => {
+    if (!amount) return "0.00";
+    const net = getNetReceiveMinor(amountInMinor, networkFeeMinor);
+    return formatMoney(net, "USDT");
+  }, [amount, amountInMinor, networkFeeMinor]);
 
   const handleWithdraw = () => {
     if (!canWithdraw) return;
@@ -72,7 +95,7 @@ export default function Withdraw() {
   };
 
   const handleMaxClick = () => {
-    setAmount(formatMoney(availableBalance, "USDT"));
+    setAmount(uiMaxWithdrawable);
   };
 
   return (
@@ -105,7 +128,7 @@ export default function Withdraw() {
                 className="text-xs text-primary hover:underline"
                 data-testid="button-max-withdraw"
               >
-                Max: {formatMoney(availableBalance, "USDT")} USDT
+                Max: {uiMaxWithdrawable} USDT
               </button>
             </div>
             <div className="relative">
@@ -174,13 +197,15 @@ export default function Withdraw() {
           <div className="bg-muted rounded-lg p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Network Fee</span>
-              <span className="font-medium tabular-nums">~{formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT")} USDT</span>
+              <span className="font-medium tabular-nums">~{uiNetworkFee} USDT</span>
             </div>
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">You'll receive</span>
-              <span className="font-medium tabular-nums">
-                {amount ? (parseFloat(amount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
-              </span>
+              <span className="font-medium tabular-nums">{uiYouReceive} USDT</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground mt-3">
+              <span>Minimum withdrawal</span>
+              <span className="tabular-nums">{uiMinWithdrawal} USDT</span>
             </div>
           </div>
         </div>
