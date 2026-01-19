@@ -23,6 +23,7 @@ import Activity from "@/pages/activity/index";
 import Receipt from "@/pages/activity/receipt";
 import Settings from "@/pages/settings/index";
 import SecuritySettings from "@/pages/settings/security";
+import SettingsProfile from "@/pages/settings/profile";
 import Statements from "@/pages/statements";
 import StatusPage from "@/pages/status";
 import OnboardingWelcome from "@/pages/onboarding/index";
@@ -57,6 +58,7 @@ function ProtectedRouter() {
           <Route path="/withdraw" component={Withdraw} />
           <Route path="/activity" component={Activity} />
           <Route path="/activity/:operationId" component={Receipt} />
+          <Route path="/settings/profile" component={SettingsProfile} />
           <Route path="/settings" component={Settings} />
           <Route path="/settings/security" component={SecuritySettings} />
           <Route path="/statements" component={Statements} />
