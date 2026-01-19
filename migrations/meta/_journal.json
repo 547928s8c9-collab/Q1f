@@ -1,1 +1,1 @@
-{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"7","when":1750000000000,"tag":"0000_add_strategy_profiles","breakpoints":true}]}
+{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"7","when":1750000000000,"tag":"0000_add_strategy_profiles","breakpoints":true},{"idx":1,"version":"7","when":1750000000001,"tag":"0001_add_sim_trading","breakpoints":true}]}
