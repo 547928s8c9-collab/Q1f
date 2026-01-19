@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,10 +49,50 @@ export default function Vaults() {
   const [goalAmount, setGoalAmount] = useState("");
   const [autoSweepPct, setAutoSweepPct] = useState(0);
   const [autoSweepEnabled, setAutoSweepEnabled] = useState(false);
+  const [twoFactorDialogOpen, setTwoFactorDialogOpen] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const pendingTwoFactorResolver = useRef<((code: string | null) => void) | null>(null);
 
   const { data: bootstrap, isLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });
+  const twoFactorEnabled = bootstrap?.security.twoFactorEnabled ?? false;
+
+  const resolveTwoFactor = useCallback((value: string | null) => {
+    if (pendingTwoFactorResolver.current) {
+      pendingTwoFactorResolver.current(value);
+      pendingTwoFactorResolver.current = null;
+    }
+    setTwoFactorDialogOpen(false);
+  }, []);
+
+  const requestTwoFactorCode = useCallback(() => {
+    if (!twoFactorEnabled) {
+      return Promise.resolve<string | null>(null);
+    }
+    setTwoFactorCode("");
+    setTwoFactorError("");
+    setTwoFactorDialogOpen(true);
+    return new Promise<string | null>((resolve) => {
+      pendingTwoFactorResolver.current = resolve;
+    });
+  }, [twoFactorEnabled]);
+
+  const handleTwoFactorOpenChange = useCallback((open: boolean) => {
+    if (!open && pendingTwoFactorResolver.current) {
+      resolveTwoFactor(null);
+    }
+    setTwoFactorDialogOpen(open);
+  }, [resolveTwoFactor]);
+
+  const handleTwoFactorSubmit = useCallback(() => {
+    if (!/^\d{6}$/.test(twoFactorCode)) {
+      setTwoFactorError("Enter a 6-digit code");
+      return;
+    }
+    resolveTwoFactor(twoFactorCode);
+  }, [resolveTwoFactor, twoFactorCode]);
 
   const transferMutation = useMutation({
     mutationFn: async (data: { fromVault: string; toVault: string; amount: string }) => {
@@ -187,11 +227,24 @@ export default function Vaults() {
           </div>
           <Switch
             checked={bootstrap?.security.autoSweepEnabled || false}
-            onCheckedChange={(checked) => {
-              apiRequest("POST", "/api/security/auto-sweep", { enabled: checked }).then(() => {
-                queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-                toast({ title: "Auto-sweep updated" });
-              });
+            onCheckedChange={async (checked) => {
+              const code = await requestTwoFactorCode();
+              if (twoFactorEnabled && !code) {
+                return;
+              }
+              apiRequest(
+                "POST",
+                "/api/security/auto-sweep",
+                { enabled: checked },
+                { headers: code ? { "x-2fa-code": code } : undefined },
+              )
+                .then(() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
+                  toast({ title: "Auto-sweep updated" });
+                })
+                .catch((error: Error) => {
+                  toast({ title: "Auto-sweep update failed", description: error.message, variant: "destructive" });
+                });
             }}
             data-testid="toggle-auto-sweep"
           />
@@ -310,6 +363,37 @@ export default function Vaults() {
               data-testid="button-save-goal"
             >
               {goalMutation.isPending ? "Saving..." : "Save Goal"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={twoFactorDialogOpen} onOpenChange={handleTwoFactorOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Two-factor confirmation</DialogTitle>
+            <DialogDescription>Enter the 6-digit code from your authenticator app.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="two-factor-code">2FA Code</Label>
+              <Input
+                id="two-factor-code"
+                type="text"
+                inputMode="numeric"
+                value={twoFactorCode}
+                onChange={(e) => {
+                  setTwoFactorCode(e.target.value.replace(/\s/g, ""));
+                  setTwoFactorError("");
+                }}
+                placeholder="123456"
+                maxLength={6}
+                className="mt-2"
+              />
+              {twoFactorError && <p className="mt-2 text-sm text-destructive">{twoFactorError}</p>}
+            </div>
+            <Button className="w-full" onClick={handleTwoFactorSubmit}>
+              Confirm
             </Button>
           </div>
         </DialogContent>
