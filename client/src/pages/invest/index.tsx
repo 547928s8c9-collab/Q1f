@@ -7,7 +7,7 @@ import { InvestSheet } from "@/components/operations/invest-sheet";
 import { StrategyCardSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useSetPageTitle } from "@/hooks/use-page-title";
-import { TrendingUp, AlertTriangle } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
 
 export default function Invest() {
@@ -90,10 +90,6 @@ export default function Invest() {
         title="Investment Strategies"
         subtitle="Choose a strategy that matches your risk profile"
       />
-
-      <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
-      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
