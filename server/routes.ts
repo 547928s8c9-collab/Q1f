@@ -3104,6 +3104,7 @@ export async function registerRoutes(
       const normalizedSymbol = symbol.toUpperCase();
 
       if (exchangeParam === "synthetic") {
+        const userId = getUserId(req);
         const strategyId = typeof req.query.strategyId === "string" ? req.query.strategyId : null;
         if (!strategyId) {
           return res.status(400).json({ error: "strategyId is required for synthetic candles" });
