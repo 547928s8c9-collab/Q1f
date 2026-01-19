@@ -19,6 +19,24 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
         storage.getStrategies(),
       ]);
 
+      const benchmarkAssets = ["SP500", "BTC", "GOLD"] as const;
+      const benchmarkTimeframes = [7, 30, 90] as const;
+      const benchmarkSeries = Object.fromEntries(
+        await Promise.all(
+          benchmarkTimeframes.map(async (timeframe) => {
+            const seriesByAsset = Object.fromEntries(
+              await Promise.all(
+                benchmarkAssets.map(async (asset) => {
+                  const series = await storage.getBenchmarkSeries(asset, timeframe);
+                  return [asset, series.map((point) => ({ date: point.date, value: point.value }))] as const;
+                })
+              )
+            );
+            return [timeframe, seriesByAsset] as const;
+          })
+        )
+      );
+
       // Build strategy lookup map
       const strategyMap = new Map(allStrategies.map((s) => [s.id, s]));
 
@@ -122,6 +140,7 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
         },
         equitySeries,
         strategies: perStrategy,
+        benchmarkSeries,
       });
     } catch (error) {
       console.error("Analytics overview error:", error);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { Card } from "@/components/ui/card";
@@ -19,13 +19,19 @@ import { type Strategy, type StrategyPerformance, type PayoutInstruction, type W
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-type Benchmark = "BTC" | "ETH" | "USDT" | "INDEX";
+type Benchmark = "SP500" | "BTC" | "GOLD" | "USDT" | "ETH" | "INDEX";
 
-const benchmarkOptions: { value: Benchmark; label: string }[] = [
+const investedBenchmarkOptions: { value: Benchmark; label: string }[] = [
   { value: "BTC", label: "BTC" },
   { value: "ETH", label: "ETH" },
   { value: "USDT", label: "USDT" },
   { value: "INDEX", label: "Index" },
+];
+
+const nonInvestedBenchmarkOptions: { value: Benchmark; label: string }[] = [
+  { value: "SP500", label: "S&P 500" },
+  { value: "BTC", label: "BTC" },
+  { value: "GOLD", label: "Gold" },
 ];
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
@@ -81,6 +87,19 @@ export default function StrategyDetail() {
   const { data: riskControls } = useQuery<RiskControlsResponse>({
     queryKey: ["/api/positions", params.id, "risk-controls"],
     enabled: !!params.id,
+  });
+
+  interface AnalyticsOverview {
+    benchmarkSeries: Record<
+      string,
+      Record<"SP500" | "BTC" | "GOLD", Array<{ date: string; value: string }>>
+    >;
+  }
+
+  const { data: analyticsOverview } = useQuery<AnalyticsOverview>({
+    queryKey: ["/api/analytics/overview"],
+    enabled: !!params.id,
+    refetchOnWindowFocus: false,
   });
 
   // Initialize payout settings from fetched instruction
@@ -174,6 +193,18 @@ export default function StrategyDetail() {
 
   const isLoading = strategyLoading || perfLoading;
 
+  const hasPosition = riskControls?.hasPosition ?? false;
+  const benchmarkOptions = useMemo(
+    () => (hasPosition ? investedBenchmarkOptions : nonInvestedBenchmarkOptions),
+    [hasPosition]
+  );
+
+  useEffect(() => {
+    if (!benchmarkOptions.find((option) => option.value === benchmark)) {
+      setBenchmark(hasPosition ? "BTC" : "SP500");
+    }
+  }, [benchmark, benchmarkOptions, hasPosition]);
+
   const tier = strategy?.riskTier || "CORE";
   const config = riskConfig[tier] || riskConfig.CORE;
   const Icon = config.icon;
@@ -187,7 +218,7 @@ export default function StrategyDetail() {
     value: (parseFloat(p.equityMinor) / baseValue) * 100,
   }));
 
-  const getBenchmarkValue = (p: StrategyPerformance, index: number): number => {
+  const getBenchmarkValue = (p: StrategyPerformance): number => {
     if (benchmark === "USDT") return 100;
     
     const btcBase = filteredPerf[0]?.benchmarkBtcMinor ? parseFloat(filteredPerf[0].benchmarkBtcMinor) : 1000000000;
@@ -207,10 +238,19 @@ export default function StrategyDetail() {
     return 100;
   };
 
-  const benchmarkData = filteredPerf.map((p, i) => ({
-    date: p.date,
-    value: getBenchmarkValue(p, i),
-  }));
+  const benchmarkData = hasPosition
+    ? filteredPerf.map((p) => ({
+      date: p.date,
+      value: getBenchmarkValue(p),
+    }))
+    : (() => {
+      const series = analyticsOverview?.benchmarkSeries?.[String(period)]?.[benchmark as "SP500" | "BTC" | "GOLD"] ?? [];
+      const seriesByDate = new Map(series.map((point) => [point.date, parseFloat(point.value)]));
+      return strategyData.map((point) => ({
+        date: point.date,
+        value: seriesByDate.get(point.date) ?? 100,
+      }));
+    })();
 
   const lastStrategyValue = strategyData[strategyData.length - 1]?.value || 100;
   const strategyReturn = ((lastStrategyValue - 100) / 100) * 100;
