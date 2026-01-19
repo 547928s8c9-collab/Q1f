@@ -63,6 +63,14 @@ const periodOptions: Array<{ value: 7 | 30 | 90; label: string }> = [
   { value: 90, label: "90D" },
 ];
 
+function toMajorUnits(minorUnits: string, decimals: number = 6): number {
+  const value = BigInt(minorUnits || "0");
+  const divisor = BigInt(Math.pow(10, decimals));
+  const majorPart = value / divisor;
+  const remainder = value % divisor;
+  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
+}
+
 interface InvestCandlesResponse {
   candles: Candle[];
   gaps: { startMs: number; endMs: number; reason: string }[];
@@ -157,6 +165,10 @@ export default function StrategyDetail() {
     ],
     enabled: !!params.id,
   });
+
+  const minInvestmentMajor = useMemo(() => {
+    return toMajorUnits(strategy?.minInvestment ?? "0", 6);
+  }, [strategy?.minInvestment]);
 
   // Initialize payout settings from fetched instruction
   useEffect(() => {
@@ -924,7 +936,10 @@ export default function StrategyDetail() {
             </Card>
             <Card className="p-4">
               <p className="text-xs text-muted-foreground uppercase">Min Investment</p>
-              <p className="text-xl font-semibold">100 USDT</p>
+              <p className="text-xl font-semibold tabular-nums">
+                {minInvestmentMajor.toLocaleString()}{" "}
+                <span className="text-sm font-medium text-muted-foreground">USDT</span>
+              </p>
             </Card>
           </div>
 
