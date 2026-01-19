@@ -14,6 +14,7 @@ import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CandlestickChart, type CandlestickMarker } from "@/components/charts/candlestick-chart";
+import { CompareChart } from "@/components/charts/compare-chart";
 import {
   TrendingUp,
   AlertTriangle,
@@ -42,6 +43,7 @@ import {
 } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -84,6 +86,7 @@ export default function StrategyDetail() {
   const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("15m");
   const [amount, setAmount] = useState("1000");
+  const [performanceView, setPerformanceView] = useState<"strategy" | "benchmark" | "both">("both");
 
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
@@ -109,7 +112,7 @@ export default function StrategyDetail() {
     queryKey: ["/api/strategies", params.id],
   });
 
-  const { data: performance, isLoading: perfLoading } = useQuery<StrategyPerformance[]>({
+  const { data: performance, isLoading: perfLoading, error: perfError } = useQuery<StrategyPerformance[]>({
     queryKey: ["/api/strategies", params.id, "performance", { days: periodDays.toString() }],
   });
 
@@ -252,12 +255,7 @@ export default function StrategyDetail() {
 
   const filteredPerf = performance || [];
 
-  const baseValue = filteredPerf[0]?.equityMinor ? parseFloat(filteredPerf[0].equityMinor) : 1000000000;
-
-  const strategyData = filteredPerf.map((p) => ({
-    date: p.date,
-    value: (parseFloat(p.equityMinor) / baseValue) * 100,
-  }));
+  const strategyData = useMemo(() => buildStrategySeries(filteredPerf), [filteredPerf]);
 
   const lastStrategyValue = strategyData[strategyData.length - 1]?.value || 100;
   const strategyReturn = ((lastStrategyValue - 100) / 100) * 100;
@@ -278,6 +276,7 @@ export default function StrategyDetail() {
   const terms = strategy?.termsJson as { profitPayout?: string; principalRedemption?: string } | null;
 
   const candleData = candleResponse?.candles ?? [];
+  const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
   const trades = insightsResponse?.trades ?? [];
   const metrics = insightsResponse?.metrics;
   const chartMarkers = useMemo<CandlestickMarker[]>(() => {
@@ -303,6 +302,7 @@ export default function StrategyDetail() {
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
+  const benchmarkLabel = candleResponse?.symbol ? `${candleResponse.symbol} Benchmark` : "Market Benchmark";
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -350,6 +350,62 @@ export default function StrategyDetail() {
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
           </div>
+
+          <Card className="p-5 mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold">Performance</h3>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { value: "strategy", label: "Strategy" },
+                  { value: "benchmark", label: "Benchmark" },
+                  { value: "both", label: "Both" },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={performanceView === option.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPerformanceView(option.value as "strategy" | "benchmark" | "both")}
+                    data-testid={`button-performance-${option.value}`}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {perfLoading ? (
+              <ChartSkeleton height={360} />
+            ) : perfError ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Unable to load performance data. Please try again shortly.
+              </div>
+            ) : strategyData.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No performance data available for this range.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <CompareChart
+                  strategyData={strategyData}
+                  benchmarkData={benchmarkData}
+                  strategyName={strategy?.name || "Strategy"}
+                  benchmarkName={benchmarkLabel}
+                  height={360}
+                  mode={performanceView}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {periodDays}D · {strategyData.length} points
+                  </span>
+                  <span className="tabular-nums">
+                    Latest index: {lastStrategyValue.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </Card>
 
           <Card className="p-5 mb-6">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
