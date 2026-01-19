@@ -211,26 +211,26 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 min-w-0">
         <Button
           variant="outline"
           size="sm"
-          className="flex-1"
+          className="flex-1 min-w-0 w-full sm:w-auto text-sm"
           onClick={onTransferIn}
           data-testid={`vault-${type}-transfer-in`}
         >
           <ArrowDownLeft className="w-4 h-4 mr-1" />
-          Transfer In
+          <span className="truncate">Transfer In</span>
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="flex-1"
+          className="flex-1 min-w-0 w-full sm:w-auto text-sm"
           onClick={onTransferOut}
           data-testid={`vault-${type}-transfer-out`}
         >
           <ArrowUpRight className="w-4 h-4 mr-1" />
-          Transfer Out
+          <span className="truncate">Transfer Out</span>
         </Button>
       </div>
     </Card>
