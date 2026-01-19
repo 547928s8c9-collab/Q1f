@@ -15,7 +15,8 @@ import {
   Vault,
   ChevronRight,
   PiggyBank,
-  Plus
+  Plus,
+  Landmark
 } from "lucide-react";
 import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
 
@@ -207,9 +208,10 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
   );
 }
 
-function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
-  const hasVaults = bootstrap && 
-    (BigInt(bootstrap.vaults.principal.balance) > 0n || BigInt(bootstrap.vaults.profit.balance) > 0n);
+export const hasVaultsData = (bootstrap?: BootstrapResponse): boolean => Boolean(bootstrap?.vaults);
+
+export function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
+  const hasVaults = hasVaultsData(bootstrap);
 
   if (isLoading) {
     return (
@@ -280,6 +282,17 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-profit">
             {formatMoney(bootstrap!.vaults.profit.balance, "USDT")}
+          </span>
+        </div>
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-warning/10 flex items-center justify-center">
+              <Landmark className="w-4 h-4 text-warning" />
+            </div>
+            <span className="text-sm font-medium">Taxes</span>
+          </div>
+          <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-taxes">
+            {formatMoney(bootstrap!.vaults.taxes.balance, "USDT")}
           </span>
         </div>
       </div>
