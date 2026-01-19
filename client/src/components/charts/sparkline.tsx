@@ -7,7 +7,7 @@ interface SparklineProps {
 }
 
 export function Sparkline({ data, positive = true, height = 24 }: SparklineProps) {
-  const color = positive ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)";
+  const color = positive ? "hsl(var(--success))" : "hsl(var(--danger))";
 
   return (
     <div className="w-full" style={{ height }}>
