@@ -2173,7 +2173,7 @@ export async function registerRoutes(
       const schema = z.object({
         fromAsset: z.string(),
         toAsset: z.string(),
-        amount: z.string(),
+        amount: z.string().regex(/^\d+(\.\d+)?$/, "Amount must be a valid number"),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -2187,8 +2187,23 @@ export async function registerRoutes(
         USDT: { RUB: DEFAULT_RUB_RATE },
       };
 
-      const rate = rates[fromAsset]?.[toAsset] || 1;
-      const toAmount = Math.round(parseFloat(amount) * rate).toString();
+      const rate = rates[fromAsset]?.[toAsset];
+      if (!rate) {
+        return res.status(400).json({
+          error: "Unsupported currency pair",
+          code: "UNSUPPORTED_PAIR",
+          supportedPairs: Object.entries(rates).flatMap(([from, toRates]) =>
+            Object.keys(toRates).map((to) => `${from}->${to}`),
+          ),
+        });
+      }
+
+      const parsedAmount = Number(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: "Invalid amount", code: "INVALID_AMOUNT" });
+      }
+
+      const toAmount = (parsedAmount * rate).toFixed(2);
 
       res.json({ fromAsset, toAsset, fromAmount: amount, toAmount, rate: rate.toString() });
     } catch (error) {
