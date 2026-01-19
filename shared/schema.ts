@@ -670,6 +670,9 @@ export const OperationType = {
   DAILY_PAYOUT: "DAILY_PAYOUT",
   PROFIT_ACCRUAL: "PROFIT_ACCRUAL",
   PROFIT_PAYOUT: "PROFIT_PAYOUT",
+  SIM_ALLOCATE: "SIM_ALLOCATE",
+  SIM_WITHDRAW: "SIM_WITHDRAW",
+  SIM_PNL: "SIM_PNL",
   PRINCIPAL_REDEEM_EXECUTED: "PRINCIPAL_REDEEM_EXECUTED",
   PAYOUT_SETTINGS_CHANGED: "PAYOUT_SETTINGS_CHANGED",
   FX: "FX",
@@ -819,6 +822,20 @@ export function getOperationCopy(type: string, status: string, metadata?: any): 
     PROFIT_PAYOUT: {
       pending: { title: "Profit Payout", subtitle: "Processing withdrawal" },
       completed: { title: "Profit Payout", subtitle: `Payout from ${metadata?.strategyName || "strategy"}` },
+    },
+    SIM_ALLOCATE: {
+      pending: { title: "Sim Allocation", subtitle: "Allocating to simulation" },
+      completed: { title: "Sim Allocation", subtitle: `Allocated to ${metadata?.strategyName || "strategy"}` },
+      failed: { title: "Sim Allocation", subtitle: "Allocation failed" },
+    },
+    SIM_WITHDRAW: {
+      pending: { title: "Sim Withdrawal", subtitle: "Processing withdrawal" },
+      completed: { title: "Sim Withdrawal", subtitle: "Funds returned to cash" },
+      failed: { title: "Sim Withdrawal", subtitle: "Withdrawal failed" },
+    },
+    SIM_PNL: {
+      pending: { title: "Sim P&L", subtitle: "Updating simulated P&L" },
+      completed: { title: "Sim P&L", subtitle: "Simulated P&L applied" },
     },
     PRINCIPAL_REDEEM_EXECUTED: {
       pending: { title: "Principal Redemption", subtitle: "Processing" },

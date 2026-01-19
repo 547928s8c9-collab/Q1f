@@ -1,5 +1,6 @@
 import type { RouteDeps } from "./types";
 import { storage } from "../storage";
+import { buildSimulatedEquity } from "../lib/simulated-equity";
 
 export function registerAnalyticsRoutes(deps: RouteDeps): void {
   const { app, isAuthenticated, getUserId } = deps;
@@ -19,30 +20,48 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
         storage.getStrategies(),
       ]);
 
+      const uniqueStrategyIds = Array.from(new Set(positions.map((p) => p.strategyId)));
+      const performanceEntries = await Promise.all(
+        uniqueStrategyIds.map(async (strategyId) => ({
+          strategyId,
+          performance: await storage.getStrategyPerformance(strategyId, days),
+        }))
+      );
+      const performanceByStrategy = new Map(
+        performanceEntries.map(({ strategyId, performance }) => [strategyId, performance])
+      );
+
+      const simulatedEquity = buildSimulatedEquity(positions, performanceByStrategy);
+
       // Build strategy lookup map
       const strategyMap = new Map(allStrategies.map((s) => [s.id, s]));
 
-      // Calculate total equity (balances + vaults + positions)
+      // Calculate total equity (real cash + simulated equity)
       let totalEquityMinor = BigInt(0);
+      let realCashMinor = BigInt(0);
 
       // Sum wallet balances (USDT only for now)
       for (const b of balances) {
         if (b.asset === "USDT") {
-          totalEquityMinor += BigInt(b.available || "0") + BigInt(b.locked || "0");
+          realCashMinor += BigInt(b.available || "0") + BigInt(b.locked || "0");
         }
       }
 
       // Sum vault balances
       for (const v of vaults) {
         if (v.asset === "USDT") {
-          totalEquityMinor += BigInt(v.balance || "0");
+          realCashMinor += BigInt(v.balance || "0");
         }
       }
 
-      // Sum positions (investedCurrentMinor = current value including gains/losses)
-      for (const p of positions) {
-        totalEquityMinor += BigInt(p.investedCurrentMinor || "0");
-      }
+      totalEquityMinor = realCashMinor + simulatedEquity.totalCurrentMinor;
+
+      const combinedSeries = simulatedEquity.series.length > 0
+        ? simulatedEquity.series.map((point) => ({
+          date: point.date,
+          value: (realCashMinor + BigInt(point.equityMinor)).toString(),
+        }))
+        : portfolioSeries.map((s) => ({ date: s.date, value: s.value }));
 
       // Calculate PnL and ROI from portfolio series
       let pnl30dMinor = BigInt(0);
@@ -50,7 +69,7 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
       let maxDrawdown30dPct = 0;
 
       // Sort series by date ascending
-      const sortedSeries = [...portfolioSeries].sort((a, b) => a.date.localeCompare(b.date));
+      const sortedSeries = [...combinedSeries].sort((a, b) => a.date.localeCompare(b.date));
 
       if (sortedSeries.length >= 2) {
         const firstValue = BigInt(sortedSeries[0].value || "0");
@@ -86,8 +105,9 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
       // Per-strategy breakdown
       const perStrategy = positions.map((pos) => {
         const strategy = strategyMap.get(pos.strategyId);
-        const principal = BigInt(pos.principalMinor || "0");
-        const current = BigInt(pos.investedCurrentMinor || "0");
+        const principal = BigInt(pos.principalMinor || pos.principal || "0");
+        const simulatedCurrent = simulatedEquity.perStrategyCurrent.get(pos.strategyId);
+        const current = simulatedCurrent ?? BigInt(pos.investedCurrentMinor || pos.currentValue || "0");
         const pnlMinor = current - principal;
         const roiPct = principal > 0n ? (Number(pnlMinor) / Number(principal)) * 100 : 0;
 
@@ -96,7 +116,7 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
           name: strategy?.name || "Unknown Strategy",
           riskTier: strategy?.riskTier || "CORE",
           allocatedMinor: pos.principalMinor || "0",
-          currentMinor: pos.investedCurrentMinor || "0",
+          currentMinor: current.toString(),
           pnlMinor: pnlMinor.toString(),
           roiPct: Math.round(roiPct * 100) / 100,
           accruedProfitMinor: pos.accruedProfitPayableMinor || "0",
