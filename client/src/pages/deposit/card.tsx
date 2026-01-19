@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
+import { toMinorUnits } from "@/lib/money";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { CreditCard, Loader2, AlertCircle } from "lucide-react";
 import type { BootstrapResponse } from "@shared/schema";
@@ -43,8 +44,17 @@ export default function DepositCard() {
   });
 
   const handleDeposit = () => {
-    if (!amount) return;
-    const amountInKopeks = (parseFloat(amount) * 100).toString();
+    const amountInKopeks = toMinorUnits(amount, 2);
+
+    if (!amountInKopeks || amountInKopeks === "0") {
+      toast({
+        title: "Invalid amount",
+        description: "Enter a RUB amount greater than zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     simulateMutation.mutate(amountInKopeks);
   };
 
