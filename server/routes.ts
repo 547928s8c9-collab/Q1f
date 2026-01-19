@@ -4,6 +4,16 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { formatMoney, VALID_TIMEFRAMES, type Timeframe, AddressStatus } from "@shared/schema";
+import {
+  DEFAULT_RUB_RATE,
+  DEPOSIT_ADDRESS,
+  MIN_DEPOSIT_MINOR,
+  MIN_DEPOSIT_MINOR_BIGINT,
+  MIN_WITHDRAWAL_MINOR,
+  MIN_WITHDRAWAL_MINOR_BIGINT,
+  NETWORK_FEE_MINOR,
+  NETWORK_FEE_MINOR_BIGINT,
+} from "./config";
 import { registerExtractedRoutes } from "./routes/index";
 import { loadCandles } from "./marketData/loadCandles";
 
@@ -29,13 +39,6 @@ function devOnly(_req: Request, res: Response, next: NextFunction) {
   }
   next();
 }
-
-// Configurable financial parameters (env-driven with sensible defaults)
-const DEPOSIT_ADDRESS = process.env.DEPOSIT_ADDRESS || "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
-const NETWORK_FEE_MINOR = process.env.NETWORK_FEE_MINOR || "1000000"; // 1 USDT
-const MIN_WITHDRAWAL_MINOR = process.env.MIN_WITHDRAWAL_MINOR || "10000000"; // 10 USDT
-const MIN_DEPOSIT_MINOR = process.env.MIN_DEPOSIT_MINOR || "10000000"; // 10 USDT
-const DEFAULT_RUB_RATE = parseFloat(process.env.DEFAULT_RUB_RATE || "92.5");
 
 // Common amount schema: digits only, must be > 0
 const amountSchema = z.string()
@@ -816,7 +819,7 @@ export async function registerRoutes(
       const { amount } = parsed.data;
 
       // Validate minimum deposit
-      if (BigInt(amount) < BigInt(MIN_DEPOSIT_MINOR)) {
+      if (BigInt(amount) < MIN_DEPOSIT_MINOR_BIGINT) {
         const errorBody = { error: "Amount below minimum deposit", code: "MIN_DEPOSIT", minimum: MIN_DEPOSIT_MINOR };
         if (lock.acquired) {
           await completeIdempotency(lock.keyId, null, 400, errorBody);
@@ -1365,7 +1368,7 @@ export async function registerRoutes(
       const { amount, address } = parsed.data;
 
       // Validate minimum withdrawal
-      if (BigInt(amount) < BigInt(MIN_WITHDRAWAL_MINOR)) {
+      if (BigInt(amount) < MIN_WITHDRAWAL_MINOR_BIGINT) {
         const errorBody = { error: "Amount below minimum withdrawal", code: "MIN_WITHDRAWAL", minimum: MIN_WITHDRAWAL_MINOR };
         if (lock.acquired) {
           await completeIdempotency(lock.keyId, null, 400, errorBody);
@@ -2742,7 +2745,7 @@ export async function registerRoutes(
         }
 
         const gross = BigInt(position.accruedProfitPayableMinor || "0");
-        const networkFee = BigInt(NETWORK_FEE_MINOR);
+        const networkFee = NETWORK_FEE_MINOR_BIGINT;
         const minPayout = BigInt(instruction.minPayoutMinor);
         const net = gross - networkFee;
 
