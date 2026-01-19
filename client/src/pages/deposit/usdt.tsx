@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
+import { toMinorUnits } from "@/lib/money";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 
 const FALLBACK_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
@@ -47,8 +48,17 @@ export default function DepositUSDT() {
   });
 
   const handleSimulate = () => {
-    if (!simulateAmount) return;
-    const amountInMinor = (parseFloat(simulateAmount) * 1000000).toString();
+    const amountInMinor = toMinorUnits(simulateAmount, 6);
+
+    if (!amountInMinor || amountInMinor === "0") {
+      toast({
+        title: "Invalid amount",
+        description: "Enter a USDT amount greater than zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     simulateMutation.mutate(amountInMinor);
   };
 
