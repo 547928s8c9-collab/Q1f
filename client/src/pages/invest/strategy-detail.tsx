@@ -47,7 +47,7 @@ import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
-  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Core" },
+  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Core Risk" },
   HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "High Risk" },
 };
 
@@ -189,11 +189,11 @@ export default function StrategyDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payout-instructions", params.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
-      toast({ title: "Настройки выплат сохранены" });
+      toast({ title: "Payout settings saved" });
     },
     onError: (error: Error & { code?: string }) => {
       toast({
-        title: "Ошибка сохранения",
+        title: "Save failed",
         description: error.message,
         variant: "destructive",
       });
@@ -222,7 +222,7 @@ export default function StrategyDetail() {
       toast({ title: data.message || "Strategy pause status updated" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -235,7 +235,7 @@ export default function StrategyDetail() {
       toast({ title: "Risk controls updated" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -543,7 +543,7 @@ export default function StrategyDetail() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Activity className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Trades Tape</h3>
+                  <h3 className="text-lg font-semibold">Trade Tape</h3>
                 </div>
                 <Badge variant="outline" className="text-xs">
                   {trades.length} trades
@@ -628,7 +628,7 @@ export default function StrategyDetail() {
                 <p className="text-2xl font-bold tabular-nums">{result.toFixed(2)} USDT</p>
               </div>
               <div className="flex flex-col justify-end">
-                <Label className="text-muted-foreground">Profit/Loss</Label>
+                <Label className="text-muted-foreground">Profit / Loss</Label>
                 <p className={cn("text-2xl font-bold tabular-nums", pnl >= 0 ? "text-positive" : "text-negative")}>
                   {pnl >= 0 ? "+" : ""}
                   {pnl.toFixed(2)} USDT
@@ -644,13 +644,13 @@ export default function StrategyDetail() {
           <Card className="p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Wallet className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold">Настройки выплат</h3>
+              <h3 className="text-lg font-semibold">Payout Settings</h3>
             </div>
 
             <div className="space-y-5">
               {/* Frequency Toggle */}
               <div>
-                <Label className="text-sm text-muted-foreground mb-2 block">Частота выплат</Label>
+                <Label className="text-sm text-muted-foreground mb-2 block">Payout Frequency</Label>
                 <div className="flex gap-2">
                   <Button
                     variant={payoutFrequency === "DAILY" ? "default" : "outline"}
@@ -658,7 +658,7 @@ export default function StrategyDetail() {
                     onClick={() => setPayoutFrequency("DAILY")}
                     data-testid="button-frequency-daily"
                   >
-                    Ежедневно
+                    Daily
                   </Button>
                   <Button
                     variant={payoutFrequency === "MONTHLY" ? "default" : "outline"}
@@ -666,18 +666,18 @@ export default function StrategyDetail() {
                     onClick={() => setPayoutFrequency("MONTHLY")}
                     data-testid="button-frequency-monthly"
                   >
-                    Ежемесячно
+                    Monthly
                   </Button>
                 </div>
               </div>
 
               {/* Address Selection */}
               <div>
-                <Label className="text-sm text-muted-foreground mb-2 block">Адрес для выплат (TRC20)</Label>
+                <Label className="text-sm text-muted-foreground mb-2 block">Payout Address (TRC20)</Label>
                 {hasActiveAddress ? (
                   <Select value={payoutAddressId} onValueChange={setPayoutAddressId}>
                     <SelectTrigger data-testid="select-payout-address">
-                      <SelectValue placeholder="Выберите адрес" />
+                      <SelectValue placeholder="Select address" />
                     </SelectTrigger>
                     <SelectContent>
                       {activeAddresses.map((addr) => (
@@ -694,7 +694,7 @@ export default function StrategyDetail() {
                             {addr.label ? `${addr.label}: ` : ""}
                             {addr.address.slice(0, 8)}...{addr.address.slice(-6)}
                             <span className="ml-2 text-warning">
-                              (активируется {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString() : "..."})
+                              (activates {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString() : "..."})
                             </span>
                           </span>
                         </SelectItem>
@@ -703,11 +703,11 @@ export default function StrategyDetail() {
                   </Select>
                 ) : (
                   <div className="p-4 border border-dashed rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground mb-3">Нет активных адресов для выплат</p>
+                    <p className="text-sm text-muted-foreground mb-3">No active payout addresses</p>
                     <Link href="/settings/security">
                       <Button variant="outline" size="sm" data-testid="button-add-address">
                         <ExternalLink className="w-4 h-4 mr-2" />
-                        Добавить адрес
+                        Add address
                       </Button>
                     </Link>
                   </div>
@@ -717,7 +717,7 @@ export default function StrategyDetail() {
               {/* Min Payout Amount */}
               <div>
                 <Label htmlFor="min-payout" className="text-sm text-muted-foreground mb-2 block">
-                  Минимальная сумма выплаты (USDT)
+                  Minimum Payout Amount (USDT)
                 </Label>
                 <Input
                   id="min-payout"
@@ -734,10 +734,8 @@ export default function StrategyDetail() {
               {/* Active Switch */}
               <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                 <div>
-                  <p className="font-medium">Автовыплата профита</p>
-                  <p className="text-xs text-muted-foreground">
-                    Автоматически выплачивать прибыль на выбранный адрес
-                  </p>
+                  <p className="font-medium">Auto-Payout Profits</p>
+                  <p className="text-xs text-muted-foreground">Automatically send profits to the selected address</p>
                 </div>
                 <Switch
                   checked={payoutActive}
@@ -751,11 +749,11 @@ export default function StrategyDetail() {
               <div className="space-y-2">
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>Комиссия сети (1 USDT) вычитается из выплаты.</span>
+                  <span>Network fee (1 USDT) is deducted from each payout.</span>
                 </div>
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>Если сумма после комиссии меньше порога — прибыль копится до следующей выплаты.</span>
+                  <span>If the post-fee amount is below the threshold, profits roll over to the next payout.</span>
                 </div>
               </div>
 
@@ -766,7 +764,7 @@ export default function StrategyDetail() {
                 className="w-full"
                 data-testid="button-save-payout"
               >
-                {savePayoutMutation.isPending ? "Сохранение..." : "Сохранить настройки"}
+                {savePayoutMutation.isPending ? "Saving..." : "Save payout settings"}
               </Button>
             </div>
           </Card>
@@ -946,7 +944,7 @@ export default function StrategyDetail() {
               <div>
                 <p className="text-sm text-muted-foreground">Fees</p>
                 <p className="text-sm">
-                  Management: {fees?.management || "0.5%"} | Performance: {fees?.performance || "10%"}
+                  Management Fee: {fees?.management || "0.5%"} | Performance Fee: {fees?.performance || "10%"}
                 </p>
               </div>
               <div>

@@ -22,27 +22,30 @@ interface StrategyDetailsSheetProps {
   onInvest?: () => void;
 }
 
-const riskConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string; description: string }> = {
-  LOW: { 
-    color: "bg-positive/10 text-positive", 
-    chipVariant: "success", 
-    icon: Shield, 
+const riskConfig: Record<
+  string,
+  { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string; description: string }
+> = {
+  LOW: {
+    color: "bg-positive/10 text-positive",
+    chipVariant: "success",
+    icon: Shield,
     label: "Low Risk",
-    description: "Conservative approach with stable returns"
+    description: "Conservative approach with stable returns",
   },
-  CORE: { 
-    color: "bg-warning/10 text-warning", 
-    chipVariant: "warning", 
-    icon: TrendingUp, 
-    label: "Medium Risk",
-    description: "Balanced risk-reward profile"
+  CORE: {
+    color: "bg-warning/10 text-warning",
+    chipVariant: "warning",
+    icon: TrendingUp,
+    label: "Core Risk",
+    description: "Balanced risk-reward profile",
   },
-  HIGH: { 
-    color: "bg-negative/10 text-negative", 
-    chipVariant: "danger", 
-    icon: Zap, 
+  HIGH: {
+    color: "bg-negative/10 text-negative",
+    chipVariant: "danger",
+    icon: Zap,
     label: "High Risk",
-    description: "Higher potential returns with increased volatility"
+    description: "Higher potential returns with increased volatility",
   },
 };
 
@@ -160,7 +163,7 @@ export function StrategyDetailsSheet({
         </div>
 
         <Card className="p-4 mb-6">
-          <h3 className="text-sm font-semibold mb-3">Risk Profile</h3>
+          <h3 className="text-sm font-semibold mb-3">Risk Tier</h3>
           <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
             <div className={cn("w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0", config.color)}>
               <Icon className="w-5 h-5" />
