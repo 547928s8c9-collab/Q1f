@@ -114,7 +114,11 @@ function QuickActions({
 
 function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
   const hasBalances = bootstrap && 
-    (BigInt(bootstrap.balances.USDT.available) > 0n || BigInt(bootstrap.balances.RUB.available) > 0n);
+    (BigInt(bootstrap.balances.USDT.available) > 0n ||
+      BigInt(bootstrap.balances.USDT.locked) > 0n ||
+      BigInt(bootstrap.balances.RUB.available) > 0n ||
+      BigInt(bootstrap.balances.RUB.locked) > 0n ||
+      BigInt(bootstrap.invested.current) > 0n);
 
   if (isLoading) {
     return (
@@ -172,9 +176,20 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
             </div>
             <span className="text-sm font-medium">USDT</span>
           </div>
-          <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-usdt">
-            {formatMoney(bootstrap!.balances.USDT.available, "USDT")}
-          </span>
+          <div className="text-right">
+            <div className="flex items-baseline justify-end gap-2">
+              <span className="text-xs text-muted-foreground">Available</span>
+              <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-usdt">
+                {formatMoney(bootstrap!.balances.USDT.available, "USDT")}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-end gap-2">
+              <span className="text-xs text-muted-foreground">Invested</span>
+              <span className="text-xs font-medium tabular-nums" data-testid="text-balance-usdt-invested">
+                {formatMoney(bootstrap!.invested.current, "USDT")}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center justify-between py-2">
           <div className="flex items-center gap-2">
