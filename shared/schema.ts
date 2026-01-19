@@ -586,6 +586,31 @@ export const updateNotificationPreferencesSchema = z.object({
 });
 export type UpdateNotificationPreferences = z.infer<typeof updateNotificationPreferencesSchema>;
 
+// ==================== TELEGRAM LINKING ====================
+export const telegramAccounts = pgTable("telegram_accounts", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  telegramUserId: text("telegram_user_id").notNull(),
+  linkedAt: timestamp("linked_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_accounts_telegram_user_idx").on(table.telegramUserId),
+]);
+
+export type TelegramAccount = typeof telegramAccounts.$inferSelect;
+
+export const telegramLinkTokens = pgTable("telegram_link_tokens", {
+  code: varchar("code", { length: 10 }).notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_link_tokens_code_idx").on(table.code),
+  index("telegram_link_tokens_user_idx").on(table.userId),
+]);
+
+export type TelegramLinkToken = typeof telegramLinkTokens.$inferSelect;
+
 // ==================== IDEMPOTENCY KEYS ====================
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

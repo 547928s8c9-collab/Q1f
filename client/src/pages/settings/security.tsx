@@ -30,6 +30,14 @@ import {
 import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet, Bell, Mail, MessageCircle, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 
+type TelegramLinkTokenPayload = {
+  ok: true;
+  data: {
+    code: string;
+    expiresAt: string;
+  };
+};
+
 export default function SecuritySettings() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -37,6 +45,8 @@ export default function SecuritySettings() {
   const [addAddressDialog, setAddAddressDialog] = useState(false);
   const [antiPhishingCode, setAntiPhishingCode] = useState("");
   const [newAddress, setNewAddress] = useState({ address: "", label: "" });
+  const [linkToken, setLinkToken] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [linkTokenRemainingMs, setLinkTokenRemainingMs] = useState<number | null>(null);
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -169,6 +179,46 @@ export default function SecuritySettings() {
     },
   });
 
+  const linkTokenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/telegram/link-token");
+      return res.json() as Promise<TelegramLinkTokenPayload>;
+    },
+    onSuccess: (payload) => {
+      setLinkToken(payload.data);
+      toast({ title: "Link code ready", description: "Use it in the Telegram Mini App within 10 minutes." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to create link code", description: error.message, variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (!linkToken) {
+      setLinkTokenRemainingMs(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const expiresAt = new Date(linkToken.expiresAt).getTime();
+      setLinkTokenRemainingMs(expiresAt - Date.now());
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+
+    return () => clearInterval(interval);
+  }, [linkToken]);
+
+  const formattedLinkTokenTtl = (() => {
+    if (linkTokenRemainingMs === null) return null;
+    if (linkTokenRemainingMs <= 0) return "Expired";
+    const totalSeconds = Math.ceil(linkTokenRemainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  })();
+
   const isLoading = bootstrapLoading || whitelistLoading || notifPrefsLoading;
 
   return (
@@ -297,6 +347,46 @@ export default function SecuritySettings() {
                 <p className="text-xs text-muted-foreground mt-1">Add addresses to enable secure withdrawals</p>
               </div>
             )}
+            </Card>
+          </section>
+
+          <section>
+            <SectionHeader title="Telegram" />
+            <Card>
+              <div className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Link your Telegram</p>
+                  <p className="text-xs text-muted-foreground">
+                    Generate a short-lived code to link your Telegram account in the Mini App.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => linkTokenMutation.mutate()}
+                  disabled={linkTokenMutation.isPending}
+                >
+                  {linkTokenMutation.isPending ? "Generating..." : "Get link code"}
+                </Button>
+              </div>
+              <div className="border-t border-border px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                {linkToken ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Your link code</p>
+                      <p className="text-lg font-semibold tracking-[0.3em] font-mono tabular-nums">
+                        {linkToken.code}
+                      </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono tabular-nums">
+                      {formattedLinkTokenTtl ? `TTL ${formattedLinkTokenTtl}` : "TTL --:--"}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No active code. Generate one to start linking.
+                  </p>
+                )}
+              </div>
             </Card>
           </section>
 
