@@ -252,6 +252,27 @@ export class SimTrader {
 
     const existingPosition = await this.store.getPosition(this.strategyRecord.id);
     if (existingPosition) {
+      const cash = fromMinor(existingPosition.cashMinor);
+      const equity = fromMinor(existingPosition.equityMinor);
+      const peakEquity = fromMinor(existingPosition.peakEquityMinor);
+      const positionSide = existingPosition.positionSide === "LONG" ? "LONG" : "FLAT";
+      const positionQty = positionSide === "LONG" ? Number(existingPosition.positionQty) || 0 : 0;
+      const positionEntryPrice = positionSide === "LONG" ? Number(existingPosition.positionEntryPrice) || 0 : 0;
+      const positionEntryTs = positionSide === "LONG" ? existingPosition.positionEntryTs ?? 0 : 0;
+
+      this.strategy.hydrate({
+        cash,
+        equity,
+        peakEquity,
+        position: {
+          side: positionSide,
+          qty: positionQty,
+          entryPrice: positionEntryPrice,
+          entryTs: positionEntryTs,
+          entryBarIndex: 0,
+        },
+      });
+
       this.driftScale = Number(existingPosition.driftScale) || 1;
       const minBps = this.strategyRecord.expectedMonthlyRangeBpsMin ?? 300;
       const maxBps = this.strategyRecord.expectedMonthlyRangeBpsMax ?? 600;

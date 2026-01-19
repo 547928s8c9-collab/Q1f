@@ -91,6 +91,14 @@ export interface StrategyState {
   rollingPnls: number[];
 }
 
+export interface StrategyHydration {
+  barIndex?: number;
+  cash?: number;
+  equity?: number;
+  position?: Partial<Position>;
+  peakEquity?: number;
+}
+
 export type EventType = "candle" | "signal" | "order" | "fill" | "trade" | "equity" | "status";
 
 export interface CandlePayload {
@@ -160,6 +168,7 @@ export interface StrategyEvent {
 export interface Strategy {
   onCandle(candle: BaseCandle, futureCandles?: BaseCandle[]): StrategyEvent[];
   getState(): StrategyState;
+  hydrate(state: StrategyHydration): void;
   reset(): void;
 }
 

@@ -5,6 +5,7 @@ import type {
   StrategyMeta,
   StrategyState,
   StrategyEvent,
+  StrategyHydration,
   Order,
   SignalPayload,
 } from "./types";
@@ -374,6 +375,25 @@ export function createBaseStrategy(
     return { ...state };
   }
 
+  function hydrate(hydration: StrategyHydration): void {
+    if (!hydration) return;
+    state = {
+      ...state,
+      barIndex: hydration.barIndex ?? state.barIndex,
+      cash: hydration.cash ?? state.cash,
+      equity: hydration.equity ?? state.equity,
+      position: {
+        ...state.position,
+        ...(hydration.position ?? {}),
+      },
+    };
+    if (typeof hydration.peakEquity === "number") {
+      peakEquity = hydration.peakEquity;
+    } else if (typeof hydration.equity === "number") {
+      peakEquity = Math.max(peakEquity, hydration.equity);
+    }
+  }
+
   function reset(): void {
     seq = 0;
     state = createInitialState();
@@ -381,5 +401,5 @@ export function createBaseStrategy(
     signalGenerator.reset();
   }
 
-  return { onCandle, getState, reset };
+  return { onCandle, getState, hydrate, reset };
 }
