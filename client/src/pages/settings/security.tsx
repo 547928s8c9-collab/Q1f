@@ -37,6 +37,10 @@ export default function SecuritySettings() {
   const [addAddressDialog, setAddAddressDialog] = useState(false);
   const [antiPhishingCode, setAntiPhishingCode] = useState("");
   const [newAddress, setNewAddress] = useState({ address: "", label: "" });
+  const [twoFactorDialogOpen, setTwoFactorDialogOpen] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorError, setTwoFactorError] = useState("");
+  const pendingTwoFactorResolver = useRef<((code: string | null) => void) | null>(null);
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -67,8 +71,16 @@ export default function SecuritySettings() {
   }, [notifPrefs]);
 
   const updateNotifPrefsMutation = useMutation({
-    mutationFn: async (patch: Partial<NotificationPreferences>) => {
-      return apiRequest("PUT", "/api/notification-preferences", patch);
+    mutationFn: async ({
+      patch,
+      twoFactorCode,
+    }: {
+      patch: Partial<NotificationPreferences>;
+      twoFactorCode?: string | null;
+    }) => {
+      return apiRequest("PUT", "/api/notification-preferences", patch, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notification-preferences"] });
@@ -88,19 +100,59 @@ export default function SecuritySettings() {
     },
   });
 
-  const handleNotifToggle = useCallback((key: keyof NotificationPreferences, value: boolean) => {
+  const twoFactorEnabled = bootstrap?.security.twoFactorEnabled ?? false;
+
+  const resolveTwoFactor = useCallback((value: string | null) => {
+    if (pendingTwoFactorResolver.current) {
+      pendingTwoFactorResolver.current(value);
+      pendingTwoFactorResolver.current = null;
+    }
+    setTwoFactorDialogOpen(false);
+  }, []);
+
+  const requestTwoFactorCode = useCallback(() => {
+    if (!twoFactorEnabled) {
+      return Promise.resolve<string | null>(null);
+    }
+    setTwoFactorCode("");
+    setTwoFactorError("");
+    setTwoFactorDialogOpen(true);
+    return new Promise<string | null>((resolve) => {
+      pendingTwoFactorResolver.current = resolve;
+    });
+  }, [twoFactorEnabled]);
+
+  const handleNotifToggle = useCallback(async (key: keyof NotificationPreferences, value: boolean) => {
     // Optimistic update
     setLocalNotifPrefs((prev) => ({ ...prev, [key]: value }));
     setIsSavingNotifs(true);
 
-    // Debounce the API call
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
+
+    if (twoFactorEnabled) {
+      const code = await requestTwoFactorCode();
+      if (!code) {
+        setIsSavingNotifs(false);
+        if (notifPrefs) {
+          setLocalNotifPrefs({
+            inAppEnabled: notifPrefs.inAppEnabled,
+            emailEnabled: notifPrefs.emailEnabled,
+            telegramEnabled: notifPrefs.telegramEnabled,
+          });
+        }
+        return;
+      }
+      updateNotifPrefsMutation.mutate({ patch: { [key]: value }, twoFactorCode: code });
+      return;
+    }
+
+    // Debounce the API call
     debounceRef.current = setTimeout(() => {
-      updateNotifPrefsMutation.mutate({ [key]: value });
+      updateNotifPrefsMutation.mutate({ patch: { [key]: value } });
     }, 400);
-  }, [updateNotifPrefsMutation]);
+  }, [notifPrefs, requestTwoFactorCode, twoFactorEnabled, updateNotifPrefsMutation]);
 
   const toggle2FAMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -113,28 +165,40 @@ export default function SecuritySettings() {
   });
 
   const toggleWhitelistMutation = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      return apiRequest("POST", "/api/security/whitelist/toggle", { enabled });
+    mutationFn: async ({ enabled, twoFactorCode }: { enabled: boolean; twoFactorCode?: string | null }) => {
+      return apiRequest("POST", "/api/security/whitelist/toggle", { enabled }, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({ title: "Whitelist settings updated" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update whitelist", description: error.message, variant: "destructive" });
+    },
   });
 
   const setAddressDelayMutation = useMutation({
-    mutationFn: async (delay: number) => {
-      return apiRequest("POST", "/api/security/address-delay", { delay });
+    mutationFn: async ({ delay, twoFactorCode }: { delay: number; twoFactorCode?: string | null }) => {
+      return apiRequest("POST", "/api/security/address-delay", { delay }, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({ title: "Address delay updated" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update delay", description: error.message, variant: "destructive" });
+    },
   });
 
   const setAntiPhishingMutation = useMutation({
-    mutationFn: async (code: string) => {
-      return apiRequest("POST", "/api/security/anti-phishing", { code });
+    mutationFn: async ({ code, twoFactorCode }: { code: string; twoFactorCode?: string | null }) => {
+      return apiRequest("POST", "/api/security/anti-phishing", { code }, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
@@ -142,11 +206,17 @@ export default function SecuritySettings() {
       setAntiPhishingDialog(false);
       setAntiPhishingCode("");
     },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update code", description: error.message, variant: "destructive" });
+    },
   });
 
   const addAddressMutation = useMutation({
-    mutationFn: async (data: { address: string; label: string }) => {
-      return apiRequest("POST", "/api/security/whitelist/add", data);
+    mutationFn: async (data: { address: string; label: string; twoFactorCode?: string | null }) => {
+      const { twoFactorCode, ...payload } = data;
+      return apiRequest("POST", "/api/security/whitelist/add", payload, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security/whitelist"] });
@@ -160,14 +230,75 @@ export default function SecuritySettings() {
   });
 
   const removeAddressMutation = useMutation({
-    mutationFn: async (addressId: string) => {
-      return apiRequest("POST", "/api/security/whitelist/remove", { addressId });
+    mutationFn: async ({ addressId, twoFactorCode }: { addressId: string; twoFactorCode?: string | null }) => {
+      return apiRequest("POST", "/api/security/whitelist/remove", { addressId }, {
+        headers: twoFactorCode ? { "x-2fa-code": twoFactorCode } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security/whitelist"] });
       toast({ title: "Address removed from whitelist" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Failed to remove address", description: error.message, variant: "destructive" });
+    },
   });
+
+  const handleTwoFactorOpenChange = useCallback((open: boolean) => {
+    if (!open && pendingTwoFactorResolver.current) {
+      resolveTwoFactor(null);
+      return;
+    }
+    setTwoFactorDialogOpen(open);
+  }, [resolveTwoFactor]);
+
+  const handleTwoFactorSubmit = useCallback(() => {
+    if (!/^\d{6}$/.test(twoFactorCode)) {
+      setTwoFactorError("Введите 6-значный код");
+      return;
+    }
+    resolveTwoFactor(twoFactorCode);
+  }, [resolveTwoFactor, twoFactorCode]);
+
+  const handleWhitelistToggle = useCallback(async (enabled: boolean) => {
+    const code = await requestTwoFactorCode();
+    if (twoFactorEnabled && !code) {
+      return;
+    }
+    toggleWhitelistMutation.mutate({ enabled, twoFactorCode: code });
+  }, [requestTwoFactorCode, toggleWhitelistMutation, twoFactorEnabled]);
+
+  const handleAddressDelayChange = useCallback(async (value: string) => {
+    const code = await requestTwoFactorCode();
+    if (twoFactorEnabled && !code) {
+      return;
+    }
+    setAddressDelayMutation.mutate({ delay: parseInt(value), twoFactorCode: code });
+  }, [requestTwoFactorCode, setAddressDelayMutation, twoFactorEnabled]);
+
+  const handleAntiPhishingSave = useCallback(async () => {
+    const code = await requestTwoFactorCode();
+    if (twoFactorEnabled && !code) {
+      return;
+    }
+    setAntiPhishingMutation.mutate({ code: antiPhishingCode, twoFactorCode: code });
+  }, [antiPhishingCode, requestTwoFactorCode, setAntiPhishingMutation, twoFactorEnabled]);
+
+  const handleAddAddress = useCallback(async () => {
+    const code = await requestTwoFactorCode();
+    if (twoFactorEnabled && !code) {
+      return;
+    }
+    addAddressMutation.mutate({ ...newAddress, twoFactorCode: code });
+  }, [addAddressMutation, newAddress, requestTwoFactorCode, twoFactorEnabled]);
+
+  const handleRemoveAddress = useCallback(async (addressId: string) => {
+    const code = await requestTwoFactorCode();
+    if (twoFactorEnabled && !code) {
+      return;
+    }
+    removeAddressMutation.mutate({ addressId, twoFactorCode: code });
+  }, [removeAddressMutation, requestTwoFactorCode, twoFactorEnabled]);
 
   const isLoading = bootstrapLoading || whitelistLoading || notifPrefsLoading;
 
@@ -222,7 +353,7 @@ export default function SecuritySettings() {
                 description="Only allow withdrawals to approved addresses"
                 type="toggle"
                 value={bootstrap?.security.whitelistEnabled ?? false}
-                onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
+                onChange={(enabled) => void handleWhitelistToggle(enabled)}
               />
               <div className="p-4">
                 <div className="flex items-center justify-between">
@@ -237,7 +368,7 @@ export default function SecuritySettings() {
                   </div>
                   <Select
                     value={String(bootstrap?.security.addressDelay || 0)}
-                    onValueChange={(value) => setAddressDelayMutation.mutate(parseInt(value))}
+                    onValueChange={(value) => void handleAddressDelayChange(value)}
                   >
                     <SelectTrigger className="w-32" data-testid="select-address-delay">
                       <SelectValue />
@@ -281,7 +412,7 @@ export default function SecuritySettings() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => removeAddressMutation.mutate(addr.id)}
+                        onClick={() => void handleRemoveAddress(addr.id)}
                         data-testid={`button-remove-address-${addr.id}`}
                       >
                         <Trash2 className="w-4 h-4 text-muted-foreground" />
@@ -364,7 +495,7 @@ export default function SecuritySettings() {
             </div>
             <Button
               className="w-full"
-              onClick={() => setAntiPhishingMutation.mutate(antiPhishingCode)}
+              onClick={() => void handleAntiPhishingSave()}
               disabled={setAntiPhishingMutation.isPending || !antiPhishingCode}
               data-testid="button-save-anti-phishing"
             >
@@ -407,11 +538,48 @@ export default function SecuritySettings() {
             </div>
             <Button
               className="w-full"
-              onClick={() => addAddressMutation.mutate(newAddress)}
+              onClick={() => void handleAddAddress()}
               disabled={addAddressMutation.isPending || !newAddress.address}
               data-testid="button-add-whitelist-address"
             >
               Add Address
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={twoFactorDialogOpen} onOpenChange={handleTwoFactorOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Подтверждение 2FA</DialogTitle>
+            <DialogDescription>
+              Введите одноразовый код, чтобы подтвердить изменения настроек безопасности.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="two-factor-code">Код 2FA</Label>
+              <Input
+                id="two-factor-code"
+                inputMode="numeric"
+                placeholder="123456"
+                value={twoFactorCode}
+                onChange={(e) => {
+                  setTwoFactorCode(e.target.value.replace(/\s/g, ""));
+                  setTwoFactorError("");
+                }}
+                className="mt-2 text-center font-mono tracking-[0.3em]"
+              />
+              {twoFactorError ? (
+                <p className="text-xs text-destructive mt-2">{twoFactorError}</p>
+              ) : null}
+            </div>
+            <Button
+              className="w-full"
+              onClick={handleTwoFactorSubmit}
+              disabled={!twoFactorCode}
+            >
+              Подтвердить
             </Button>
           </div>
         </DialogContent>

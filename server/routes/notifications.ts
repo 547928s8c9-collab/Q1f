@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import type { RouteDeps } from "./types";
 import { updateNotificationPreferencesSchema } from "@shared/schema";
+import { requireTwoFactor } from "../middleware/requireTwoFactor";
 
 export function registerNotificationsRoutes({ app, isAuthenticated, devOnly, getUserId }: RouteDeps): void {
   // GET /api/notifications (protected) - returns InboxCard format
@@ -161,7 +162,7 @@ export function registerNotificationsRoutes({ app, isAuthenticated, devOnly, get
   });
 
   // PUT /api/notification-preferences (protected)
-  app.put("/api/notification-preferences", isAuthenticated, async (req, res) => {
+  app.put("/api/notification-preferences", isAuthenticated, requireTwoFactor, async (req, res) => {
     try {
       const userId = getUserId(req);
       const parsed = updateNotificationPreferencesSchema.safeParse(req.body);
