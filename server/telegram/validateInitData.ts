@@ -40,9 +40,25 @@ export function validateTelegramInitData(
     throw createBadRequestError("Auth date missing in init data");
   }
 
+  const authDateSeconds = typeof authDate === "number" ? authDate : Number(authDate);
+
+  if (!Number.isFinite(authDateSeconds) || authDateSeconds <= 0) {
+    throw createBadRequestError("Auth date invalid in init data");
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  if (authDateSeconds > nowSeconds + 60) {
+    throw createBadRequestError("Auth date is in the future");
+  }
+
+  if (nowSeconds - authDateSeconds > maxAgeSeconds) {
+    throw createBadRequestError("Auth date is too old");
+  }
+
   return {
     telegramUserId: String(telegramUserId),
     telegramUser,
-    authDate: typeof authDate === "number" ? authDate : Number(authDate),
+    authDate: authDateSeconds,
   };
 }
