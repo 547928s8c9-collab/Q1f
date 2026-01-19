@@ -361,6 +361,9 @@ export default function StrategyDetail() {
 
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Strategy returns can be volatile. Review risk controls below.
+            </p>
           </div>
 
           <Card className="p-5 mb-6">
