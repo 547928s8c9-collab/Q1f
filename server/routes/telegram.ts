@@ -24,7 +24,7 @@ const telegramAuthLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-export function registerTelegramRoutes({ app }: RouteDeps): void {
+export function registerTelegramRoutes({ app, isAuthenticated, getUserId }: RouteDeps): void {
   app.post("/api/telegram/auth", telegramAuthLimiter, async (req, res) => {
     const parsedBody = authPayloadSchema.safeParse(req.body);
     if (!parsedBody.success) {
@@ -227,6 +227,58 @@ export function registerTelegramRoutes({ app }: RouteDeps): void {
           message: "Failed to load Telegram data",
         },
       });
+    }
+  });
+
+  app.get("/api/telegram/notifications/status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const [prefs, account] = await Promise.all([
+        storage.getNotificationPreferences(userId),
+        storage.getTelegramAccountByUserId(userId),
+      ]);
+
+      res.json({
+        linked: Boolean(account),
+        enabled: prefs.telegramEnabled,
+      });
+    } catch (error) {
+      console.error("Telegram notification status error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/telegram/notifications/enable", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const account = await storage.getTelegramAccountByUserId(userId);
+      if (!account) {
+        return res.status(400).json({
+          ok: false,
+          error: {
+            code: "TELEGRAM_NOT_LINKED",
+            message: "Telegram account not linked",
+          },
+        });
+      }
+
+      const updated = await storage.updateNotificationPreferences(userId, { telegramEnabled: true });
+      res.json({ linked: true, enabled: updated.telegramEnabled });
+    } catch (error) {
+      console.error("Enable Telegram notifications error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/telegram/notifications/disable", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const updated = await storage.updateNotificationPreferences(userId, { telegramEnabled: false });
+      const account = await storage.getTelegramAccountByUserId(userId);
+      res.json({ linked: Boolean(account), enabled: updated.telegramEnabled });
+    } catch (error) {
+      console.error("Disable Telegram notifications error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 }

@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { errorHandler } from "./middleware/errorHandler";
 import { normalizePath } from "./metrics/normalizePath";
 import { initTwoFactorCrypto } from "./lib/twofactorCrypto";
+import { startOutboxWorker } from "./workers/outboxWorker";
 
 const app = express();
 const httpServer = createServer(app);
@@ -198,6 +199,11 @@ app.get("/api/metrics", (req, res) => {
   initTwoFactorCrypto();
 
   await registerRoutes(httpServer, app);
+
+  if (process.env.TELEGRAM_NOTIFICATIONS_ENABLED === "true") {
+    startOutboxWorker();
+    log("Telegram outbox worker started", "outbox");
+  }
 
   app.use(errorHandler);
 
