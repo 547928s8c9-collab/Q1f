@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { createIdempotencyKey } from "@/lib/idempotency";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 import {
   ActionSheet,
@@ -55,7 +56,12 @@ function DepositFlow({
 
   const depositMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/deposit/usdt/simulate", { amount: minorAmount });
+      const res = await apiRequest(
+        "POST",
+        "/api/deposit/usdt/simulate",
+        { amount: minorAmount },
+        { headers: { "Idempotency-Key": createIdempotencyKey("dep_usdt") } },
+      );
       return res.json();
     },
     onSuccess: (data) => {

@@ -8,8 +8,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { AlertCircle, CheckCircle2, Loader2, Copy } from "lucide-react";
+import { createIdempotencyKey } from "@/lib/idempotency";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
+import { getMoneyInputState } from "@/lib/moneyInput";
 
 const FALLBACK_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
 
@@ -26,7 +28,12 @@ export default function DepositUSDT() {
 
   const simulateMutation = useMutation({
     mutationFn: async (amount: string) => {
-      return apiRequest("POST", "/api/deposit/usdt/simulate", { amount });
+      return apiRequest(
+        "POST",
+        "/api/deposit/usdt/simulate",
+        { amount },
+        { headers: { "Idempotency-Key": createIdempotencyKey("dep_usdt") } },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
@@ -46,9 +53,11 @@ export default function DepositUSDT() {
     },
   });
 
+  const { normalized: normalizedAmount, minor: amountInMinor, error: amountError } =
+    getMoneyInputState(simulateAmount, "USDT");
+
   const handleSimulate = () => {
-    if (!simulateAmount) return;
-    const amountInMinor = (parseFloat(simulateAmount) * 1000000).toString();
+    if (!amountInMinor) return;
     simulateMutation.mutate(amountInMinor);
   };
 
@@ -105,12 +114,13 @@ export default function DepositUSDT() {
               className="mt-2"
               data-testid="input-simulate-amount"
             />
+            {amountError && <p className="text-xs text-destructive mt-2">{amountError}</p>}
           </div>
 
           <Button
             className="w-full min-h-[44px]"
             onClick={handleSimulate}
-            disabled={simulateMutation.isPending || !simulateAmount}
+            disabled={simulateMutation.isPending || !normalizedAmount || !!amountError}
             data-testid="button-simulate-deposit"
           >
             {simulateMutation.isPending ? (
