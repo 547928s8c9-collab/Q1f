@@ -87,7 +87,14 @@ export function createDbSimTraderStore(): SimTraderStore {
         }
         return updated;
       }
-      const [created] = await db.insert(simPositions).values(input).returning();
+      const [created] = await db
+        .insert(simPositions)
+        .values(input)
+        .onConflictDoUpdate({
+          target: simPositions.strategyId,
+          set: { ...input, updatedAt: new Date() },
+        })
+        .returning();
       return created;
     },
     async getOpenTrade(strategyId: string) {

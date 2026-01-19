@@ -214,5 +214,9 @@ describe("SimTrader", () => {
     expect(closedTrades.length).toBeGreaterThan(0);
     expect(results[results.length - 1].position.lastCandleTs).toBe(nowAligned);
     expect(results.some((result) => result.equitySnapshot)).toBe(true);
+    results.forEach((result) => {
+      expect(BigInt(result.position.cashMinor)).toBeGreaterThanOrEqual(0n);
+      expect(BigInt(result.position.equityMinor)).toBeGreaterThanOrEqual(0n);
+    });
   });
 });
