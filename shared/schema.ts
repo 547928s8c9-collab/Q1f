@@ -586,6 +586,21 @@ export const updateNotificationPreferencesSchema = z.object({
 });
 export type UpdateNotificationPreferences = z.infer<typeof updateNotificationPreferencesSchema>;
 
+// ==================== TELEGRAM ACCOUNTS ====================
+export const telegramAccounts = pgTable("telegram_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  telegramUserId: varchar("telegram_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_accounts_user_idx").on(table.userId),
+  uniqueIndex("telegram_accounts_telegram_user_idx").on(table.telegramUserId),
+]);
+
+export const insertTelegramAccountSchema = createInsertSchema(telegramAccounts).omit({ id: true, createdAt: true });
+export type InsertTelegramAccount = z.infer<typeof insertTelegramAccountSchema>;
+export type TelegramAccount = typeof telegramAccounts.$inferSelect;
+
 // ==================== IDEMPOTENCY KEYS ====================
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

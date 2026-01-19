@@ -21,6 +21,8 @@ import {
   notifications,
   idempotencyKeys,
   marketCandles,
+  telegramAccounts,
+  users,
   AddressStatus,
   dbRowToCandle,
   // Admin tables
@@ -71,11 +73,20 @@ import {
   type IdempotencyKey,
   type InsertIdempotencyKey,
   type Candle,
+  type TelegramAccount,
+  type User,
 } from "@shared/schema";
 
 export interface IStorage {
   ensureUserData(userId: string): Promise<void>;
   seedDemoUserData(userId: string): Promise<void>;
+
+  getUserById(userId: string): Promise<User | undefined>;
+  getUserByTelegramLinkCode(code: string): Promise<User | undefined>;
+
+  getTelegramAccountByTelegramUserId(telegramUserId: string): Promise<TelegramAccount | undefined>;
+  getTelegramAccountByUserId(userId: string): Promise<TelegramAccount | undefined>;
+  upsertTelegramAccount(userId: string, telegramUserId: string): Promise<TelegramAccount>;
 
   getBalances(userId: string): Promise<Balance[]>;
   getBalance(userId: string, asset: string): Promise<Balance | undefined>;
@@ -408,6 +419,56 @@ export class DatabaseStorage implements IStorage {
     await this.updateVault(userId, "principal", "10000000000"); // 10,000 USDT in principal vault
     await this.updateVault(userId, "profit", "850000000"); // 850 USDT accumulated profit
     await this.updateVault(userId, "taxes", "150000000"); // 150 USDT set aside for taxes
+  }
+
+  async getUserById(userId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return user;
+  }
+
+  async getUserByTelegramLinkCode(code: string): Promise<User | undefined> {
+    if (!code?.trim()) {
+      return undefined;
+    }
+
+    const [row] = await db
+      .select({ user: users })
+      .from(securitySettings)
+      .innerJoin(users, eq(securitySettings.userId, users.id))
+      .where(eq(securitySettings.antiPhishingCode, code))
+      .limit(1);
+
+    return row?.user;
+  }
+
+  async getTelegramAccountByTelegramUserId(telegramUserId: string): Promise<TelegramAccount | undefined> {
+    const [account] = await db
+      .select()
+      .from(telegramAccounts)
+      .where(eq(telegramAccounts.telegramUserId, telegramUserId))
+      .limit(1);
+    return account;
+  }
+
+  async getTelegramAccountByUserId(userId: string): Promise<TelegramAccount | undefined> {
+    const [account] = await db
+      .select()
+      .from(telegramAccounts)
+      .where(eq(telegramAccounts.userId, userId))
+      .limit(1);
+    return account;
+  }
+
+  async upsertTelegramAccount(userId: string, telegramUserId: string): Promise<TelegramAccount> {
+    const [account] = await db.transaction(async (tx) => {
+      await tx.delete(telegramAccounts).where(eq(telegramAccounts.userId, userId));
+      return tx
+        .insert(telegramAccounts)
+        .values({ userId, telegramUserId })
+        .returning();
+    });
+
+    return account;
   }
 
   async getBalances(userId: string): Promise<Balance[]> {
