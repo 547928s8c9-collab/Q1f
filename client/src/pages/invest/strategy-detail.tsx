@@ -15,7 +15,7 @@ import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TrendingUp, AlertTriangle, Shield, Zap, Calculator, Wallet, Info, ExternalLink, ShieldAlert, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Strategy, type StrategyPerformance, type PayoutInstruction, type WhitelistAddress, formatMoney } from "@shared/schema";
+import { type Strategy, type StrategyPerformance, type PayoutInstruction, type WhitelistAddress, formatMoney, AddressStatus, normalizeAddressStatus } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -168,8 +168,8 @@ export default function StrategyDetail() {
     riskControlsMutation.mutate({ ddLimitPct, autoPauseEnabled });
   };
 
-  const activeAddresses = whitelistAddresses?.filter(a => a.status === "ACTIVE") || [];
-  const pendingAddresses = whitelistAddresses?.filter(a => a.status === "PENDING_ACTIVATION") || [];
+  const activeAddresses = whitelistAddresses?.filter(a => normalizeAddressStatus(a.status) === AddressStatus.ACTIVE) || [];
+  const pendingAddresses = whitelistAddresses?.filter(a => normalizeAddressStatus(a.status) === AddressStatus.PENDING_ACTIVATION) || [];
   const hasActiveAddress = activeAddresses.length > 0;
 
   const isLoading = strategyLoading || perfLoading;

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateSecret, generate, verify, generateURI } from "otplib";
 import QRCode from "qrcode";
 import { storage } from "../storage";
-import { twoFactorVerifySchema, twoFactorDisableSchema } from "@shared/schema";
+import { AddressStatus, twoFactorVerifySchema, twoFactorDisableSchema } from "@shared/schema";
 import { isTwoFactorAvailable, encryptSecret, decryptSecret } from "../lib/twofactorCrypto";
 import { requireTwoFactor } from "../middleware/requireTwoFactor";
 import type { RouteDeps } from "./types";
@@ -294,8 +294,8 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
     try {
       const userId = getUserId(req);
       const schema = z.object({
-        address: z.string().min(30),
-        label: z.string().optional(),
+        address: z.string().trim().min(30),
+        label: z.string().trim().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -307,12 +307,12 @@ export function registerSecurityRoutes({ app, isAuthenticated, getUserId }: Rout
       const delay = security?.addressDelay || 0;
 
       const activatesAt = delay > 0 ? new Date(Date.now() + delay * 60 * 60 * 1000) : new Date();
-      const status = delay > 0 ? "pending" : "active";
+      const status = delay > 0 ? AddressStatus.PENDING_ACTIVATION : AddressStatus.ACTIVE;
 
       await storage.createWhitelistAddress({
         userId,
-        address,
-        label: label || null,
+        address: address.trim(),
+        label: label?.trim() || null,
         network: "TRC20",
         status,
         activatesAt,

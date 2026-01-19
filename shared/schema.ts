@@ -331,6 +331,16 @@ export const AddressStatus = {
 
 export type AddressStatusType = typeof AddressStatus[keyof typeof AddressStatus];
 
+export function normalizeAddressStatus(status?: string | null): AddressStatusType | null {
+  if (!status) {
+    return null;
+  }
+  const normalized = status.toUpperCase();
+  return (Object.values(AddressStatus) as string[]).includes(normalized)
+    ? (normalized as AddressStatusType)
+    : null;
+}
+
 export const whitelistAddresses = pgTable("whitelist_addresses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
