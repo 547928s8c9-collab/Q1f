@@ -90,8 +90,11 @@ async function ensureSuperAdmin(): Promise<void> {
 async function seed() {
   console.log("Seeding database...");
   try {
-    await storage.seedStrategies();
-    console.log("Strategies seeded successfully");
+    const strategiesResult = await storage.seedStrategies();
+    console.log(`Strategies seeded successfully (inserted=${strategiesResult.inserted}, updated=${strategiesResult.updated})`);
+
+    const profilesResult = await storage.seedStrategyProfiles();
+    console.log(`Strategy profiles seeded successfully (inserted=${profilesResult.inserted}, updated=${profilesResult.updated})`);
 
     await storage.seedAdminRbac();
     console.log("Admin RBAC (roles, permissions, mappings) seeded successfully");
