@@ -114,7 +114,17 @@ function QuickActions({
 
 function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
   const hasBalances = bootstrap && 
-    (BigInt(bootstrap.balances.USDT.available) > 0n || BigInt(bootstrap.balances.RUB.available) > 0n);
+    (BigInt(bootstrap.balances.USDT.available) > 0n ||
+      BigInt(bootstrap.balances.USDT.locked) > 0n ||
+      BigInt(bootstrap.balances.RUB.available) > 0n ||
+      BigInt(bootstrap.balances.RUB.locked) > 0n);
+
+  const usdtTotal = bootstrap
+    ? (BigInt(bootstrap.balances.USDT.available) + BigInt(bootstrap.balances.USDT.locked)).toString()
+    : "0";
+  const rubTotal = bootstrap
+    ? (BigInt(bootstrap.balances.RUB.available) + BigInt(bootstrap.balances.RUB.locked)).toString()
+    : "0";
 
   if (isLoading) {
     return (
@@ -173,7 +183,7 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
             <span className="text-sm font-medium">USDT</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-usdt">
-            {formatMoney(bootstrap!.balances.USDT.available, "USDT")}
+            {formatMoney(usdtTotal, "USDT")}
           </span>
         </div>
         <div className="flex items-center justify-between py-2">
@@ -184,7 +194,7 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
             <span className="text-sm font-medium">RUB</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-rub">
-            {formatMoney(bootstrap!.balances.RUB.available, "RUB")}
+            {formatMoney(rubTotal, "RUB")}
           </span>
         </div>
       </div>
