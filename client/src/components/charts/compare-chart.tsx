@@ -88,7 +88,7 @@ export function CompareChart({
           <Line
             type="monotone"
             dataKey="strategy"
-            stroke="hsl(24, 85%, 48%)"
+            stroke="hsl(var(--primary))"
             strokeWidth={2}
             dot={false}
             name={strategyName}
