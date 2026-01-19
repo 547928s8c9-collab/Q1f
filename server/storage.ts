@@ -21,6 +21,7 @@ import {
   notifications,
   idempotencyKeys,
   marketCandles,
+  outboxEvents,
   telegramAccounts,
   users,
   AddressStatus,
@@ -73,6 +74,8 @@ import {
   type IdempotencyKey,
   type InsertIdempotencyKey,
   type Candle,
+  type InsertOutboxEvent,
+  type OutboxEvent,
   type TelegramAccount,
   type User,
 } from "@shared/schema";
@@ -201,6 +204,12 @@ export interface IStorage {
   // Market Candles
   getCandlesFromCache(exchange: string, symbol: string, timeframe: string, startMs: number, endMs: number): Promise<Candle[]>;
   upsertCandles(exchange: string, symbol: string, timeframe: string, candles: Candle[]): Promise<void>;
+
+  // Outbox events
+  enqueueOutboxEvent(eventType: string, payload: any, actorAdminUserId?: string | null): Promise<OutboxEvent>;
+  markOutboxProcessed(id: string): Promise<void>;
+  incrementOutboxAttempt(id: string, lastError: string): Promise<void>;
+  getPendingOutboxEvents(limit: number): Promise<OutboxEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -986,6 +995,7 @@ export class DatabaseStorage implements IStorage {
 
   async createNotification(notification: InsertNotification): Promise<Notification> {
     const [created] = await db.insert(notifications).values(notification).returning();
+    await this.maybeEnqueueTelegramNotification(created);
     return created;
   }
 
@@ -1028,6 +1038,95 @@ export class DatabaseStorage implements IStorage {
       .where(eq(notificationPreferences.userId, userId))
       .returning();
     return updated;
+  }
+
+  async enqueueOutboxEvent(eventType: string, payload: any, actorAdminUserId?: string | null): Promise<OutboxEvent> {
+    const [created] = await db.insert(outboxEvents)
+      .values({
+        eventType,
+        payloadJson: payload,
+        actorAdminUserId: actorAdminUserId ?? null,
+      } satisfies InsertOutboxEvent)
+      .returning();
+    return created;
+  }
+
+  async markOutboxProcessed(id: string): Promise<void> {
+    await db.update(outboxEvents)
+      .set({ processedAt: new Date() })
+      .where(eq(outboxEvents.id, id));
+  }
+
+  async incrementOutboxAttempt(id: string, lastError: string): Promise<void> {
+    await db.update(outboxEvents)
+      .set({
+        attempts: sql`${outboxEvents.attempts} + 1`,
+        lastError: lastError.slice(0, 500),
+      })
+      .where(eq(outboxEvents.id, id));
+  }
+
+  async getPendingOutboxEvents(limit: number): Promise<OutboxEvent[]> {
+    return db.transaction(async (tx) => {
+      const result = await tx.execute(sql`
+        SELECT
+          id,
+          created_at,
+          event_type,
+          payload_json,
+          actor_admin_user_id,
+          processed_at,
+          attempts,
+          last_error
+        FROM outbox_events
+        WHERE processed_at IS NULL
+          AND event_type = 'telegram.send'
+        ORDER BY created_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `);
+
+      return result.rows.map((row) => ({
+        id: row.id as string,
+        createdAt: row.created_at as Date | null,
+        eventType: row.event_type as string,
+        payloadJson: row.payload_json,
+        actorAdminUserId: row.actor_admin_user_id as string | null,
+        processedAt: row.processed_at as Date | null,
+        attempts: row.attempts as number,
+        lastError: row.last_error as string | null,
+      }));
+    });
+  }
+
+  private async maybeEnqueueTelegramNotification(notification: Notification): Promise<void> {
+    if (process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== "true") {
+      return;
+    }
+
+    if (!shouldSendTelegramNotification(notification)) {
+      return;
+    }
+
+    const [prefs, telegramAccount] = await Promise.all([
+      this.getNotificationPreferences(notification.userId),
+      this.getTelegramAccountByUserId(notification.userId),
+    ]);
+
+    if (!telegramAccount || !prefs.telegramEnabled) {
+      return;
+    }
+
+    await this.enqueueOutboxEvent("telegram.send", {
+      userId: notification.userId,
+      telegramUserId: telegramAccount.telegramUserId,
+      notificationType: notification.type,
+      title: notification.title,
+      message: notification.message,
+      createdAt: notification.createdAt?.toISOString() ?? new Date().toISOString(),
+      resourceType: notification.resourceType ?? null,
+      resourceId: notification.resourceId ?? null,
+    });
   }
 
   // Two Factor Authentication
@@ -1275,6 +1374,20 @@ export class DatabaseStorage implements IStorage {
       }
     }
   }
+}
+
+function shouldSendTelegramNotification(notification: Notification): boolean {
+  const normalizedTitle = notification.title.toLowerCase();
+  if (notification.type === "kyc") {
+    return normalizedTitle.includes("kyc approved") || normalizedTitle.includes("kyc rejected");
+  }
+  if (notification.type === "security") {
+    return normalizedTitle.includes("strategy auto-paused") || normalizedTitle.includes("strategy paused");
+  }
+  if (notification.type === "transaction" || notification.type === "operation") {
+    return normalizedTitle.includes("deposit") || normalizedTitle.includes("withdrawal");
+  }
+  return false;
 }
 
 class MemoryStorage extends DatabaseStorage {

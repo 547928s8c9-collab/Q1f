@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
@@ -27,8 +28,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet, Bell, Mail, MessageCircle, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Shield, ListChecks, Clock, Eye, Plus, Trash2, Wallet, Bell, Mail, MessageCircle, Loader2, Link2 } from "lucide-react";
 import { useLocation } from "wouter";
+
+interface TelegramNotificationStatus {
+  linked: boolean;
+  enabled: boolean;
+}
 
 export default function SecuritySettings() {
   const { toast } = useToast();
@@ -48,6 +55,10 @@ export default function SecuritySettings() {
 
   const { data: notifPrefs, isLoading: notifPrefsLoading } = useQuery<NotificationPreferences>({
     queryKey: ["/api/notification-preferences"],
+  });
+
+  const { data: telegramStatus, isLoading: telegramStatusLoading } = useQuery<TelegramNotificationStatus>({
+    queryKey: ["/api/telegram/notifications/status"],
   });
 
   // Local state for optimistic UI updates
@@ -85,6 +96,21 @@ export default function SecuritySettings() {
           telegramEnabled: notifPrefs.telegramEnabled,
         });
       }
+    },
+  });
+
+  const toggleTelegramMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const endpoint = enabled ? "/api/telegram/notifications/enable" : "/api/telegram/notifications/disable";
+      return apiRequest("POST", endpoint, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/telegram/notifications/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notification-preferences"] });
+      toast({ title: "Telegram уведомления обновлены" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Не удалось обновить Telegram", description: error.message, variant: "destructive" });
     },
   });
 
@@ -169,7 +195,7 @@ export default function SecuritySettings() {
     },
   });
 
-  const isLoading = bootstrapLoading || whitelistLoading || notifPrefsLoading;
+  const isLoading = bootstrapLoading || whitelistLoading || notifPrefsLoading || telegramStatusLoading;
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -329,14 +355,48 @@ export default function SecuritySettings() {
                 value={localNotifPrefs.emailEnabled ?? false}
                 onChange={(enabled) => handleNotifToggle("emailEnabled", enabled)}
               />
-              <SecuritySettingRow
-                icon={<MessageCircle className="w-5 h-5 text-muted-foreground" />}
-                label="Telegram уведомления"
-                description="Получать уведомления в Telegram"
-                type="toggle"
-                value={localNotifPrefs.telegramEnabled ?? false}
-                onChange={(enabled) => handleNotifToggle("telegramEnabled", enabled)}
-              />
+              <div className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <MessageCircle className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">Telegram уведомления</p>
+                    <p className="text-xs text-muted-foreground">
+                      Получать важные уведомления в личном чате с ботом
+                    </p>
+                  </div>
+                  <Switch
+                    checked={telegramStatus?.enabled ?? false}
+                    disabled={!telegramStatus?.linked || toggleTelegramMutation.isPending}
+                    onCheckedChange={(enabled) => toggleTelegramMutation.mutate(enabled)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pl-14">
+                  <Badge variant="outline" className={telegramStatus?.linked ? "border-positive/30 text-positive" : "border-muted text-muted-foreground"}>
+                    <span className="flex items-center gap-2">
+                      <span className={telegramStatus?.linked ? "w-1.5 h-1.5 rounded-full bg-positive" : "w-1.5 h-1.5 rounded-full bg-muted-foreground"} />
+                      {telegramStatus?.linked ? "Linked" : "Not linked"}
+                    </span>
+                  </Badge>
+                  {telegramStatus?.linked ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => toggleTelegramMutation.mutate(!(telegramStatus?.enabled ?? false))}
+                      disabled={toggleTelegramMutation.isPending}
+                      className="h-8"
+                    >
+                      {telegramStatus?.enabled ? "Disable" : "Enable"}
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" size="sm" disabled className="h-8 gap-2">
+                      <Link2 className="w-3.5 h-3.5" />
+                      Откройте /tg и привяжите аккаунт
+                    </Button>
+                  )}
+                </div>
+              </div>
             </Card>
           </section>
         </div>
