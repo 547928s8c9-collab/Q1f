@@ -341,53 +341,42 @@ export function registerTelegramRoutes({ app }: RouteDeps): void {
         const chatId = message?.chat?.id;
         const chatType = message?.chat?.type;
         const messageId = message?.message_id;
-
-        await botAnswerCallbackQuery(callbackId);
+        let callbackText: string | undefined;
+        let callbackAlert = false;
 
         if (chatType && chatType !== "private") {
-          await botAnswerCallbackQuery(callbackId, "Private chat only");
-          return res.status(200).json({ ok: true });
-        }
+          callbackText = "Private chat only";
+        } else if (!data?.startsWith("a:") || !chatId) {
+          callbackText = undefined;
+        } else {
+          const actionToken = data.slice(2);
+          const consumeResult = await storage.consumeTelegramActionToken(actionToken, telegramUserId);
 
-        if (!data?.startsWith("a:") || !chatId) {
-          return res.status(200).json({ ok: true });
-        }
-
-        const actionToken = data.slice(2);
-        const consumeResult = await storage.consumeTelegramActionToken(actionToken, telegramUserId);
-
-        if (consumeResult.status === "expired") {
-          await botAnswerCallbackQuery(callbackId, "Expired action");
-          return res.status(200).json({ ok: true });
-        }
-        if (consumeResult.status === "used") {
-          await botAnswerCallbackQuery(callbackId, "Already processed");
-          return res.status(200).json({ ok: true });
-        }
-        if (consumeResult.status === "invalid") {
-          await botAnswerCallbackQuery(callbackId, "Invalid action");
-          return res.status(200).json({ ok: true });
-        }
-
-        const account = await storage.getTelegramAccountByTelegramUserId(telegramUserId);
-        if (!account || account.userId !== consumeResult.userId) {
-          await botAnswerCallbackQuery(callbackId, "Unauthorized action");
-          return res.status(200).json({ ok: true });
-        }
-
-        if (consumeResult.action === "REFRESH") {
-          const summary = await buildTelegramSummaryText(account.userId);
-          const replyMarkup = await createRefreshKeyboard(telegramUserId, account.userId);
-
-          if (messageId) {
-            await botEditMessageText(String(chatId), messageId, summary, replyMarkup);
+          if (consumeResult.status === "expired") {
+            callbackText = "Expired action";
+          } else if (consumeResult.status === "used") {
+            callbackText = "Already processed";
+          } else if (consumeResult.status === "invalid") {
+            callbackText = "Invalid action";
           } else {
-            await botSendMessage(String(chatId), summary, replyMarkup);
-          }
-          return res.status(200).json({ ok: true });
-        }
+            const account = await storage.getTelegramAccountByTelegramUserId(telegramUserId);
+            if (!account || account.userId !== consumeResult.userId) {
+              callbackText = "Unauthorized action";
+            } else if (consumeResult.action === "REFRESH") {
+              const summary = await buildTelegramSummaryText(account.userId);
+              const replyMarkup = await createRefreshKeyboard(telegramUserId, account.userId);
 
-        await botAnswerCallbackQuery(callbackId, "Unknown action");
+              if (messageId) {
+                await botEditMessageText(String(chatId), messageId, summary, replyMarkup);
+              } else {
+                await botSendMessage(String(chatId), summary, replyMarkup);
+              }
+            } else {
+              callbackText = "Unknown action";
+            }
+          }
+        }
+        await botAnswerCallbackQuery(callbackId, callbackText, callbackAlert);
       }
     } catch (error) {
       console.error("Telegram webhook error:", error);
