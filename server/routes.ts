@@ -15,7 +15,8 @@ import {
   NETWORK_FEE_MINOR_BIGINT,
 } from "./config";
 import { registerExtractedRoutes } from "./routes/index";
-import { loadCandles } from "./marketData/loadCandles";
+import { buildGaps, loadCandles } from "./marketData/loadCandles";
+import { ensureCandleRange, buildSyntheticSeed } from "./services/syntheticMarket";
 
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
@@ -718,11 +719,59 @@ export async function registerRoutes(
 
       // Exchange default
       const exchangeParam = typeof exchange === "string" ? exchange : "binance_spot";
+      const normalizedSymbol = symbol.toUpperCase();
+
+      if (exchangeParam === "synthetic") {
+        const userId = getUserId(req);
+        if (!userId) {
+          return res.status(401).json({
+            error: { code: "UNAUTHORIZED", message: "Authentication required for synthetic candles" },
+          });
+        }
+
+        const strategyId = typeof req.query.strategyId === "string" ? req.query.strategyId : null;
+        if (!strategyId) {
+          return res.status(400).json({
+            error: { code: "MISSING_STRATEGY_ID", message: "Query param 'strategyId' is required for synthetic candles" },
+          });
+        }
+
+        const seed = buildSyntheticSeed({
+          userId,
+          strategyId,
+          symbol: normalizedSymbol,
+          timeframe: tf,
+        });
+
+        await ensureCandleRange({
+          exchange: "synthetic",
+          symbol: normalizedSymbol,
+          timeframe: tf,
+          fromTs: startMs,
+          toTs: endMs,
+          seed,
+        });
+
+        const candles = await storage.getCandlesFromCache(
+          "synthetic",
+          normalizedSymbol,
+          tf,
+          startMs,
+          endMs
+        );
+
+        res.json({
+          candles,
+          gaps: buildGaps(candles, startMs, endMs, tfMs),
+          source: "synthetic",
+        });
+        return;
+      }
 
       // Call Market Data Layer
       const result = await loadCandles({
         exchange: exchangeParam,
-        symbol: symbol.toUpperCase(),
+        symbol: normalizedSymbol,
         timeframe: tf,
         startMs,
         endMs,
@@ -3034,6 +3083,9 @@ export async function registerRoutes(
       if (!timeframe || typeof timeframe !== "string") {
         return res.status(400).json({ error: "timeframe is required (15m, 1h, 1d)" });
       }
+      if (!VALID_TIMEFRAMES.includes(timeframe as Timeframe)) {
+        return res.status(400).json({ error: `Invalid timeframe. Allowed: ${VALID_TIMEFRAMES.join(", ")}` });
+      }
       if (!startMs || isNaN(Number(startMs))) {
         return res.status(400).json({ error: "startMs is required (unix ms)" });
       }
@@ -3048,9 +3100,54 @@ export async function registerRoutes(
         return res.status(400).json({ error: "startMs must be less than endMs" });
       }
       
+      const exchangeParam = exchange as string;
+      const normalizedSymbol = symbol.toUpperCase();
+
+      if (exchangeParam === "synthetic") {
+        const strategyId = typeof req.query.strategyId === "string" ? req.query.strategyId : null;
+        if (!strategyId) {
+          return res.status(400).json({ error: "strategyId is required for synthetic candles" });
+        }
+
+        const seed = buildSyntheticSeed({
+          userId,
+          strategyId,
+          symbol: normalizedSymbol,
+          timeframe,
+        });
+
+        await ensureCandleRange({
+          exchange: "synthetic",
+          symbol: normalizedSymbol,
+          timeframe,
+          fromTs: start,
+          toTs: end,
+          seed,
+        });
+
+        const candles = await storage.getCandlesFromCache(
+          "synthetic",
+          normalizedSymbol,
+          timeframe,
+          start,
+          end
+        );
+
+        res.json({
+          success: true,
+          data: {
+            candles,
+            gaps: buildGaps(candles, start, end, TIMEFRAME_MS[timeframe as Timeframe]),
+            source: "synthetic",
+            count: candles.length,
+          },
+        });
+        return;
+      }
+
       const result = await loadCandles({
-        exchange: exchange as string,
-        symbol,
+        exchange: exchangeParam,
+        symbol: normalizedSymbol,
         timeframe,
         startMs: start,
         endMs: end,
