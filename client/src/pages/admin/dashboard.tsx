@@ -200,7 +200,7 @@ function generateActivities() {
   const actions = [
     { title: "Пополнение", detail: "USDT кошелек" },
     { title: "Вывод", detail: "Запрос на вывод" },
-    { title: "Инвестиция", detail: "Strategy: Growth" },
+    { title: "Инвестиция", detail: "Strategy: BTC Squeeze Breakout" },
     { title: "KYC", detail: "Новый документ" },
     { title: "Перевод", detail: "Внутренний перевод" },
     { title: "Верификация", detail: "Обновление профиля" },
@@ -223,7 +223,16 @@ function generateActivities() {
 }
 
 function generateInvestments() {
-  const strategies = ["Growth", "Balanced", "Momentum", "Stable Yield", "Algo Vision"];
+  const strategies = [
+    "BTC Squeeze Breakout",
+    "ETH EMA Revert",
+    "BNB Trend Pullback",
+    "SOL Volatility Burst",
+    "XRP Keltner Revert",
+    "DOGE Fast Momentum",
+    "ADA Deep Revert",
+    "TRX Low-Vol Band",
+  ];
   const statuses: AdminInvestment["status"][] = ["active", "pending", "completed"];
 
   return Array.from({ length: 5 }, (_, index) => {

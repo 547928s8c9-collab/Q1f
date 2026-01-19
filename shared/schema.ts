@@ -74,6 +74,29 @@ export const insertStrategySchema = createInsertSchema(strategies).omit({ id: tr
 export type InsertStrategy = z.infer<typeof insertStrategySchema>;
 export type Strategy = typeof strategies.$inferSelect;
 
+// ==================== STRATEGY PROFILES ====================
+export const strategyProfiles = pgTable("strategy_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull(),
+  displayName: text("display_name").notNull(),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  description: text("description"),
+  riskLevel: text("risk_level").notNull(),
+  tags: jsonb("tags"),
+  defaultConfig: jsonb("default_config").notNull(),
+  configSchema: jsonb("config_schema"),
+  isEnabled: boolean("is_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("strategy_profiles_slug_idx").on(table.slug),
+]);
+
+export const insertStrategyProfileSchema = createInsertSchema(strategyProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStrategyProfile = z.infer<typeof insertStrategyProfileSchema>;
+export type StrategyProfile = typeof strategyProfiles.$inferSelect;
+
 // ==================== STRATEGY PERFORMANCE ====================
 export const strategyPerformance = pgTable("strategy_performance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

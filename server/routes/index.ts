@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { RouteDeps } from "./types";
 
 import { registerStrategiesRoutes } from "./strategies";
+import { registerStrategyProfilesRoutes } from "./strategyProfiles";
 import { registerOperationsRoutes } from "./operations";
 import { registerStatementsRoutes } from "./statements";
 import { registerSecurityRoutes } from "./security";
@@ -11,6 +12,7 @@ import { registerAnalyticsRoutes } from "./analytics";
 export function registerExtractedRoutes(deps: RouteDeps): void {
   // Register routes in the same order as original file
   registerStrategiesRoutes(deps);
+  registerStrategyProfilesRoutes(deps);
   registerOperationsRoutes(deps);
   registerStatementsRoutes(deps);
   registerSecurityRoutes(deps);

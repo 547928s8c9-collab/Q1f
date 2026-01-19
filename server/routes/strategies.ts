@@ -77,8 +77,8 @@ export function registerStrategiesRoutes({ app, isAuthenticated, devOnly }: Rout
   // POST /api/strategies/seed - Seed strategies (dev only)
   app.post("/api/strategies/seed", isAuthenticated, devOnly, async (req, res) => {
     try {
-      await storage.seedStrategies();
-      res.json({ success: true, message: "Strategies seeded" });
+      const result = await storage.seedStrategies();
+      res.json({ success: true, message: "Strategies seeded", ...result });
     } catch (error) {
       console.error("Seed strategies error:", error);
       res.status(500).json({ error: "Internal server error" });

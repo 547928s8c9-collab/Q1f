@@ -361,6 +361,11 @@ export async function registerRoutes(
   } catch (error) {
     console.error("Seed strategies error:", error);
   }
+  try {
+    await storage.seedStrategyProfiles();
+  } catch (error) {
+    console.error("Seed strategy profiles error:", error);
+  }
 
   // GET /api/health - Health check endpoint (public)
   app.get("/api/health", async (_req, res) => {

@@ -4,6 +4,7 @@ import {
   balances,
   vaults,
   strategies,
+  strategyProfiles,
   strategyPerformance,
   positions,
   operations,
@@ -32,6 +33,8 @@ import {
   type InsertVault,
   type Strategy,
   type InsertStrategy,
+  type StrategyProfile,
+  type InsertStrategyProfile,
   type StrategyPerformance,
   type InsertStrategyPerformance,
   type Position,
@@ -94,7 +97,10 @@ export interface IStorage {
   
   getStrategyPerformance(strategyId: string, days?: number): Promise<StrategyPerformance[]>;
   createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance>;
-  seedStrategies(): Promise<void>;
+  seedStrategies(): Promise<{ inserted: number; updated: number }>;
+
+  getStrategyProfiles(): Promise<StrategyProfile[]>;
+  seedStrategyProfiles(): Promise<{ inserted: number; updated: number }>;
 
   getPositions(userId: string): Promise<Position[]>;
   getPosition(userId: string, strategyId: string): Promise<Position | undefined>;
@@ -486,72 +492,120 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async seedStrategies(): Promise<void> {
-    const existingStrategies = await this.getStrategies();
-    if (existingStrategies.length >= 8) return;
+  async seedStrategies(): Promise<{ inserted: number; updated: number }> {
+    const { getCanonicalStrategies } = await import("./strategies/catalog");
+    const canonicalStrategies = getCanonicalStrategies();
+    const existingStrategies = await db.select().from(strategies).orderBy(strategies.createdAt);
+    const existingByName = new Map(existingStrategies.map((s) => [s.name, s]));
+    const canonicalNames = new Set(canonicalStrategies.map((s) => s.name));
+    const unusedExisting = existingStrategies.filter((s) => !canonicalNames.has(s.name));
+    const usedIds = new Set<string>();
+    let inserted = 0;
+    let updated = 0;
 
-    await db.delete(strategies);
-    await db.delete(strategyPerformance);
+    const seededStrategies: Strategy[] = [];
 
-    const strategyData = [
-      { name: "Stable Yield", tier: "LOW", desc: "Conservative stablecoin farming with minimal risk", pairs: ["USDT/USDC", "DAI/USDT"], minBps: 200, maxBps: 300, worst: "-0.8%", dd: "-1.2%" },
-      { name: "Fixed Income Plus", tier: "LOW", desc: "Enhanced fixed income with diversified lending", pairs: ["USDT/aUSDC", "USDT/cDAI"], minBps: 250, maxBps: 350, worst: "-1.0%", dd: "-1.5%" },
-      { name: "Balanced Growth", tier: "CORE", desc: "Balanced approach mixing stable and volatile assets", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 400, maxBps: 500, worst: "-3.5%", dd: "-8.0%" },
-      { name: "DeFi Momentum", tier: "CORE", desc: "Momentum-based DeFi token rotation strategy", pairs: ["UNI/USDT", "AAVE/USDT", "LINK/USDT"], minBps: 450, maxBps: 550, worst: "-4.2%", dd: "-10.0%" },
-      { name: "Market Neutral", tier: "CORE", desc: "Long-short strategy targeting absolute returns", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 350, maxBps: 450, worst: "-2.8%", dd: "-6.0%" },
-      { name: "Alpha Seeker", tier: "HIGH", desc: "Aggressive alpha generation through arbitrage", pairs: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], minBps: 600, maxBps: 700, worst: "-8.0%", dd: "-18.0%" },
-      { name: "Volatility Harvester", tier: "HIGH", desc: "Options-based volatility capture strategy", pairs: ["BTC/USDT", "ETH/USDT"], minBps: 650, maxBps: 750, worst: "-10.0%", dd: "-22.0%" },
-      { name: "Moonshot Portfolio", tier: "HIGH", desc: "High-conviction altcoin picks for maximum growth", pairs: ["SOL/USDT", "AVAX/USDT", "DOT/USDT"], minBps: 700, maxBps: 800, worst: "-15.0%", dd: "-35.0%" },
-    ];
+    for (const canonical of canonicalStrategies) {
+      const existing = existingByName.get(canonical.name);
+      if (existing) {
+        const [updatedStrategy] = await db.update(strategies)
+          .set({
+            name: canonical.name,
+            description: canonical.description,
+            riskTier: canonical.riskTier,
+            baseAsset: canonical.baseAsset,
+            pairsJson: canonical.pairsJson,
+            expectedMonthlyRangeBpsMin: canonical.expectedMonthlyRangeBpsMin,
+            expectedMonthlyRangeBpsMax: canonical.expectedMonthlyRangeBpsMax,
+            feesJson: canonical.feesJson,
+            termsJson: canonical.termsJson,
+            minInvestment: canonical.minInvestment,
+            worstMonth: canonical.worstMonth,
+            maxDrawdown: canonical.maxDrawdown,
+            isActive: canonical.isActive,
+          })
+          .where(eq(strategies.id, existing.id))
+          .returning();
+        updated += 1;
+        usedIds.add(existing.id);
+        seededStrategies.push(updatedStrategy);
+        continue;
+      }
+
+      const fallback = unusedExisting.shift();
+      if (fallback) {
+        const [updatedStrategy] = await db.update(strategies)
+          .set({
+            name: canonical.name,
+            description: canonical.description,
+            riskTier: canonical.riskTier,
+            baseAsset: canonical.baseAsset,
+            pairsJson: canonical.pairsJson,
+            expectedMonthlyRangeBpsMin: canonical.expectedMonthlyRangeBpsMin,
+            expectedMonthlyRangeBpsMax: canonical.expectedMonthlyRangeBpsMax,
+            feesJson: canonical.feesJson,
+            termsJson: canonical.termsJson,
+            minInvestment: canonical.minInvestment,
+            worstMonth: canonical.worstMonth,
+            maxDrawdown: canonical.maxDrawdown,
+            isActive: canonical.isActive,
+          })
+          .where(eq(strategies.id, fallback.id))
+          .returning();
+        updated += 1;
+        usedIds.add(fallback.id);
+        seededStrategies.push(updatedStrategy);
+        continue;
+      }
+
+      const [created] = await db.insert(strategies)
+        .values(canonical)
+        .returning();
+      inserted += 1;
+      usedIds.add(created.id);
+      seededStrategies.push(created);
+    }
+
+    const idsToDeactivate = existingStrategies
+      .filter((s) => !usedIds.has(s.id) && s.isActive)
+      .map((s) => s.id);
+
+    if (idsToDeactivate.length > 0) {
+      await db.update(strategies)
+        .set({ isActive: false })
+        .where(inArray(strategies.id, idsToDeactivate));
+    }
 
     const baseAmount = 1000000000; // 1000 USDT in minor units
+    const today = new Date();
 
-    for (const s of strategyData) {
-      const [strategy] = await db.insert(strategies).values({
-        name: s.name,
-        description: s.desc,
-        riskTier: s.tier,
-        baseAsset: "USDT",
-        pairsJson: s.pairs,
-        expectedMonthlyRangeBpsMin: s.minBps,
-        expectedMonthlyRangeBpsMax: s.maxBps,
-        feesJson: { management: "0.5%", performance: "10%" },
-        termsJson: { profitPayout: s.tier === "LOW" ? "DAILY" : "MONTHLY", principalRedemption: "WEEKLY_WINDOW" },
-        minInvestment: "100000000",
-        worstMonth: s.worst,
-        maxDrawdown: s.dd,
-        isActive: true,
-      }).returning();
+    for (const strategy of seededStrategies) {
+      await db.delete(strategyPerformance).where(eq(strategyPerformance.strategyId, strategy.id));
 
-      // Generate 90-day performance series
-      const dailyDrift = s.tier === "LOW" ? 0.0008 : s.tier === "CORE" ? 0.0015 : 0.0022;
-      const volatility = s.tier === "LOW" ? 0.002 : s.tier === "CORE" ? 0.008 : 0.015;
-      
+      const dailyDrift = strategy.riskTier === "LOW" ? 0.0008 : strategy.riskTier === "CORE" ? 0.0015 : 0.0022;
+      const volatility = strategy.riskTier === "LOW" ? 0.002 : strategy.riskTier === "CORE" ? 0.008 : 0.015;
+
       let equity = baseAmount;
       let btcBenchmark = baseAmount;
       let ethBenchmark = baseAmount;
-      
-      const today = new Date();
-      
+
       for (let day = 1; day <= 90; day++) {
         const date = new Date(today);
         date.setDate(date.getDate() - (90 - day));
         const dateStr = date.toISOString().split("T")[0];
-        
-        // Seeded random for deterministic results
+
         const seed = strategy.id.charCodeAt(0) + day;
         const rand1 = Math.sin(seed * 9999) * 10000;
         const rand2 = Math.sin(seed * 7777) * 10000;
         const random = (rand1 - Math.floor(rand1)) * 2 - 1;
-        
-        // Add drawdown days for HIGH tier
-        const isDrawdownDay = s.tier === "HIGH" && day % 15 === 0;
+
+        const isDrawdownDay = strategy.riskTier === "HIGH" && day % 15 === 0;
         const dailyReturn = isDrawdownDay ? -volatility * 2 : dailyDrift + random * volatility;
-        
+
         equity = Math.round(equity * (1 + dailyReturn));
         btcBenchmark = Math.round(btcBenchmark * (1 + 0.001 + (rand2 - Math.floor(rand2)) * 0.015 - 0.0075));
         ethBenchmark = Math.round(ethBenchmark * (1 + 0.0012 + (rand1 - Math.floor(rand1)) * 0.018 - 0.009));
-        
+
         await db.insert(strategyPerformance).values({
           strategyId: strategy.id,
           day,
@@ -562,6 +616,55 @@ export class DatabaseStorage implements IStorage {
         });
       }
     }
+
+    return { inserted, updated };
+  }
+
+  async getStrategyProfiles(): Promise<StrategyProfile[]> {
+    return db.select().from(strategyProfiles).orderBy(strategyProfiles.displayName);
+  }
+
+  async seedStrategyProfiles(): Promise<{ inserted: number; updated: number }> {
+    const { getCanonicalStrategyProfiles, computeProfileSeedStats } = await import("./strategies/catalog");
+    const canonicalProfiles = getCanonicalStrategyProfiles();
+    const existing = await db.select({ slug: strategyProfiles.slug }).from(strategyProfiles);
+    const existingSlugs = existing.map((row) => row.slug);
+    const { inserted, updated } = computeProfileSeedStats(existingSlugs);
+
+    for (const profile of canonicalProfiles) {
+      const data: InsertStrategyProfile = {
+        slug: profile.slug,
+        displayName: profile.displayName,
+        symbol: profile.symbol,
+        timeframe: profile.timeframe,
+        description: profile.description,
+        riskLevel: profile.riskLevel,
+        tags: profile.tags,
+        defaultConfig: profile.defaultConfig,
+        configSchema: profile.configSchema,
+        isEnabled: profile.isEnabled,
+      };
+
+      await db.insert(strategyProfiles)
+        .values(data)
+        .onConflictDoUpdate({
+          target: strategyProfiles.slug,
+          set: {
+            displayName: data.displayName,
+            symbol: data.symbol,
+            timeframe: data.timeframe,
+            description: data.description,
+            riskLevel: data.riskLevel,
+            tags: data.tags,
+            defaultConfig: data.defaultConfig,
+            configSchema: data.configSchema,
+            isEnabled: data.isEnabled,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
+    return { inserted, updated };
   }
 
   async getPositions(userId: string): Promise<Position[]> {
