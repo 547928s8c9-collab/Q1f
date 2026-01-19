@@ -25,7 +25,7 @@ export default function Landing() {
 
     if (adminLogin === "qwerty" && adminPassword === "qwerty") {
       setAdminError("");
-      navigate("/admin/dashboard");
+      handleAdminLogin();
       return;
     }
 
