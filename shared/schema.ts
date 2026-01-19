@@ -601,6 +601,26 @@ export const insertTelegramAccountSchema = createInsertSchema(telegramAccounts).
 export type InsertTelegramAccount = z.infer<typeof insertTelegramAccountSchema>;
 export type TelegramAccount = typeof telegramAccounts.$inferSelect;
 
+// ==================== TELEGRAM ACTION TOKENS ====================
+export const telegramActionTokens = pgTable("telegram_action_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: varchar("token", { length: 32 }).notNull(),
+  telegramUserId: text("telegram_user_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  action: text("action").notNull(),
+  payloadJson: jsonb("payload_json"),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("telegram_action_tokens_token_idx").on(table.token),
+  index("telegram_action_tokens_expires_idx").on(table.expiresAt),
+]);
+
+export const insertTelegramActionTokenSchema = createInsertSchema(telegramActionTokens).omit({ id: true, createdAt: true, usedAt: true });
+export type InsertTelegramActionToken = z.infer<typeof insertTelegramActionTokenSchema>;
+export type TelegramActionToken = typeof telegramActionTokens.$inferSelect;
+
 // ==================== IDEMPOTENCY KEYS ====================
 export const idempotencyKeys = pgTable("idempotency_keys", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

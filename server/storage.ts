@@ -1,5 +1,6 @@
 import { db } from "./db";
-import { eq, and, desc, gte, or, ilike, lte, lt, sql, inArray } from "drizzle-orm";
+import crypto from "crypto";
+import { eq, and, desc, gte, or, ilike, lte, lt, sql, inArray, isNull } from "drizzle-orm";
 import {
   balances,
   vaults,
@@ -22,6 +23,7 @@ import {
   idempotencyKeys,
   marketCandles,
   telegramAccounts,
+  telegramActionTokens,
   users,
   AddressStatus,
   dbRowToCandle,
@@ -74,8 +76,32 @@ import {
   type InsertIdempotencyKey,
   type Candle,
   type TelegramAccount,
+  type TelegramActionToken,
+  type InsertTelegramActionToken,
   type User,
 } from "@shared/schema";
+
+type TelegramActionTokenPayload = Record<string, unknown> | null;
+
+export type TelegramActionTokenConsumeResult =
+  | {
+      status: "ok";
+      action: string;
+      payload: TelegramActionTokenPayload;
+      telegramUserId: string;
+      userId: string;
+    }
+  | { status: "invalid" | "expired" | "used" };
+
+const actionTokenMemoryStore = new Map<string, TelegramActionToken>();
+
+function shouldUseMemoryActionTokens(): boolean {
+  return process.env.NODE_ENV === "test" && !process.env.DATABASE_URL;
+}
+
+function generateActionToken(): string {
+  return crypto.randomBytes(12).toString("base64url");
+}
 
 export interface IStorage {
   ensureUserData(userId: string): Promise<void>;
@@ -87,6 +113,15 @@ export interface IStorage {
   getTelegramAccountByTelegramUserId(telegramUserId: string): Promise<TelegramAccount | undefined>;
   getTelegramAccountByUserId(userId: string): Promise<TelegramAccount | undefined>;
   upsertTelegramAccount(userId: string, telegramUserId: string): Promise<TelegramAccount>;
+  createTelegramActionToken(input: {
+    telegramUserId: string;
+    userId: string;
+    action: string;
+    payload?: TelegramActionTokenPayload;
+    ttlSeconds?: number;
+  }): Promise<string>;
+  consumeTelegramActionToken(token: string, telegramUserId?: string): Promise<TelegramActionTokenConsumeResult>;
+  cleanupExpiredActionTokens(): Promise<void>;
 
   getBalances(userId: string): Promise<Balance[]>;
   getBalance(userId: string, asset: string): Promise<Balance | undefined>;
@@ -469,6 +504,136 @@ export class DatabaseStorage implements IStorage {
     });
 
     return account;
+  }
+
+  async createTelegramActionToken({
+    telegramUserId,
+    userId,
+    action,
+    payload,
+    ttlSeconds = 600,
+  }: {
+    telegramUserId: string;
+    userId: string;
+    action: string;
+    payload?: TelegramActionTokenPayload;
+    ttlSeconds?: number;
+  }): Promise<string> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
+
+    if (shouldUseMemoryActionTokens()) {
+      const token = generateActionToken();
+      const record: TelegramActionToken = {
+        id: crypto.randomUUID(),
+        token,
+        telegramUserId,
+        userId,
+        action,
+        payloadJson: payload ?? null,
+        expiresAt,
+        usedAt: null,
+        createdAt: now,
+      };
+      actionTokenMemoryStore.set(token, record);
+      return token;
+    }
+
+    const payloadJson = payload ?? null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = generateActionToken();
+      try {
+        const [created] = await db.insert(telegramActionTokens).values({
+          token,
+          telegramUserId,
+          userId,
+          action,
+          payloadJson,
+          expiresAt,
+        } satisfies InsertTelegramActionToken).returning();
+        if (created) {
+          return created.token;
+        }
+      } catch (error) {
+        if (attempt === 2) {
+          throw error;
+        }
+      }
+    }
+    throw new Error("Failed to create Telegram action token");
+  }
+
+  async consumeTelegramActionToken(token: string, telegramUserId?: string): Promise<TelegramActionTokenConsumeResult> {
+    const now = new Date();
+
+    if (shouldUseMemoryActionTokens()) {
+      const record = actionTokenMemoryStore.get(token);
+      if (!record) {
+        return { status: "invalid" };
+      }
+      if (telegramUserId && record.telegramUserId !== telegramUserId) {
+        return { status: "invalid" };
+      }
+      if (record.usedAt) {
+        return { status: "used" };
+      }
+      if (record.expiresAt.getTime() < now.getTime()) {
+        return { status: "expired" };
+      }
+      record.usedAt = now;
+      actionTokenMemoryStore.set(token, record);
+      return {
+        status: "ok",
+        action: record.action,
+        payload: (record.payloadJson as TelegramActionTokenPayload) ?? null,
+        telegramUserId: record.telegramUserId,
+        userId: record.userId,
+      };
+    }
+
+    const [record] = await db.select().from(telegramActionTokens).where(eq(telegramActionTokens.token, token));
+    if (!record) {
+      return { status: "invalid" };
+    }
+    if (telegramUserId && record.telegramUserId !== telegramUserId) {
+      return { status: "invalid" };
+    }
+    if (record.usedAt) {
+      return { status: "used" };
+    }
+    if (record.expiresAt.getTime() < now.getTime()) {
+      return { status: "expired" };
+    }
+
+    const [updated] = await db
+      .update(telegramActionTokens)
+      .set({ usedAt: now })
+      .where(and(eq(telegramActionTokens.token, token), isNull(telegramActionTokens.usedAt)))
+      .returning();
+    if (!updated) {
+      return { status: "used" };
+    }
+
+    return {
+      status: "ok",
+      action: record.action,
+      payload: (record.payloadJson as TelegramActionTokenPayload) ?? null,
+      telegramUserId: record.telegramUserId,
+      userId: record.userId,
+    };
+  }
+
+  async cleanupExpiredActionTokens(): Promise<void> {
+    const now = new Date();
+    if (shouldUseMemoryActionTokens()) {
+      for (const [token, record] of actionTokenMemoryStore.entries()) {
+        if (record.expiresAt.getTime() < now.getTime()) {
+          actionTokenMemoryStore.delete(token);
+        }
+      }
+      return;
+    }
+    await db.delete(telegramActionTokens).where(lt(telegramActionTokens.expiresAt, now));
   }
 
   async getBalances(userId: string): Promise<Balance[]> {

@@ -4,6 +4,8 @@ import { validateTelegramInitData } from "../telegram/validateInitData";
 import { requireTelegramJwt } from "../middleware/requireTelegramJwt";
 import { signTelegramJwt, verifyTelegramJwt } from "../telegram/jwt";
 import { storage } from "../storage";
+import { botAnswerCallbackQuery, botEditMessageText, botSendMessage } from "../telegram/botApi";
+import { buildTelegramKeyboard, formatMinorUnits, getTelegramWebAppUrl, type TelegramInlineKeyboardMarkup } from "../telegram/botMessages";
 import rateLimit from "express-rate-limit";
 
 const authPayloadSchema = z.object({
@@ -23,6 +25,52 @@ const telegramAuthLimiter = rateLimit({
   message: { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } },
   validate: { xForwardedForHeader: false },
 });
+
+type TelegramUpdate = {
+  message?: {
+    text?: string;
+    from?: { id: number };
+    chat?: { id: number; type?: string };
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number };
+    data?: string;
+    message?: { message_id?: number; chat?: { id: number; type?: string } };
+  };
+};
+
+async function buildTelegramSummaryText(userId: string): Promise<string> {
+  const [balances, positions, unreadCount] = await Promise.all([
+    storage.getBalances(userId),
+    storage.getPositions(userId),
+    storage.getUnreadNotificationCount(userId),
+  ]);
+
+  const usdtBalance = balances.find((balance) => balance.asset === "USDT");
+  const formattedBalance = formatMinorUnits(usdtBalance?.available ?? "0");
+
+  return [
+    "Сводка",
+    `Баланс USDT: ${formattedBalance}`,
+    `Позиции: ${positions.length}`,
+    `Непрочитанные уведомления: ${unreadCount}`,
+    `Обновлено: ${new Date().toLocaleString("ru-RU")}`,
+  ].join("\n");
+}
+
+async function createRefreshKeyboard(telegramUserId: string, userId: string): Promise<TelegramInlineKeyboardMarkup> {
+  const refreshToken = await storage.createTelegramActionToken({
+    telegramUserId,
+    userId,
+    action: "REFRESH",
+    ttlSeconds: 600,
+  });
+  return buildTelegramKeyboard({
+    webAppUrl: getTelegramWebAppUrl(),
+    refreshToken,
+  });
+}
 
 export function registerTelegramRoutes({ app }: RouteDeps): void {
   app.post("/api/telegram/auth", telegramAuthLimiter, async (req, res) => {
@@ -228,5 +276,123 @@ export function registerTelegramRoutes({ app }: RouteDeps): void {
         },
       });
     }
+  });
+
+  app.post("/api/telegram/bot/webhook", async (req, res) => {
+    const isProduction = process.env.NODE_ENV === "production";
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const providedSecret = req.header("X-Telegram-Bot-Api-Secret-Token");
+
+    if (isProduction) {
+      if (!webhookSecret || providedSecret !== webhookSecret) {
+        return res.status(401).json({ ok: false });
+      }
+    } else if (!webhookSecret || providedSecret !== webhookSecret) {
+      console.warn("Telegram webhook secret missing or mismatched in dev mode");
+    }
+
+    const update = req.body as TelegramUpdate;
+
+    try {
+      if (update.message?.text) {
+        const chatId = update.message.chat?.id;
+        const chatType = update.message.chat?.type;
+        const telegramUserId = update.message.from?.id;
+
+        if (!chatId || !telegramUserId) {
+          return res.status(200).json({ ok: true });
+        }
+
+        if (chatType && chatType !== "private") {
+          await botSendMessage(String(chatId), "Используйте бота в приватном чате.");
+          return res.status(200).json({ ok: true });
+        }
+
+        const account = await storage.getTelegramAccountByTelegramUserId(String(telegramUserId));
+        const linkedUserId = account?.userId;
+        const webAppUrl = getTelegramWebAppUrl();
+
+        if (update.message.text.startsWith("/start")) {
+          if (!linkedUserId) {
+            await botSendMessage(
+              String(chatId),
+              "Привет! Откройте mini app и привяжите аккаунт в /tg.",
+              buildTelegramKeyboard({ webAppUrl }),
+            );
+            return res.status(200).json({ ok: true });
+          }
+
+          const replyMarkup = await createRefreshKeyboard(String(telegramUserId), linkedUserId);
+          await botSendMessage(
+            String(chatId),
+            "С возвращением! Нажмите Open App для входа или Refresh для обновления сводки.",
+            replyMarkup,
+          );
+          return res.status(200).json({ ok: true });
+        }
+
+        await botSendMessage(String(chatId), "Нажмите Open App, чтобы открыть mini app.", buildTelegramKeyboard({ webAppUrl }));
+        return res.status(200).json({ ok: true });
+      }
+
+      if (update.callback_query) {
+        const { id: callbackId, from, data, message } = update.callback_query;
+        const telegramUserId = String(from.id);
+        const chatId = message?.chat?.id;
+        const chatType = message?.chat?.type;
+        const messageId = message?.message_id;
+
+        await botAnswerCallbackQuery(callbackId);
+
+        if (chatType && chatType !== "private") {
+          await botAnswerCallbackQuery(callbackId, "Private chat only");
+          return res.status(200).json({ ok: true });
+        }
+
+        if (!data?.startsWith("a:") || !chatId) {
+          return res.status(200).json({ ok: true });
+        }
+
+        const actionToken = data.slice(2);
+        const consumeResult = await storage.consumeTelegramActionToken(actionToken, telegramUserId);
+
+        if (consumeResult.status === "expired") {
+          await botAnswerCallbackQuery(callbackId, "Expired action");
+          return res.status(200).json({ ok: true });
+        }
+        if (consumeResult.status === "used") {
+          await botAnswerCallbackQuery(callbackId, "Already processed");
+          return res.status(200).json({ ok: true });
+        }
+        if (consumeResult.status === "invalid") {
+          await botAnswerCallbackQuery(callbackId, "Invalid action");
+          return res.status(200).json({ ok: true });
+        }
+
+        const account = await storage.getTelegramAccountByTelegramUserId(telegramUserId);
+        if (!account || account.userId !== consumeResult.userId) {
+          await botAnswerCallbackQuery(callbackId, "Unauthorized action");
+          return res.status(200).json({ ok: true });
+        }
+
+        if (consumeResult.action === "REFRESH") {
+          const summary = await buildTelegramSummaryText(account.userId);
+          const replyMarkup = await createRefreshKeyboard(telegramUserId, account.userId);
+
+          if (messageId) {
+            await botEditMessageText(String(chatId), messageId, summary, replyMarkup);
+          } else {
+            await botSendMessage(String(chatId), summary, replyMarkup);
+          }
+          return res.status(200).json({ ok: true });
+        }
+
+        await botAnswerCallbackQuery(callbackId, "Unknown action");
+      }
+    } catch (error) {
+      console.error("Telegram webhook error:", error);
+    }
+
+    return res.status(200).json({ ok: true });
   });
 }
