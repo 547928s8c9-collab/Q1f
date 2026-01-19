@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { CreditCard, Loader2, AlertCircle } from "lucide-react";
 import type { BootstrapResponse } from "@shared/schema";
+import { getMoneyInputState } from "@/lib/moneyInput";
+import { createIdempotencyKey } from "@/lib/idempotency";
 
 export default function DepositCard() {
   const { toast } = useToast();
@@ -22,7 +24,12 @@ export default function DepositCard() {
 
   const simulateMutation = useMutation({
     mutationFn: async (amountRub: string) => {
-      return apiRequest("POST", "/api/deposit/card/simulate", { amount: amountRub });
+      return apiRequest(
+        "POST",
+        "/api/deposit/card/simulate",
+        { amount: amountRub },
+        { headers: { "Idempotency-Key": createIdempotencyKey("dep_card") } },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
@@ -42,13 +49,17 @@ export default function DepositCard() {
     },
   });
 
+  const { normalized: normalizedAmount, minor: amountInKopeks, error: amountError } =
+    getMoneyInputState(amount, "RUB");
+
   const handleDeposit = () => {
-    if (!amount) return;
-    const amountInKopeks = (parseFloat(amount) * 100).toString();
+    if (!amountInKopeks) return;
     simulateMutation.mutate(amountInKopeks);
   };
 
-  const estimatedUsdt = amount ? (parseFloat(amount) / usdtRubRate).toFixed(2) : "0.00";
+  const estimatedUsdt = amountInKopeks
+    ? (Number(amountInKopeks) / 100 / usdtRubRate).toFixed(2)
+    : "0.00";
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
@@ -78,6 +89,7 @@ export default function DepositCard() {
               className="mt-2"
               data-testid="input-card-amount"
             />
+            {amountError && <p className="text-xs text-destructive mt-2">{amountError}</p>}
           </div>
 
           <div className="bg-muted rounded-lg p-4">
@@ -94,7 +106,7 @@ export default function DepositCard() {
           <Button
             className="w-full min-h-[44px]"
             onClick={handleDeposit}
-            disabled={simulateMutation.isPending || !amount}
+            disabled={simulateMutation.isPending || !normalizedAmount || !!amountError}
             data-testid="button-card-deposit"
           >
             {simulateMutation.isPending ? (
