@@ -265,6 +265,22 @@ export const insertStrategySeriesSchema = createInsertSchema(strategySeries).omi
 export type InsertStrategySeries = z.infer<typeof insertStrategySeriesSchema>;
 export type StrategySeries = typeof strategySeries.$inferSelect;
 
+// ==================== BENCHMARK SERIES ====================
+export const benchmarkSeries = pgTable("benchmark_series", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  asset: text("asset").notNull(), // SP500, BTC, GOLD
+  timeframeDays: integer("timeframe_days").notNull(),
+  date: text("date").notNull(),
+  value: text("value").notNull(), // normalized to 100
+}, (table) => [
+  uniqueIndex("benchmark_series_asset_timeframe_date_idx").on(table.asset, table.timeframeDays, table.date),
+  index("benchmark_series_asset_timeframe_idx").on(table.asset, table.timeframeDays),
+]);
+
+export const insertBenchmarkSeriesSchema = createInsertSchema(benchmarkSeries).omit({ id: true });
+export type InsertBenchmarkSeries = z.infer<typeof insertBenchmarkSeriesSchema>;
+export type BenchmarkSeries = typeof benchmarkSeries.$inferSelect;
+
 // ==================== QUOTES ====================
 export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

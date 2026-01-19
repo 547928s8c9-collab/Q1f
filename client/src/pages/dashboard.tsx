@@ -34,6 +34,7 @@ interface AnalyticsOverview {
     accruedProfitMinor: string;
     status: string;
   }>;
+  benchmarkSeries?: Record<string, Record<string, Array<{ date: string; value: string }>>>;
 }
 
 export default function Dashboard() {

@@ -10,6 +10,7 @@ import {
   operations,
   portfolioSeries,
   strategySeries,
+  benchmarkSeries,
   quotes,
   securitySettings,
   whitelistAddresses,
@@ -45,6 +46,8 @@ import {
   type InsertPortfolioSeries,
   type StrategySeries,
   type InsertStrategySeries,
+  type BenchmarkSeries,
+  type InsertBenchmarkSeries,
   type Quote,
   type InsertQuote,
   type SecuritySettings,
@@ -72,6 +75,7 @@ import {
   type InsertIdempotencyKey,
   type Candle,
 } from "@shared/schema";
+import { buildBenchmarkSeries, type BenchmarkAsset } from "./lib/benchmarkSeries";
 
 export interface IStorage {
   ensureUserData(userId: string): Promise<void>;
@@ -118,6 +122,8 @@ export interface IStorage {
 
   getStrategySeries(strategyId: string, days?: number): Promise<StrategySeries[]>;
   createStrategySeries(series: InsertStrategySeries): Promise<StrategySeries>;
+
+  getBenchmarkSeries(asset: BenchmarkAsset, timeframeDays: number): Promise<BenchmarkSeries[]>;
 
   getQuotes(pair: string, days?: number): Promise<Quote[]>;
   getLatestQuote(pair: string): Promise<Quote | undefined>;
@@ -772,6 +778,39 @@ export class DatabaseStorage implements IStorage {
   async createStrategySeries(series: InsertStrategySeries): Promise<StrategySeries> {
     const [created] = await db.insert(strategySeries).values(series).returning();
     return created;
+  }
+
+  private async ensureBenchmarkSeries(asset: BenchmarkAsset, timeframeDays: number): Promise<void> {
+    const today = new Date().toISOString().split("T")[0];
+    const [latest] = await db.select({ date: benchmarkSeries.date })
+      .from(benchmarkSeries)
+      .where(and(eq(benchmarkSeries.asset, asset), eq(benchmarkSeries.timeframeDays, timeframeDays)))
+      .orderBy(desc(benchmarkSeries.date))
+      .limit(1);
+
+    if (!latest || latest.date < today) {
+      const series = buildBenchmarkSeries(asset, timeframeDays);
+      if (series.length > 0) {
+        await db.insert(benchmarkSeries).values(series as InsertBenchmarkSeries[]).onConflictDoNothing();
+      }
+    }
+  }
+
+  async getBenchmarkSeries(asset: BenchmarkAsset, timeframeDays: number): Promise<BenchmarkSeries[]> {
+    await this.ensureBenchmarkSeries(asset, timeframeDays);
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - timeframeDays);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+
+    const results = await db.select().from(benchmarkSeries)
+      .where(and(
+        eq(benchmarkSeries.asset, asset),
+        eq(benchmarkSeries.timeframeDays, timeframeDays),
+        gte(benchmarkSeries.date, cutoffStr)
+      ));
+
+    return results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }
 
   async getQuotes(pair: string, days: number = 90): Promise<Quote[]> {
