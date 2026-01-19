@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
+import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,24 +10,38 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { PageHeader } from "@/components/ui/page-header";
-import { CompareChart } from "@/components/charts/compare-chart";
-import { PeriodToggle } from "@/components/charts/period-toggle";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, AlertTriangle, Shield, Zap, Calculator, Wallet, Info, ExternalLink, ShieldAlert, Pause, Play } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { CandlestickChart, type CandlestickMarker } from "@/components/charts/candlestick-chart";
+import {
+  TrendingUp,
+  AlertTriangle,
+  Shield,
+  Zap,
+  Calculator,
+  Wallet,
+  Info,
+  ExternalLink,
+  ShieldAlert,
+  Pause,
+  Play,
+  Activity,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type Strategy, type StrategyPerformance, type PayoutInstruction, type WhitelistAddress, formatMoney } from "@shared/schema";
+import {
+  type Candle,
+  type InvestMetrics,
+  type InvestTrade,
+  type Strategy,
+  type StrategyPerformance,
+  type PayoutInstruction,
+  type WhitelistAddress,
+  type Timeframe,
+  formatMoney,
+} from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-
-type Benchmark = "BTC" | "ETH" | "USDT" | "INDEX";
-
-const benchmarkOptions: { value: Benchmark; label: string }[] = [
-  { value: "BTC", label: "BTC" },
-  { value: "ETH", label: "ETH" },
-  { value: "USDT", label: "USDT" },
-  { value: "INDEX", label: "Index" },
-];
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -34,13 +49,42 @@ const riskConfig: Record<string, { color: string; icon: React.ElementType; label
   HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "High Risk" },
 };
 
+const timeframeOptions: { value: Timeframe; label: string }[] = [
+  { value: "15m", label: "15m" },
+  { value: "1h", label: "1h" },
+  { value: "1d", label: "1d" },
+];
+
+const periodOptions: Array<{ value: 7 | 30 | 90; label: string }> = [
+  { value: 7, label: "7D" },
+  { value: 30, label: "30D" },
+  { value: 90, label: "90D" },
+];
+
+interface InvestCandlesResponse {
+  candles: Candle[];
+  gaps: { startMs: number; endMs: number; reason: string }[];
+  source: string;
+  symbol: string;
+  timeframe: Timeframe;
+  periodDays: number;
+}
+
+interface InvestInsightsResponse {
+  trades: InvestTrade[];
+  metrics: InvestMetrics;
+  timeframe: Timeframe;
+  periodDays: number;
+  symbol: string;
+}
+
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
-  const [period, setPeriod] = useState<7 | 30 | 90>(30);
-  const [benchmark, setBenchmark] = useState<Benchmark>("BTC");
-  const [Amount, setAmount] = useState("1000");
-  
+  const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
+  const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("15m");
+  const [amount, setAmount] = useState("1000");
+
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
   const [payoutAddressId, setPayoutAddressId] = useState<string>("");
@@ -66,7 +110,7 @@ export default function StrategyDetail() {
   });
 
   const { data: performance, isLoading: perfLoading } = useQuery<StrategyPerformance[]>({
-    queryKey: ["/api/strategies", params.id, "performance"],
+    queryKey: ["/api/strategies", params.id, "performance", { days: periodDays.toString() }],
   });
 
   const { data: payoutInstruction } = useQuery<PayoutInstruction | null>({
@@ -80,6 +124,34 @@ export default function StrategyDetail() {
 
   const { data: riskControls } = useQuery<RiskControlsResponse>({
     queryKey: ["/api/positions", params.id, "risk-controls"],
+    enabled: !!params.id,
+  });
+
+  const {
+    data: candleResponse,
+    isLoading: candlesLoading,
+    error: candlesError,
+  } = useQuery<InvestCandlesResponse>({
+    queryKey: [
+      "/api/invest/strategies",
+      params.id,
+      "candles",
+      { timeframe: chartTimeframe, period: periodDays.toString() },
+    ],
+    enabled: !!params.id,
+  });
+
+  const {
+    data: insightsResponse,
+    isLoading: insightsLoading,
+    error: insightsError,
+  } = useQuery<InvestInsightsResponse>({
+    queryKey: [
+      "/api/invest/strategies",
+      params.id,
+      "insights",
+      { timeframe: chartTimeframe, period: periodDays.toString() },
+    ],
     enabled: !!params.id,
   });
 
@@ -102,12 +174,12 @@ export default function StrategyDetail() {
   }, [riskControls]);
 
   const savePayoutMutation = useMutation({
-    mutationFn: async (data: { 
-      strategyId: string; 
-      frequency: string; 
-      addressId?: string; 
-      minPayoutMinor: string; 
-      active: boolean 
+    mutationFn: async (data: {
+      strategyId: string;
+      frequency: string;
+      addressId?: string;
+      minPayoutMinor: string;
+      active: boolean;
     }) => {
       return apiRequest("POST", "/api/payout-instructions", data);
     },
@@ -117,10 +189,10 @@ export default function StrategyDetail() {
       toast({ title: "Настройки выплат сохранены" });
     },
     onError: (error: Error & { code?: string }) => {
-      toast({ 
-        title: "Ошибка сохранения", 
-        description: error.message, 
-        variant: "destructive" 
+      toast({
+        title: "Ошибка сохранения",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
@@ -168,8 +240,8 @@ export default function StrategyDetail() {
     riskControlsMutation.mutate({ ddLimitPct, autoPauseEnabled });
   };
 
-  const activeAddresses = whitelistAddresses?.filter(a => a.status === "ACTIVE") || [];
-  const pendingAddresses = whitelistAddresses?.filter(a => a.status === "PENDING_ACTIVATION") || [];
+  const activeAddresses = whitelistAddresses?.filter((a) => a.status === "ACTIVE") || [];
+  const pendingAddresses = whitelistAddresses?.filter((a) => a.status === "PENDING_ACTIVATION") || [];
   const hasActiveAddress = activeAddresses.length > 0;
 
   const isLoading = strategyLoading || perfLoading;
@@ -178,53 +250,59 @@ export default function StrategyDetail() {
   const config = riskConfig[tier] || riskConfig.CORE;
   const Icon = config.icon;
 
-  const filteredPerf = (performance || []).slice(-period);
-  
+  const filteredPerf = performance || [];
+
   const baseValue = filteredPerf[0]?.equityMinor ? parseFloat(filteredPerf[0].equityMinor) : 1000000000;
-  
+
   const strategyData = filteredPerf.map((p) => ({
     date: p.date,
     value: (parseFloat(p.equityMinor) / baseValue) * 100,
   }));
 
-  const getBenchmarkValue = (p: StrategyPerformance, index: number): number => {
-    if (benchmark === "USDT") return 100;
-    
-    const btcBase = filteredPerf[0]?.benchmarkBtcMinor ? parseFloat(filteredPerf[0].benchmarkBtcMinor) : 1000000000;
-    const ethBase = filteredPerf[0]?.benchmarkEthMinor ? parseFloat(filteredPerf[0].benchmarkEthMinor) : 1000000000;
-    
-    if (benchmark === "BTC" && p.benchmarkBtcMinor) {
-      return (parseFloat(p.benchmarkBtcMinor) / btcBase) * 100;
-    }
-    if (benchmark === "ETH" && p.benchmarkEthMinor) {
-      return (parseFloat(p.benchmarkEthMinor) / ethBase) * 100;
-    }
-    if (benchmark === "INDEX" && p.benchmarkBtcMinor && p.benchmarkEthMinor) {
-      const btcNorm = (parseFloat(p.benchmarkBtcMinor) / btcBase) * 100;
-      const ethNorm = (parseFloat(p.benchmarkEthMinor) / ethBase) * 100;
-      return (btcNorm + ethNorm) / 2;
-    }
-    return 100;
-  };
-
-  const benchmarkData = filteredPerf.map((p, i) => ({
-    date: p.date,
-    value: getBenchmarkValue(p, i),
-  }));
-
   const lastStrategyValue = strategyData[strategyData.length - 1]?.value || 100;
   const strategyReturn = ((lastStrategyValue - 100) / 100) * 100;
-  
-  const AmountNum = parseFloat(Amount) || 1000;
-  const Result = AmountNum * (1 + strategyReturn / 100);
-  const PnL = Result - AmountNum;
 
-  const minReturn = strategy?.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0";
-  const maxReturn = strategy?.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0";
+  const amountNum = parseFloat(amount) || 1000;
+  const result = amountNum * (1 + strategyReturn / 100);
+  const pnl = result - amountNum;
+
+  const minReturn = strategy?.expectedMonthlyRangeBpsMin
+    ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1)
+    : "0";
+  const maxReturn = strategy?.expectedMonthlyRangeBpsMax
+    ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1)
+    : "0";
 
   const pairs = Array.isArray(strategy?.pairsJson) ? strategy.pairsJson : [];
   const fees = strategy?.feesJson as { management?: string; performance?: string } | null;
   const terms = strategy?.termsJson as { profitPayout?: string; principalRedemption?: string } | null;
+
+  const candleData = candleResponse?.candles ?? [];
+  const trades = insightsResponse?.trades ?? [];
+  const metrics = insightsResponse?.metrics;
+  const chartMarkers = useMemo<CandlestickMarker[]>(() => {
+    if (!trades.length) return [];
+
+    return trades.flatMap((trade) => [
+      {
+        time: trade.entryTs,
+        position: "belowBar",
+        color: "hsl(var(--success))",
+        shape: "arrowUp",
+        text: "Buy",
+      },
+      {
+        time: trade.exitTs,
+        position: "aboveBar",
+        color: "hsl(var(--danger))",
+        shape: "arrowDown",
+        text: "Sell",
+      },
+    ]);
+  }, [trades]);
+
+  const formatPrice = (value: number) => value.toFixed(2);
+  const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -248,12 +326,18 @@ export default function StrategyDetail() {
       ) : (
         <>
           <div className="flex items-center gap-3 mb-6">
-            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center",
-              tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
-            )}>
-              <Icon className={cn("w-5 h-5",
-                tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
-              )} />
+            <div
+              className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center",
+                tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
+              )}
+            >
+              <Icon
+                className={cn(
+                  "w-5 h-5",
+                  tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
+                )}
+              />
             </div>
             <div>
               <h2 className="text-xl font-semibold">{strategy?.name}</h2>
@@ -268,42 +352,200 @@ export default function StrategyDetail() {
           </div>
 
           <Card className="p-5 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-              <h3 className="text-lg font-semibold">Performance vs Benchmark</h3>
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold">Market Activity</h3>
+                {candleResponse?.symbol && (
+                  <Badge variant="outline" className="text-xs">
+                    {candleResponse.symbol}
+                  </Badge>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                  {benchmarkOptions.map((option) => (
-                    <Button
-                      key={option.value}
-                      variant={benchmark === option.value ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setBenchmark(option.value)}
-                      className={cn(
-                        "text-xs",
-                        benchmark !== option.value && "text-muted-foreground"
-                      )}
-                      data-testid={`button-benchmark-${option.value.toLowerCase()}`}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-                <PeriodToggle value={period} onChange={setPeriod} />
+                <Select value={chartTimeframe} onValueChange={(value) => setChartTimeframe(value as Timeframe)}>
+                  <SelectTrigger className="w-[96px]" data-testid="select-timeframe">
+                    <SelectValue placeholder="Timeframe" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timeframeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(periodDays)} onValueChange={(value) => setPeriodDays(Number(value) as 7 | 30 | 90)}>
+                  <SelectTrigger className="w-[96px]" data-testid="select-period">
+                    <SelectValue placeholder="Period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {periodOptions.map((option) => (
+                      <SelectItem key={option.value} value={String(option.value)}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <CompareChart
-              strategyData={strategyData}
-              benchmarkData={benchmarkData}
-              strategyName={strategy?.name || "Strategy"}
-              benchmarkName={benchmarkOptions.find((b) => b.value === benchmark)?.label || benchmark}
-              height={320}
-            />
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              {period}-day return: <span className={strategyReturn >= 0 ? "text-positive" : "text-negative"}>
-                {strategyReturn >= 0 ? "+" : ""}{strategyReturn.toFixed(2)}%
-              </span>
-            </div>
+            {candlesLoading ? (
+              <ChartSkeleton height={360} />
+            ) : candlesError ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Unable to load market data. Please try again shortly.
+              </div>
+            ) : candleData.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No candles available for this range. Try a shorter period.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {periodDays}D · {candleData.length} candles · {candleResponse?.source ?? "source"}
+                  </span>
+                  {candleData[candleData.length - 1] && (
+                    <span className="tabular-nums">
+                      Last close: {formatPrice(candleData[candleData.length - 1].close)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <Card className="p-5 lg:col-span-2">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold">Strategy Metrics</h3>
+              </div>
+              {insightsLoading ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className="h-20 rounded-xl" />
+                  ))}
+                </div>
+              ) : insightsError ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Unable to load strategy metrics right now.
+                </div>
+              ) : metrics ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Total Trades</p>
+                    <p className="text-xl font-semibold tabular-nums">{metrics.totalTrades}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Win Rate</p>
+                    <p className="text-xl font-semibold tabular-nums">{metrics.winRatePct.toFixed(1)}%</p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Net P&amp;L</p>
+                    <p
+                      className={cn(
+                        "text-xl font-semibold tabular-nums",
+                        metrics.netPnl >= 0 ? "text-positive" : "text-negative"
+                      )}
+                    >
+                      {metrics.netPnl >= 0 ? "+" : ""}
+                      {metrics.netPnl.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Net P&amp;L %</p>
+                    <p className="text-xl font-semibold tabular-nums">
+                      {metrics.netPnlPct >= 0 ? "+" : ""}
+                      {metrics.netPnlPct.toFixed(2)}%
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Avg Hold</p>
+                    <p className="text-xl font-semibold tabular-nums">
+                      {metrics.avgHoldBars.toFixed(1)} bars
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 p-4">
+                    <p className="text-xs text-muted-foreground uppercase">Profit Factor</p>
+                    <p className="text-xl font-semibold tabular-nums">
+                      {metrics.profitFactor === Number.POSITIVE_INFINITY
+                        ? "∞"
+                        : metrics.profitFactor.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Metrics will appear once data is available.
+                </div>
+              )}
+            </Card>
+
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Trades Tape</h3>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  {trades.length} trades
+                </Badge>
+              </div>
+              {insightsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="h-16 rounded-xl" />
+                  ))}
+                </div>
+              ) : insightsError ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  Unable to load trade history.
+                </div>
+              ) : trades.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No trades for this window yet.
+                </div>
+              ) : (
+                <ScrollArea className="h-[280px] pr-3">
+                  <div className="hidden md:grid grid-cols-6 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+                    <span className="col-span-2">Exit</span>
+                    <span>Side</span>
+                    <span>Entry</span>
+                    <span>Exit</span>
+                    <span>P&amp;L</span>
+                  </div>
+                  <div className="space-y-2">
+                    {trades.map((trade) => (
+                      <div
+                        key={trade.id}
+                        className="grid grid-cols-2 md:grid-cols-6 gap-2 items-center rounded-lg border border-border/60 p-3 text-xs"
+                      >
+                        <span className="col-span-2 md:col-span-2 text-muted-foreground">
+                          {formatDateTime(trade.exitTs)}
+                        </span>
+                        <Badge variant="outline" className="w-fit text-[10px] uppercase">
+                          Long
+                        </Badge>
+                        <span className="tabular-nums text-muted-foreground">{formatPrice(trade.entryPrice)}</span>
+                        <span className="tabular-nums text-muted-foreground">{formatPrice(trade.exitPrice)}</span>
+                        <span
+                          className={cn(
+                            "tabular-nums font-medium",
+                            trade.netPnl >= 0 ? "text-positive" : "text-negative"
+                          )}
+                        >
+                          {trade.netPnl >= 0 ? "+" : ""}
+                          {trade.netPnl.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </Card>
+          </div>
 
           <Card className="p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
@@ -311,7 +553,7 @@ export default function StrategyDetail() {
               <h3 className="text-lg font-semibold">Calculator</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              See what your investment would have returned over the selected {period}-day period.
+              See what your investment would have returned over the selected {periodDays}-day period.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -319,7 +561,7 @@ export default function StrategyDetail() {
                 <Input
                   id="amount"
                   type="number"
-                  value={Amount}
+                  value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="mt-1"
                   data-testid="input-amount"
@@ -327,12 +569,13 @@ export default function StrategyDetail() {
               </div>
               <div className="flex flex-col justify-end">
                 <Label className="text-muted-foreground">Final Value</Label>
-                <p className="text-2xl font-bold tabular-nums">{Result.toFixed(2)} USDT</p>
+                <p className="text-2xl font-bold tabular-nums">{result.toFixed(2)} USDT</p>
               </div>
               <div className="flex flex-col justify-end">
                 <Label className="text-muted-foreground">Profit/Loss</Label>
-                <p className={cn("text-2xl font-bold tabular-nums", PnL >= 0 ? "text-positive" : "text-negative")}>
-                  {PnL >= 0 ? "+" : ""}{PnL.toFixed(2)} USDT
+                <p className={cn("text-2xl font-bold tabular-nums", pnl >= 0 ? "text-positive" : "text-negative")}>
+                  {pnl >= 0 ? "+" : ""}
+                  {pnl.toFixed(2)} USDT
                 </p>
               </div>
             </div>
@@ -384,14 +627,16 @@ export default function StrategyDetail() {
                       {activeAddresses.map((addr) => (
                         <SelectItem key={addr.id} value={addr.id}>
                           <span className="font-mono text-xs">
-                            {addr.label ? `${addr.label}: ` : ""}{addr.address.slice(0, 8)}...{addr.address.slice(-6)}
+                            {addr.label ? `${addr.label}: ` : ""}
+                            {addr.address.slice(0, 8)}...{addr.address.slice(-6)}
                           </span>
                         </SelectItem>
                       ))}
                       {pendingAddresses.map((addr) => (
                         <SelectItem key={addr.id} value={addr.id} disabled>
                           <span className="font-mono text-xs text-muted-foreground">
-                            {addr.label ? `${addr.label}: ` : ""}{addr.address.slice(0, 8)}...{addr.address.slice(-6)}
+                            {addr.label ? `${addr.label}: ` : ""}
+                            {addr.address.slice(0, 8)}...{addr.address.slice(-6)}
                             <span className="ml-2 text-warning">
                               (активируется {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString() : "..."})
                             </span>
@@ -402,9 +647,7 @@ export default function StrategyDetail() {
                   </Select>
                 ) : (
                   <div className="p-4 border border-dashed rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Нет активных адресов для выплат
-                    </p>
+                    <p className="text-sm text-muted-foreground mb-3">Нет активных адресов для выплат</p>
                     <Link href="/settings/security">
                       <Button variant="outline" size="sm" data-testid="button-add-address">
                         <ExternalLink className="w-4 h-4 mr-2" />
@@ -461,8 +704,8 @@ export default function StrategyDetail() {
               </div>
 
               {/* Save Button */}
-              <Button 
-                onClick={handleSavePayout} 
+              <Button
+                onClick={handleSavePayout}
                 disabled={savePayoutMutation.isPending}
                 className="w-full"
                 data-testid="button-save-payout"
@@ -482,17 +725,29 @@ export default function StrategyDetail() {
 
               {/* Paused Banner */}
               {riskControls.paused && (
-                <div className={cn(
-                  "p-3 rounded-lg mb-4 flex items-center justify-between",
-                  riskControls.pausedReason === "dd_breach" 
-                    ? "bg-negative/10 border border-negative/20" 
-                    : "bg-warning/10 border border-warning/20"
-                )}>
+                <div
+                  className={cn(
+                    "p-3 rounded-lg mb-4 flex items-center justify-between",
+                    riskControls.pausedReason === "dd_breach"
+                      ? "bg-negative/10 border border-negative/20"
+                      : "bg-warning/10 border border-warning/20"
+                  )}
+                >
                   <div className="flex items-center gap-2">
-                    <Pause className={cn("w-4 h-4", riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning")} />
-                    <span className={cn("text-sm font-medium", riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning")}>
-                      {riskControls.pausedReason === "dd_breach" 
-                        ? "Auto-paused due to drawdown limit breach" 
+                    <Pause
+                      className={cn(
+                        "w-4 h-4",
+                        riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        riskControls.pausedReason === "dd_breach" ? "text-negative" : "text-warning"
+                      )}
+                    >
+                      {riskControls.pausedReason === "dd_breach"
+                        ? "Auto-paused due to drawdown limit breach"
                         : "Strategy is manually paused"}
                     </span>
                   </div>
@@ -513,10 +768,14 @@ export default function StrategyDetail() {
               {riskControls.currentDrawdownPct > 0 && (
                 <div className="p-3 rounded-lg bg-muted/50 mb-4">
                   <p className="text-sm text-muted-foreground">Current Drawdown</p>
-                  <p className={cn(
-                    "text-xl font-semibold tabular-nums",
-                    riskControls.currentDrawdownPct >= (riskControls.ddLimitPct || 100) ? "text-negative" : "text-warning"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-xl font-semibold tabular-nums",
+                      riskControls.currentDrawdownPct >= (riskControls.ddLimitPct || 100)
+                        ? "text-negative"
+                        : "text-warning"
+                    )}
+                  >
                     -{riskControls.currentDrawdownPct.toFixed(1)}%
                   </p>
                 </div>
@@ -528,9 +787,7 @@ export default function StrategyDetail() {
                   <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                     <div>
                       <p className="font-medium">Pause Strategy</p>
-                      <p className="text-xs text-muted-foreground">
-                        Stop accrual and block new investments
-                      </p>
+                      <p className="text-xs text-muted-foreground">Stop accrual and block new investments</p>
                     </div>
                     <Button
                       variant="outline"
@@ -549,9 +806,7 @@ export default function StrategyDetail() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label>Drawdown Limit</Label>
-                    <span className="text-sm font-medium tabular-nums">
-                      {ddLimitPct === 0 ? "Off" : `${ddLimitPct}%`}
-                    </span>
+                    <span className="text-sm font-medium tabular-nums">{ddLimitPct === 0 ? "Off" : `${ddLimitPct}%`}</span>
                   </div>
                   <Slider
                     value={[ddLimitPct]}
@@ -571,9 +826,7 @@ export default function StrategyDetail() {
                 <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                   <div>
                     <p className="font-medium">Auto-Pause on Breach</p>
-                    <p className="text-xs text-muted-foreground">
-                      Automatically pause if drawdown exceeds limit
-                    </p>
+                    <p className="text-xs text-muted-foreground">Automatically pause if drawdown exceeds limit</p>
                   </div>
                   <Switch
                     checked={autoPauseEnabled}
@@ -628,13 +881,17 @@ export default function StrategyDetail() {
                 <p className="text-sm text-muted-foreground">Trading Pairs</p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {pairs.map((pair: string) => (
-                    <Badge key={pair} variant="outline" className="text-xs">{pair}</Badge>
+                    <Badge key={pair} variant="outline" className="text-xs">
+                      {pair}
+                    </Badge>
                   ))}
                 </div>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Fees</p>
-                <p className="text-sm">Management: {fees?.management || "0.5%"} | Performance: {fees?.performance || "10%"}</p>
+                <p className="text-sm">
+                  Management: {fees?.management || "0.5%"} | Performance: {fees?.performance || "10%"}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Profit Payout</p>
