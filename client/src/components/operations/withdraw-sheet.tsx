@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { formatMoney, type BootstrapResponse } from "@shared/schema";
+import { getMaxWithdrawableMinor, getTotalDeductMinor } from "@/lib/withdrawal";
+import { formatMoney, parseMoney, type BootstrapResponse } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -49,17 +50,12 @@ function WithdrawFlow({
   const queryClient = useQueryClient();
 
   const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const networkFeeMinor = bootstrap?.config?.networkFee || NETWORK_FEE;
+  const minWithdrawalMinor = bootstrap?.config?.minWithdrawal || "0";
 
-  const toMinorUnits = (displayValue: string): string => {
-    if (!displayValue || displayValue === ".") return "0";
-    const parts = displayValue.split(".");
-    const whole = parts[0] || "0";
-    const fraction = (parts[1] || "").padEnd(6, "0").slice(0, 6);
-    return BigInt(whole + fraction).toString();
-  };
-
-  const minorAmount = toMinorUnits(amount);
-  const totalDeduction = (BigInt(minorAmount || "0") + BigInt(NETWORK_FEE)).toString();
+  const minorAmount = amount ? parseMoney(amount, "USDT") : "0";
+  const totalDeduction = getTotalDeductMinor(minorAmount || "0", networkFeeMinor);
+  const maxWithdrawableMinor = getMaxWithdrawableMinor(availableBalance, networkFeeMinor);
   const balanceAfter = (BigInt(availableBalance) - BigInt(totalDeduction)).toString();
 
   const handleAmountChange = (value: string) => {
@@ -72,15 +68,15 @@ function WithdrawFlow({
   };
 
   const handleNext = () => {
-    const minVal = BigInt("1000000");
-    const maxVal = BigInt(availableBalance) - BigInt(NETWORK_FEE);
+    const minVal = BigInt(minWithdrawalMinor);
+    const maxVal = BigInt(getMaxWithdrawableMinor(availableBalance, networkFeeMinor));
     
     if (!address || address.length < 30) {
       setError("Please enter a valid wallet address");
       return;
     }
     if (BigInt(minorAmount) < minVal) {
-      setError("Minimum withdrawal is 1 USDT");
+      setError(`Minimum withdrawal is ${formatMoney(minWithdrawalMinor, "USDT")} USDT`);
       return;
     }
     if (BigInt(minorAmount) > maxVal) {
@@ -91,36 +87,27 @@ function WithdrawFlow({
   };
 
   const setMax = () => {
-    const maxMinor = BigInt(availableBalance) - BigInt(NETWORK_FEE);
-    if (maxMinor <= 0n) {
-      setAmount("0");
-      return;
-    }
-    const divisor = BigInt(1000000);
-    const whole = maxMinor / divisor;
-    const fraction = maxMinor % divisor;
-    const fractionStr = fraction.toString().padStart(6, "0");
-    setAmount(`${whole}.${fractionStr}`);
+    setAmount(formatMoney(maxWithdrawableMinor, "USDT"));
     setError("");
   };
 
   const withdrawMutation = useMutation({
     mutationFn: async () => {
+      const idempotencyKey = crypto.randomUUID();
       const res = await apiRequest("POST", "/api/withdraw/usdt", {
         amount: minorAmount,
         address,
+      }, {
+        headers: { "Idempotency-Key": idempotencyKey },
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || data.error || "Withdrawal failed");
-      }
       return res.json();
     },
     onSuccess: (data) => {
       setStatus("pending");
-      setOperationId(data.operation?.id || null);
+      setOperationId(data.operationId || data.operation?.id || null);
       setStep("result");
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       toast({
         title: "Withdrawal submitted",
@@ -196,19 +183,20 @@ function WithdrawFlow({
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Available</span>
+            <span className="text-muted-foreground">Max</span>
             <button
               type="button"
               onClick={setMax}
               className="text-primary hover:underline font-medium"
               data-testid="button-max-amount"
             >
-              {formatMoney(availableBalance, "USDT")} USDT
+              {formatMoney(maxWithdrawableMinor, "USDT")} USDT
             </button>
           </div>
 
-          <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-            Network fee: {formatMoney(NETWORK_FEE, "USDT")} USDT
+          <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
+            <div>Network fee: {formatMoney(networkFeeMinor, "USDT")} USDT</div>
+            <div>Minimum withdrawal: {formatMoney(minWithdrawalMinor, "USDT")} USDT</div>
           </div>
 
           <Button
@@ -227,7 +215,7 @@ function WithdrawFlow({
         asset="USDT"
         balanceBefore={availableBalance}
         balanceAfter={balanceAfter}
-        fee={NETWORK_FEE}
+        fee={networkFeeMinor}
         details={[
           { label: "To Address", value: `${address.slice(0, 8)}...${address.slice(-6)}` },
           { label: "Network", value: "TRON (TRC20)" },
