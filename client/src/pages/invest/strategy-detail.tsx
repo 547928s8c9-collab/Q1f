@@ -58,6 +58,11 @@ const timeframeOptions: { value: Timeframe; label: string }[] = [
   { value: "1d", label: "1d" },
 ];
 
+const timeframeStepMs: Record<Timeframe, number> = {
+  "15m": 15 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+};
 
 function toMajorUnits(minorUnits: string, decimals: number = 6): number {
   const value = BigInt(minorUnits || "0");
@@ -79,6 +84,12 @@ export default function StrategyDetail() {
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [tradeDetailsOpen, setTradeDetailsOpen] = useState(false);
   const [tradesCursor, setTradesCursor] = useState<string | undefined>(undefined);
+
+  const candleLimit = useMemo(() => {
+    const stepMs = timeframeStepMs[chartTimeframe];
+    const targetBars = Math.ceil((periodDays * 24 * 60 * 60 * 1000) / stepMs);
+    return Math.min(Math.max(targetBars, 50), 1500);
+  }, [chartTimeframe, periodDays]);
 
   // Memoize marker click handler to prevent chart recreation on every render
   const handleMarkerClick = useCallback((marker: CandlestickMarker) => {
@@ -139,7 +150,7 @@ export default function StrategyDetail() {
       "/api/invest/strategies",
       params.id,
       "candles",
-      { timeframe: chartTimeframe, periodDays: periodDays.toString() },
+      { timeframe: chartTimeframe, periodDays: periodDays.toString(), limit: candleLimit.toString() },
     ],
     enabled: !!params.id,
   });

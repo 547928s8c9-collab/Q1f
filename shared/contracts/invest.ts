@@ -52,6 +52,7 @@ export const InvestCandlesQuerySchema = z.object({
   periodDays: z.coerce.number().int().min(1).max(365).optional(),
   startMs: z.coerce.number().int().optional(),
   endMs: z.coerce.number().int().optional(),
+  limit: z.coerce.number().int().min(50).max(5000).optional(),
 });
 
 export const InvestCandlesResponseSchema = ApiEnvelopeSchema(

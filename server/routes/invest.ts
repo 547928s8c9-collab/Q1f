@@ -152,11 +152,12 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
       }
 
       const { profile } = resolved;
-      const periodDays = query.data.periodDays ?? DEFAULT_PERIOD_DAYS;
+      const periodDays = parsePeriodDays(query.data.periodDays?.toString());
       const timeframe = normalizeTimeframe(query.data.timeframe ?? profile.timeframe);
 
       const endMs = query.data.endMs ?? Date.now();
       const startMs = query.data.startMs ?? endMs - periodDays * DAY_MS;
+      const maxCandles = Math.min(query.data.limit ?? 1500, 5000);
 
       const result = await getMarketCandles({
         exchange: "synthetic",
@@ -166,7 +167,7 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
         toTs: endMs,
         userId,
         strategyId: resolved.strategy.id,
-        maxCandles: 5000,
+        maxCandles,
       });
 
       res.json(ok({
@@ -195,7 +196,7 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
       }
 
       const { profile } = resolved;
-      const periodDays = query.data.periodDays ?? DEFAULT_PERIOD_DAYS;
+      const periodDays = parsePeriodDays(query.data.periodDays?.toString());
       const timeframe = normalizeTimeframe(query.data.timeframe ?? profile.timeframe);
       const endMs = Date.now();
       const startMs = endMs - periodDays * DAY_MS;
