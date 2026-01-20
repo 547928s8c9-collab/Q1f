@@ -135,6 +135,9 @@ export function createDbSimTraderStore(): SimTraderStore {
 }
 
 export function computeDriftPerBar(monthlyBps: number, timeframe: Timeframe): number {
+  if (!Number.isFinite(monthlyBps)) {
+    return 0;
+  }
   const minutes = timeframe === "15m" ? 15 : timeframe === "1h" ? 60 : 1440;
   const barsPerMonth = Math.max(1, Math.round((30 * 24 * 60) / minutes));
   return (monthlyBps / 10_000) / barsPerMonth;
@@ -335,6 +338,7 @@ export class SimTrader {
     const tradesOpened: SimTrade[] = [];
     const tradesClosed: SimTrade[] = [];
     let equitySnapshot: SimEquitySnapshot | undefined;
+    let fallbackTradeClosed = false;
 
     const equityEvent = events.find((event) => event.payload.type === "equity");
 
@@ -374,7 +378,7 @@ export class SimTrader {
         if (updatedTrade) {
           tradesClosed.push(updatedTrade);
           this.openTradeId = null;
-        } else {
+        } else if (!fallbackTradeClosed) {
           const fallback = await this.store.insertTrade({
             strategyId: this.strategyRecord.id,
             status: "CLOSED",
@@ -390,6 +394,7 @@ export class SimTrader {
             reason: trade.reason,
           });
           tradesClosed.push(fallback);
+          fallbackTradeClosed = true;
         }
       }
     }

@@ -77,7 +77,7 @@ function buildCandle(seed: string, ts: number, prevClose: number): Candle {
   const wickUp = randomFor(seed, ts, "wickUp") * MAX_WICK_PCT;
   const wickDown = randomFor(seed, ts, "wickDown") * MAX_WICK_PCT;
   const high = Math.max(open, close) * (1 + wickUp);
-  const low = Math.min(open, close) * (1 - wickDown);
+  const low = Math.max(MIN_PRICE, Math.min(open, close) * (1 - wickDown));
 
   const volumeBase = 100 + randomFor(seed, ts, "volume") * 900;
   const volume = Math.max(1, volumeBase * (1 + Math.abs(change) * 8));

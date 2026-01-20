@@ -636,6 +636,7 @@ export const marketCandles = pgTable("market_candles", {
 }, (table) => [
   uniqueIndex("market_candles_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
   index("market_candles_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
+  index("market_candles_exchange_symbol_tf_ts_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
 ]);
 
 export const insertMarketCandleSchema = createInsertSchema(marketCandles).omit({ id: true });
