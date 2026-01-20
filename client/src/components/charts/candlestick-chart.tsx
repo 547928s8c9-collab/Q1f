@@ -82,41 +82,44 @@ export function CandlestickChart({
   const hasFitRef = useRef(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
+  // Filter invalid candles once and reuse for both candle and volume data
+  const validCandles = useMemo(() => {
+    return candles.filter((candle) => {
+      // Filter out invalid candles
+      return (
+        Number.isFinite(candle.ts) &&
+        Number.isFinite(candle.open) &&
+        Number.isFinite(candle.high) &&
+        Number.isFinite(candle.low) &&
+        Number.isFinite(candle.close) &&
+        candle.high >= candle.low &&
+        candle.high >= candle.open &&
+        candle.high >= candle.close &&
+        candle.low <= candle.open &&
+        candle.low <= candle.close
+      );
+    });
+  }, [candles]);
+
   const candleData = useMemo<CandlestickData[]>(
     () =>
-      candles
-        .filter((candle) => {
-          // Filter out invalid candles
-          return (
-            Number.isFinite(candle.ts) &&
-            Number.isFinite(candle.open) &&
-            Number.isFinite(candle.high) &&
-            Number.isFinite(candle.low) &&
-            Number.isFinite(candle.close) &&
-            candle.high >= candle.low &&
-            candle.high >= candle.open &&
-            candle.high >= candle.close &&
-            candle.low <= candle.open &&
-            candle.low <= candle.close
-          );
-        })
-        .map((candle) => ({
-          time: toChartTime(candle.ts),
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
-        })),
-    [candles]
+      validCandles.map((candle) => ({
+        time: toChartTime(candle.ts),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      })),
+    [validCandles]
   );
 
   const volumeData = useMemo(() => {
-    return candles.map((candle) => ({
+    return validCandles.map((candle) => ({
       time: toChartTime(candle.ts),
       value: candle.volume,
       up: candle.close >= candle.open,
     }));
-  }, [candles]);
+  }, [validCandles]);
 
   const markerData = useMemo<SeriesMarker<UTCTimestamp>[]>(
     () =>

@@ -3,6 +3,7 @@ import { adminAuditLogs } from "@shared/schema";
 import type { Request, Response, NextFunction } from "express";
 import { fail, ErrorCodes } from "./http";
 import crypto from "crypto";
+import { logger } from "../lib/logger";
 
 export interface AuditLogParams {
   actorAdminUserId: string;
@@ -201,7 +202,7 @@ export function wrapMutation(
 
       res.status(result.status).json(result.body);
     } catch (error: any) {
-      console.error(`[wrapMutation:${actionType}]`, error);
+      logger.error(`wrapMutation:${actionType}`, "admin-audit", { actionType, adminUserId, requestId }, error);
 
       await completeAdminIdempotency(adminUserId, endpoint, idempotencyKey, "failed", {
         status: 500,

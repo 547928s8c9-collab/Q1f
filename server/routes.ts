@@ -388,7 +388,7 @@ export async function registerRoutes(
       const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
       const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
 
-      if (limit < 1 || limit > 100) {
+      if (!Number.isFinite(limit) || limit < 1 || limit > 100) {
         return res.status(400).json({
           error: { code: "INVALID_LIMIT", message: "Limit must be between 1 and 100" },
         });
@@ -2546,6 +2546,11 @@ export async function registerRoutes(
       const { getMarketCandles } = await import("./app/marketDataService");
       let dataSourceOk = true;
       try {
+        // Get a strategy ID for the user to use in synthetic candle check
+        // If no strategy exists, use a placeholder that won't cause errors
+        const positions = await storage.getPositions(userId);
+        const testStrategyId = positions.length > 0 ? positions[0].strategyId : "test-strategy-id";
+        
         // Try to get recent candles for a common symbol
         const result = await getMarketCandles({
           exchange: "synthetic",
@@ -2554,7 +2559,7 @@ export async function registerRoutes(
           fromTs: Date.now() - 24 * 60 * 60 * 1000,
           toTs: Date.now(),
           userId,
-          strategyId: "",
+          strategyId: testStrategyId,
           maxCandles: 1,
         });
         dataSourceOk = result.candles.length > 0;
@@ -2617,7 +2622,7 @@ export async function registerRoutes(
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
       const cursor = req.query.cursor as string | undefined;
 
-      if (limit < 1 || limit > 100) {
+      if (!Number.isFinite(limit) || limit < 1 || limit > 100) {
         return res.status(400).json({
           error: { code: "INVALID_LIMIT", message: "Limit must be between 1 and 100" },
         });

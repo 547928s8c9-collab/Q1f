@@ -10,9 +10,12 @@ import { registerNotificationsRoutes } from "./notifications";
 import { registerAnalyticsRoutes } from "./analytics";
 import { registerInvestRoutes } from "./invest";
 import { registerTelegramRoutes } from "./telegram";
+import { registerCoreRoutes } from "./core";
+import { registerStatusRoutes } from "./status";
 
 export function registerExtractedRoutes(deps: RouteDeps): void {
   // Register routes in the same order as original file
+  registerCoreRoutes(deps);
   registerStrategiesRoutes(deps);
   registerStrategyProfilesRoutes(deps);
   registerOperationsRoutes(deps);
@@ -22,6 +25,7 @@ export function registerExtractedRoutes(deps: RouteDeps): void {
   registerAnalyticsRoutes(deps);
   registerInvestRoutes(deps);
   registerTelegramRoutes(deps);
+  registerStatusRoutes(deps);
 }
 
 export type { RouteDeps };

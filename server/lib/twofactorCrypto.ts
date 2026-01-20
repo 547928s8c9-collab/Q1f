@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { logger } from "./logger";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -10,7 +11,7 @@ export function initTwoFactorCrypto(): void {
   const keyEnv = process.env.TWOFA_ENCRYPTION_KEY;
   
   if (!keyEnv) {
-    console.warn("[2FA] TWOFA_ENCRYPTION_KEY not set - 2FA features will be unavailable");
+    logger.warn("TWOFA_ENCRYPTION_KEY not set - 2FA features will be unavailable", "twofactorCrypto");
     return;
   }
 
@@ -31,9 +32,9 @@ export function initTwoFactorCrypto(): void {
       throw new Error(`Invalid key length: ${encryptionKey.length} bytes (expected 32)`);
     }
 
-    console.log("[2FA] Encryption key loaded successfully");
+    logger.info("Encryption key loaded successfully", "twofactorCrypto");
   } catch (error) {
-    console.error("[2FA] Failed to initialize encryption key:", error);
+    logger.error("Failed to initialize encryption key", "twofactorCrypto", {}, error);
     encryptionKey = null;
   }
 }

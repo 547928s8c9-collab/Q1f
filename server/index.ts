@@ -139,8 +139,10 @@ app.use((req, res, next) => {
       let endpointKey = `${req.method} ${routePath}`;
 
       // Memory cap: aggregate to __other__ if too many unique keys
-      const keyCount = Object.keys(metricsCollector.getMetrics().requestsByEndpoint).length;
-      if (keyCount >= METRICS_ENDPOINT_CAP && !endpointKey.includes("__other__")) {
+      // Only aggregate new endpoints that don't already exist in the map
+      const currentMetrics = metricsCollector.getMetrics();
+      const keyCount = Object.keys(currentMetrics.requestsByEndpoint).length;
+      if (keyCount >= METRICS_ENDPOINT_CAP && !(endpointKey in currentMetrics.requestsByEndpoint)) {
         endpointKey = "__other__";
       }
 
@@ -276,17 +278,26 @@ app.get("/api/metrics/alerts", (req, res) => {
     logger.info(`Received ${signal}, shutting down gracefully`, "server");
     
     // Stop engine scheduler with timeout
+    let shutdownTimeout: NodeJS.Timeout | null = null;
     if (process.env.ENGINE_ENABLED !== "false") {
       try {
-        const shutdownTimeout = setTimeout(() => {
+        shutdownTimeout = setTimeout(() => {
           logger.warn("Engine shutdown timeout exceeded, forcing exit", "server");
           process.exit(1);
         }, 10000); // 10s total timeout for shutdown
         
         await engineScheduler.stop();
-        clearTimeout(shutdownTimeout);
+        if (shutdownTimeout) {
+          clearTimeout(shutdownTimeout);
+          shutdownTimeout = null;
+        }
         logger.info("Engine scheduler stopped", "server");
       } catch (error) {
+        // Clear timeout even if stop() throws
+        if (shutdownTimeout) {
+          clearTimeout(shutdownTimeout);
+          shutdownTimeout = null;
+        }
         logger.error("Error stopping engine scheduler", "server", {}, error);
       }
     }

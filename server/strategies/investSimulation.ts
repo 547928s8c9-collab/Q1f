@@ -70,7 +70,10 @@ export function simulateInvestStrategy({
       const trade = event.payload.data;
       const entryTs = event.ts - trade.holdBars * timeframeMs;
       const entryNotional = trade.entryPrice * trade.qty;
-      const netPnlPct = entryNotional > 0 ? (trade.netPnl / entryNotional) * 100 : 0;
+      // Guard against division by zero and invalid values
+      const netPnlPct = entryNotional > 0 && Number.isFinite(trade.netPnl) 
+        ? (trade.netPnl / entryNotional) * 100 
+        : 0;
 
       trades.push({
         id: `${event.ts}-${event.seq}`,

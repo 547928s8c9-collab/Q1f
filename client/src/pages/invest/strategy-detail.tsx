@@ -320,7 +320,9 @@ export default function StrategyDetail() {
   );
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
   // Use trades from tradesResponse if available, otherwise fallback to insights
-  const trades = (tradesResponse?.ok ? tradesResponse.data.trades : []) || insightsPayload?.trades || [];
+  const trades = tradesResponse?.ok 
+    ? tradesResponse.data.trades 
+    : (insightsPayload?.trades || []);
   const metrics = insightsPayload?.metrics;
   
   // Compute valid timestamp range from candles to filter markers
@@ -1072,7 +1074,9 @@ export default function StrategyDetail() {
           {selectedTradeId && (
             <TradeDetailsContent
               tradeId={selectedTradeId}
-              trades={(tradesResponse?.ok ? tradesResponse.data.trades : []) || (insightsPayload?.trades || [])}
+              trades={tradesResponse?.ok 
+                ? tradesResponse.data.trades 
+                : (insightsPayload?.trades || [])}
               events={tradeEventsResponse?.ok ? tradeEventsResponse.data.events : []}
               loading={tradeEventsLoading}
             />

@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { logger } from "./lib/logger";
 
 const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL;
@@ -20,10 +21,10 @@ export const pool = new Pool({
 
 // Handle connection errors gracefully
 pool.on('error', (err) => {
-  console.error('Database pool error:', err.message);
+  logger.error('Database pool error', "db", { message: err.message }, err);
   // Don't crash on transient errors like EAI_AGAIN
   if (err.message.includes('EAI_AGAIN')) {
-    console.log('Transient DNS error, will retry on next query');
+    logger.info('Transient DNS error, will retry on next query', "db");
   }
 });
 
