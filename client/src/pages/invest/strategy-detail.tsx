@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
@@ -79,6 +79,14 @@ export default function StrategyDetail() {
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [tradeDetailsOpen, setTradeDetailsOpen] = useState(false);
   const [tradesCursor, setTradesCursor] = useState<string | undefined>(undefined);
+
+  // Memoize marker click handler to prevent chart recreation on every render
+  const handleMarkerClick = useCallback((marker: CandlestickMarker) => {
+    if (marker.tradeId) {
+      setSelectedTradeId(marker.tradeId);
+      setTradeDetailsOpen(true);
+    }
+  }, []); // State setters are stable, so empty deps array is safe
 
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
@@ -543,12 +551,7 @@ export default function StrategyDetail() {
                   candles={candleData} 
                   markers={chartMarkers} 
                   height={360}
-                  onMarkerClick={(marker) => {
-                    if (marker.tradeId) {
-                      setSelectedTradeId(marker.tradeId);
-                      setTradeDetailsOpen(true);
-                    }
-                  }}
+                  onMarkerClick={handleMarkerClick}
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
