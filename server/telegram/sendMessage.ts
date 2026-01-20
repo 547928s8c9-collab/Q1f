@@ -1,8 +1,19 @@
 type TelegramParseMode = "HTML" | "MarkdownV2";
 
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+  web_app?: { url: string };
+}
+
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
 interface SendTelegramMessageOptions {
   parseMode?: TelegramParseMode;
   disableWebPagePreview?: boolean;
+  replyMarkup?: InlineKeyboardMarkup;
 }
 
 const TELEGRAM_API_BASE = "https://api.telegram.org";
@@ -46,6 +57,7 @@ export async function sendTelegramMessage(
         text,
         parse_mode: opts?.parseMode,
         disable_web_page_preview: opts?.disableWebPagePreview,
+        reply_markup: opts?.replyMarkup,
       }),
     });
 

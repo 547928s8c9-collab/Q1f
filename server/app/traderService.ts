@@ -27,6 +27,12 @@ export interface TraderParams {
 }
 
 export async function runTrader(params: TraderParams): Promise<void> {
+  // Validate allocation: must be positive
+  const allocatedMinor = BigInt(params.allocatedMinor || "0");
+  if (allocatedMinor <= 0n) {
+    throw new Error("INVALID_ALLOCATION");
+  }
+
   const { trades, metrics } = simulateInvestStrategy({
     candles: params.candles,
     profileSlug: params.profileSlug,
@@ -39,8 +45,10 @@ export async function runTrader(params: TraderParams): Promise<void> {
 
   const minPct = (params.expectedReturnMinBps ?? 0) / 100;
   const maxPct = (params.expectedReturnMaxBps ?? 500) / 100;
-  const targetPct = clamp(metrics.netPnlPct, minPct, maxPct);
-  const scale = metrics.netPnlPct !== 0 ? targetPct / metrics.netPnlPct : 0;
+  // Guard against NaN/Infinity
+  const safeNetPnlPct = Number.isFinite(metrics.netPnlPct) ? metrics.netPnlPct : 0;
+  const targetPct = clamp(safeNetPnlPct, minPct, maxPct);
+  const scale = safeNetPnlPct !== 0 && Number.isFinite(safeNetPnlPct) ? targetPct / safeNetPnlPct : 0;
 
   const scaledTrades = trades.map((trade) => ({
     ...trade,
@@ -79,7 +87,6 @@ export async function runTrader(params: TraderParams): Promise<void> {
     });
   }
 
-  const allocatedMinor = BigInt(params.allocatedMinor || "0");
   const netPnlMinor = BigInt(toMinorUnits(scaledStats.netPnl));
   const equityMinor = allocatedMinor + netPnlMinor;
 

@@ -1,4 +1,7 @@
 import { storage } from "../storage";
+import { db } from "../db";
+import { simAllocations } from "@shared/schema";
+import { eq, and, sql } from "drizzle-orm";
 
 export interface StrategyAllocationSummary {
   strategyId: string;
@@ -45,18 +48,43 @@ export function reconcilePortfolio(summary: PortfolioSummary): { ok: true } | { 
 }
 
 export async function getPortfolioSummary(userId: string): Promise<PortfolioSummary> {
-  const [balances, positions] = await Promise.all([
+  const [balances, positions, activeAllocations] = await Promise.all([
     storage.getBalances(userId),
     storage.getPositions(userId),
+    // Get sum of all ACTIVE allocations for this user
+    db.select({
+      total: sql<string>`COALESCE(SUM(CAST(${simAllocations.amountMinor} AS BIGINT)), 0)::text`,
+    })
+      .from(simAllocations)
+      .where(and(
+        eq(simAllocations.userId, userId),
+        eq(simAllocations.status, "ACTIVE")
+      )),
   ]);
 
   const usdtBalance = balances.find((b) => b.asset === "USDT");
-  const availableCashMinor = usdtBalance?.available ?? "0";
+  const balanceAvailable = BigInt(usdtBalance?.available ?? "0");
+  const totalAllocated = BigInt(activeAllocations[0]?.total ?? "0");
+  
+  // availableCashMinor = max(0, balances.available - sumAllocations)
+  const availableCashMinor = (balanceAvailable > totalAllocated 
+    ? balanceAvailable - totalAllocated 
+    : 0n).toString();
 
   const allocations: StrategyAllocationSummary[] = positions.map((position) => {
     const allocatedMinor = position.principalMinor || "0";
-    const equityMinor = position.investedCurrentMinor || "0";
-    const pnlMinor = (BigInt(equityMinor) - BigInt(allocatedMinor)).toString();
+    const rawEquityMinor = position.investedCurrentMinor || "0";
+    // Ensure both are valid BigInt strings
+    const allocated = BigInt(allocatedMinor || "0");
+    const rawEquity = BigInt(rawEquityMinor || "0");
+    
+    // Clamp equity to 0 if negative (protection against bad data)
+    const safeEquity = rawEquity < 0n ? 0n : rawEquity;
+    const equityMinor = safeEquity.toString();
+    
+    // Calculate PnL from safe equity
+    const pnlMinor = (safeEquity - allocated).toString();
+    
     return {
       strategyId: position.strategyId,
       allocatedMinor,

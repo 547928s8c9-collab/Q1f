@@ -10,6 +10,8 @@ import { errorHandler } from "./middleware/errorHandler";
 import { normalizePath } from "./metrics/normalizePath";
 import { initTwoFactorCrypto } from "./lib/twofactorCrypto";
 import { startOutboxWorker } from "./workers/outboxWorker";
+import { initializeEngineScheduler } from "./app/engineInit";
+import { engineScheduler } from "./app/engineScheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -100,34 +102,21 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Structured logging helper
-export function log(message: string, source = "express", meta?: Record<string, unknown>) {
-  const timestamp = new Date().toISOString();
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+// Re-export logger for backward compatibility
+import { logger } from "./lib/logger";
 
-  if (meta) {
-    console.log(`${formattedTime} [${source}] ${message}`, JSON.stringify(meta));
-  } else {
-    console.log(`${formattedTime} [${source}] ${message}`);
-  }
+// Legacy log function for backward compatibility
+export function log(message: string, source = "express", meta?: Record<string, unknown>) {
+  logger.info(message, source, meta);
 }
 
-// Metrics counters (simple in-memory)
-const metrics = {
-  requestCount: 0,
-  requestsByStatus: {} as Record<string, number>,
-  requestsByEndpoint: {} as Record<string, number>,
-};
+// Import metrics collector
+import { metricsCollector, exportPrometheusMetrics, checkHealthAlerts } from "./lib/metrics";
 
 const METRICS_ENDPOINT_CAP = 500;
 
 export function getMetrics() {
-  return { ...metrics };
+  return metricsCollector.getMetrics();
 }
 
 app.use((req, res, next) => {
@@ -145,29 +134,29 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      // Update metrics
-      metrics.requestCount++;
-      const statusKey = `${res.statusCode}`;
-      metrics.requestsByStatus[statusKey] = (metrics.requestsByStatus[statusKey] || 0) + 1;
-
-      // Prefer Express route pattern if available, otherwise normalize path
+      // Record metrics
       const routePath = req.route?.path ? `${req.baseUrl}${req.route.path}` : normalizePath(path);
       let endpointKey = `${req.method} ${routePath}`;
 
       // Memory cap: aggregate to __other__ if too many unique keys
-      const keyCount = Object.keys(metrics.requestsByEndpoint).length;
-      if (keyCount >= METRICS_ENDPOINT_CAP && !(endpointKey in metrics.requestsByEndpoint)) {
+      const keyCount = Object.keys(metricsCollector.getMetrics().requestsByEndpoint).length;
+      if (keyCount >= METRICS_ENDPOINT_CAP && !endpointKey.includes("__other__")) {
         endpointKey = "__other__";
       }
-      metrics.requestsByEndpoint[endpointKey] = (metrics.requestsByEndpoint[endpointKey] || 0) + 1;
+
+      metricsCollector.recordRequest(endpointKey, res.statusCode, duration);
 
       // Structured log
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      const logLevel = res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
+      const logMessage = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      
+      if (logLevel === "error") {
+        logger.error(logMessage, "express", { requestId, duration, status: res.statusCode, response: capturedJsonResponse });
+      } else if (logLevel === "warn") {
+        logger.warn(logMessage, "express", { requestId, duration, status: res.statusCode });
+      } else {
+        logger.info(logMessage, "express", { requestId, duration, status: res.statusCode });
       }
-
-      log(logLine, "express", { requestId, duration, status: res.statusCode });
     }
   });
 
@@ -194,6 +183,46 @@ app.get("/api/metrics", (req, res) => {
   res.json(getMetrics());
 });
 
+// Prometheus metrics endpoint (admin only)
+app.get("/api/metrics/prometheus", (req, res) => {
+  const IS_PRODUCTION = process.env.NODE_ENV === "production";
+  const METRICS_SECRET = process.env.METRICS_SECRET;
+  
+  if (IS_PRODUCTION && !METRICS_SECRET) {
+    return res.status(500).json({ error: "Service not configured" });
+  }
+  
+  const expectedSecret = METRICS_SECRET || "demo-metrics-secret";
+  const providedSecret = req.headers["x-metrics-secret"];
+  
+  if (providedSecret !== expectedSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  
+  res.setHeader("Content-Type", "text/plain");
+  res.send(exportPrometheusMetrics());
+});
+
+// Health alerts endpoint (admin only)
+app.get("/api/metrics/alerts", (req, res) => {
+  const IS_PRODUCTION = process.env.NODE_ENV === "production";
+  const METRICS_SECRET = process.env.METRICS_SECRET;
+  
+  if (IS_PRODUCTION && !METRICS_SECRET) {
+    return res.status(500).json({ error: "Service not configured" });
+  }
+  
+  const expectedSecret = METRICS_SECRET || "demo-metrics-secret";
+  const providedSecret = req.headers["x-metrics-secret"];
+  
+  if (providedSecret !== expectedSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  
+  const alerts = checkHealthAlerts();
+  res.json({ alerts, timestamp: new Date().toISOString() });
+});
+
 (async () => {
   // Initialize 2FA encryption
   initTwoFactorCrypto();
@@ -203,6 +232,15 @@ app.get("/api/metrics", (req, res) => {
   if (process.env.TELEGRAM_NOTIFICATIONS_ENABLED === "true") {
     startOutboxWorker();
     log("Telegram outbox worker started", "outbox");
+  }
+
+  // Initialize engine scheduler (loads active investments and starts tick loops)
+  // Only if ENGINE_ENABLED is not explicitly set to "false"
+  if (process.env.ENGINE_ENABLED !== "false") {
+    await initializeEngineScheduler();
+    logger.info("Engine scheduler initialized", "server");
+  } else {
+    logger.info("Engine scheduler disabled (ENGINE_ENABLED=false)", "server");
   }
 
   app.use(errorHandler);
@@ -232,4 +270,40 @@ app.get("/api/metrics", (req, res) => {
       log(`serving on port ${port}`);
     },
   );
+
+  // Graceful shutdown: stop engine scheduler on SIGINT/SIGTERM
+  const shutdown = async (signal: string) => {
+    logger.info(`Received ${signal}, shutting down gracefully`, "server");
+    
+    // Stop engine scheduler with timeout
+    if (process.env.ENGINE_ENABLED !== "false") {
+      try {
+        const shutdownTimeout = setTimeout(() => {
+          logger.warn("Engine shutdown timeout exceeded, forcing exit", "server");
+          process.exit(1);
+        }, 10000); // 10s total timeout for shutdown
+        
+        await engineScheduler.stop();
+        clearTimeout(shutdownTimeout);
+        logger.info("Engine scheduler stopped", "server");
+      } catch (error) {
+        logger.error("Error stopping engine scheduler", "server", {}, error);
+      }
+    }
+    
+    // Close HTTP server gracefully
+    httpServer.close(() => {
+      logger.info("HTTP server closed", "server");
+      process.exit(0);
+    });
+    
+    // Force exit after 15s if server doesn't close
+    setTimeout(() => {
+      logger.warn("Forcing exit after shutdown timeout", "server");
+      process.exit(1);
+    }, 15000);
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 })();

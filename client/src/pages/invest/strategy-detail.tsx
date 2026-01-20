@@ -271,30 +271,76 @@ export default function StrategyDetail() {
 
   const candlePayload = candleResponse?.ok ? candleResponse.data : null;
   const insightsPayload = insightsResponse?.ok ? insightsResponse.data : null;
-  const candleData = candlePayload?.candles ?? [];
+  // Filter out invalid candles to prevent chart crashes
+  const candleData = (candlePayload?.candles ?? []).filter(
+    (c) =>
+      c &&
+      Number.isFinite(c.ts) &&
+      Number.isFinite(c.open) &&
+      Number.isFinite(c.high) &&
+      Number.isFinite(c.low) &&
+      Number.isFinite(c.close) &&
+      c.high >= c.low
+  );
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
   const trades = insightsPayload?.trades ?? [];
   const metrics = insightsPayload?.metrics;
-  const chartMarkers = useMemo<CandlestickMarker[]>(() => {
-    if (!trades.length) return [];
+  
+  // Compute valid timestamp range from candles to filter markers
+  const candleTimeRange = useMemo(() => {
+    if (!candleData.length) return null;
+    const timestamps = candleData.map((c) => c.ts).filter(Number.isFinite);
+    if (!timestamps.length) return null;
+    return {
+      minTs: Math.min(...timestamps),
+      maxTs: Math.max(...timestamps),
+    };
+  }, [candleData]);
 
-    return trades.flatMap((trade) => [
-      {
-        time: trade.entryTs,
-        position: "belowBar",
-        color: "hsl(var(--success))",
-        shape: "arrowUp",
-        text: "Buy",
-      },
-      {
-        time: trade.exitTs,
-        position: "aboveBar",
-        color: "hsl(var(--danger))",
-        shape: "arrowDown",
-        text: "Sell",
-      },
-    ]);
-  }, [trades]);
+  const chartMarkers = useMemo<CandlestickMarker[]>(() => {
+    // Early return if no candles or no valid time range
+    if (!candleData.length || !candleTimeRange || !trades.length) return [];
+
+    return trades
+      .filter((trade) => {
+        // Filter trades where both entry and exit are within candle range
+        const entryValid = 
+          Number.isFinite(trade.entryTs) && 
+          trade.entryTs >= candleTimeRange.minTs && 
+          trade.entryTs <= candleTimeRange.maxTs;
+        const exitValid = 
+          Number.isFinite(trade.exitTs) && 
+          trade.exitTs >= candleTimeRange.minTs && 
+          trade.exitTs <= candleTimeRange.maxTs;
+        return entryValid && exitValid;
+      })
+      .flatMap((trade) => {
+        // Double-check timestamps are valid before creating markers
+        const entryTs = trade.entryTs;
+        const exitTs = trade.exitTs;
+        
+        if (!Number.isFinite(entryTs) || !Number.isFinite(exitTs)) {
+          return [];
+        }
+        
+        return [
+          {
+            time: entryTs,
+            position: "belowBar" as const,
+            color: "hsl(var(--success))",
+            shape: "arrowUp" as const,
+            text: "Buy",
+          },
+          {
+            time: exitTs,
+            position: "aboveBar" as const,
+            color: "hsl(var(--danger))",
+            shape: "arrowDown" as const,
+            text: "Sell",
+          },
+        ];
+      });
+  }, [trades, candleTimeRange, candleData.length]);
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");

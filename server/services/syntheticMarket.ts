@@ -79,7 +79,7 @@ function buildCandle(seed: string, ts: number, prevClose: number, maxStepChangeP
   const wickUp = randomFor(seed, ts, "wickUp") * maxWickPct;
   const wickDown = randomFor(seed, ts, "wickDown") * maxWickPct;
   const high = Math.max(open, close) * (1 + wickUp);
-  const low = Math.min(open, close) * (1 - wickDown);
+  const low = Math.max(MIN_PRICE, Math.min(open, close) * (1 - wickDown)); // Ensure low >= MIN_PRICE
 
   const volumeBase = 100 + randomFor(seed, ts, "volume") * 900;
   const volume = Math.max(1, volumeBase * (1 + Math.abs(change) * 8));
@@ -99,7 +99,10 @@ function alignStart(ts: number, stepMs: number): number {
 }
 
 function alignEnd(ts: number, stepMs: number): number {
-  return Math.ceil(ts / stepMs) * stepMs;
+  // Align to exclusive end: if ts is exactly on a boundary, don't include that candle
+  // Example: toTs=2000, stepMs=1000 -> alignedEnd=2000 (exclusive, so candle at 2000 is not included)
+  // Example: toTs=1999, stepMs=1000 -> alignedEnd=2000 (exclusive, so candle at 2000 is not included)
+  return Math.floor((ts - 1) / stepMs) * stepMs + stepMs;
 }
 
 export function generateSyntheticCandles(params: {

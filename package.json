@@ -8,10 +8,19 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "echo 'Note: drizzle-kit migrate may not be available. Apply migrations manually with: psql $DATABASE_URL -f migrations/XXXX_*.sql' && drizzle-kit migrate || echo 'If migrate fails, apply SQL files manually from migrations/ directory'",
     "db:push": "drizzle-kit push",
     "test": "NODE_ENV=test vitest run",
+    "test:e2e": "NODE_ENV=test vitest run server/__tests__/e2e",
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
-    "test:all": "npm run typecheck && npm run test && npm run build"
+    "lint": "echo 'Linting not configured - run typecheck instead' && npm run typecheck",
+    "test:all": "npm run typecheck && npm run test && npm run build",
+    "check:security": "tsx scripts/check-security.ts",
+    "audit:fix": "npm audit fix",
+    "smoke": "tsx scripts/smoke-test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -96,6 +105,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",

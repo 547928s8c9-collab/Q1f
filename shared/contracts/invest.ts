@@ -82,6 +82,8 @@ export const InvestCandlesResponseSchema = ApiEnvelopeSchema(
 export const InvestTradesQuerySchema = z.object({
   timeframe: z.enum(VALID_TIMEFRAMES).optional(),
   periodDays: z.coerce.number().int().min(1).max(365).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(100),
+  cursor: z.string().optional(), // exitTs timestamp as cursor
 });
 
 export const InvestTradesResponseSchema = ApiEnvelopeSchema(
@@ -100,6 +102,7 @@ export const InvestTradesResponseSchema = ApiEnvelopeSchema(
         reason: z.string(),
       })
     ),
+    nextCursor: z.string().optional(),
   })
 );
 

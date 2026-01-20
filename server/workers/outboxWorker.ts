@@ -1,5 +1,6 @@
 import { storage } from "../storage";
-import { sendTelegramMessage, TelegramSendError } from "../telegram/sendMessage";
+import { TelegramSendError } from "../telegram/sendMessage";
+import { sendTelegramMessageWithKeyboard, type InlineKeyboardButton } from "../telegram/botApi";
 
 const POLL_INTERVAL_MS = 3000;
 const BATCH_SIZE = 20;
@@ -60,7 +61,25 @@ export async function processOutboxBatch(): Promise<void> {
       }
 
       try {
-        await sendTelegramMessage(payload.telegramUserId, text, { disableWebPagePreview: true });
+        // Create action token for Refresh button (10 minutes TTL)
+        const refreshToken = await storage.createTelegramActionToken({
+          telegramUserId: payload.telegramUserId,
+          userId: payload.userId,
+          action: "REFRESH",
+          ttlSeconds: 600, // 10 minutes
+        });
+
+        // Build inline keyboard: Row1 = Open App, Row2 = Refresh
+        const webappUrl = process.env.TELEGRAM_PUBLIC_WEBAPP_URL || process.env.APP_URL || "https://example.com/tg";
+        const keyboard: InlineKeyboardButton[][] = [
+          [{ text: "📱 Open App", web_app: { url: webappUrl } }],
+          [{ text: "🔄 Refresh", callback_data: `a:${refreshToken.token}` }],
+        ];
+
+        await sendTelegramMessageWithKeyboard(payload.telegramUserId, text, {
+          disableWebPagePreview: true,
+          replyMarkup: { inline_keyboard: keyboard },
+        });
         await storage.markOutboxProcessed(event.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
@@ -86,10 +105,8 @@ function buildTelegramMessage(payload: TelegramOutboxPayload): string | null {
 
   const parts = [label, title, message].filter((value) => value.length > 0);
 
-  const appUrl = process.env.APP_URL;
-  if (appUrl) {
-    parts.push(`Открыть: ${appUrl.replace(/\/$/, "")}/dashboard`);
-  }
+  // Remove the "Открыть: ..." link since we now have inline buttons
+  // The buttons will be added via reply_markup
 
   return parts.length ? parts.join("\n") : null;
 }

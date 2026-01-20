@@ -29,6 +29,8 @@ import {
   marketCandles,
   outboxEvents,
   telegramAccounts,
+  telegramLinkTokens,
+  telegramActionTokens,
   users,
   AddressStatus,
   dbRowToCandle,
@@ -95,6 +97,10 @@ import {
   type InsertOutboxEvent,
   type OutboxEvent,
   type TelegramAccount,
+  type TelegramLinkToken,
+  type InsertTelegramLinkToken,
+  type TelegramActionToken,
+  type InsertTelegramActionToken,
   type User,
 } from "@shared/schema";
 
@@ -108,6 +114,19 @@ export interface IStorage {
   getTelegramAccountByTelegramUserId(telegramUserId: string): Promise<TelegramAccount | undefined>;
   getTelegramAccountByUserId(userId: string): Promise<TelegramAccount | undefined>;
   upsertTelegramAccount(userId: string, telegramUserId: string): Promise<TelegramAccount>;
+
+  createTelegramLinkToken(userId: string, ttlMinutes?: number): Promise<{ code: string; expiresAt: Date }>;
+  consumeTelegramLinkToken(code: string): Promise<{ userId: string }>;
+  cleanupExpiredTelegramLinkTokens(): Promise<number>;
+
+  createTelegramActionToken(params: {
+    telegramUserId: string;
+    userId: string;
+    action: string;
+    payload?: unknown;
+    ttlSeconds?: number;
+  }): Promise<{ token: string; expiresAt: Date }>;
+  consumeTelegramActionToken(token: string, telegramUserId: string): Promise<{ action: string; payload: unknown | null; userId: string }>;
 
   getBalances(userId: string): Promise<Balance[]>;
   getBalance(userId: string, asset: string): Promise<Balance | undefined>;
@@ -142,7 +161,14 @@ export interface IStorage {
   upsertSimPosition(position: InsertSimPosition): Promise<SimPosition>;
 
   createSimTrade(trade: InsertSimTrade): Promise<SimTrade>;
-  getSimTrades(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimTrade[]>;
+  getSimTrades(
+    userId: string,
+    strategyId: string,
+    fromTs: number,
+    toTs: number,
+    limit?: number,
+    cursor?: string
+  ): Promise<{ trades: SimTrade[]; nextCursor?: string }>;
 
   createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot>;
   getSimEquitySnapshots(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimEquitySnapshot[]>;
@@ -150,6 +176,7 @@ export interface IStorage {
 
   getInvestState(userId: string, strategyId: string): Promise<InvestState | undefined>;
   upsertInvestState(state: InsertInvestState): Promise<InvestState>;
+  getActiveInvestments(): Promise<Array<{ userId: string; strategyId: string }>>;
 
   upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number>;
 
@@ -517,6 +544,185 @@ export class DatabaseStorage implements IStorage {
     return account;
   }
 
+  async createTelegramLinkToken(userId: string, ttlMinutes: number = 10): Promise<{ code: string; expiresAt: Date }> {
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+    
+    // Generate a random 6-digit code, retry if collision (unlikely but possible)
+    let code: string;
+    let attempts = 0;
+    do {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      attempts++;
+      
+      // Check if code already exists
+      const [existing] = await db
+        .select()
+        .from(telegramLinkTokens)
+        .where(eq(telegramLinkTokens.code, code))
+        .limit(1);
+      
+      if (!existing) {
+        break;
+      }
+      
+      if (attempts > 10) {
+        throw new Error("Failed to generate unique code after multiple attempts");
+      }
+    } while (true);
+
+    await db.insert(telegramLinkTokens).values({
+      code,
+      userId,
+      expiresAt,
+      usedAt: null,
+    });
+
+    return { code, expiresAt };
+  }
+
+  async consumeTelegramLinkToken(code: string): Promise<{ userId: string }> {
+    const [token] = await db
+      .select()
+      .from(telegramLinkTokens)
+      .where(eq(telegramLinkTokens.code, code))
+      .limit(1);
+
+    if (!token) {
+      throw new Error("INVALID_CODE");
+    }
+
+    // Check if already used
+    if (token.usedAt) {
+      throw new Error("CODE_ALREADY_USED");
+    }
+
+    // Check if expired
+    if (new Date() > token.expiresAt) {
+      throw new Error("CODE_EXPIRED");
+    }
+
+    // Mark as used
+    await db
+      .update(telegramLinkTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(telegramLinkTokens.id, token.id));
+
+    return { userId: token.userId };
+  }
+
+  async cleanupExpiredTelegramLinkTokens(): Promise<number> {
+    const now = new Date();
+    // Delete expired tokens that have been used (cleanup old data)
+    await db
+      .delete(telegramLinkTokens)
+      .where(
+        and(
+          lte(telegramLinkTokens.expiresAt, now),
+          sql`${telegramLinkTokens.usedAt} IS NOT NULL`
+        )
+      );
+    // Note: drizzle-orm delete doesn't return count directly
+    return 0; // Return 0 for now, can be improved if needed
+  }
+
+  async createTelegramActionToken(params: {
+    telegramUserId: string;
+    userId: string;
+    action: string;
+    payload?: unknown;
+    ttlSeconds?: number;
+  }): Promise<{ token: string; expiresAt: Date }> {
+    const ttlSeconds = params.ttlSeconds ?? 300; // Default 5 minutes
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+    
+    // Generate a random 32-character token (16 bytes = 32 hex chars)
+    let finalToken: string;
+    let attempts = 0;
+    do {
+      finalToken = randomBytes(16).toString("hex");
+      
+      // Check for collision (very unlikely but possible)
+      const [existing] = await db
+        .select()
+        .from(telegramActionTokens)
+        .where(eq(telegramActionTokens.token, finalToken))
+        .limit(1);
+      
+      if (!existing) {
+        break;
+      }
+      
+      if (attempts > 10) {
+        throw new Error("Failed to generate unique action token after multiple attempts");
+      }
+      
+      attempts++;
+    } while (true);
+
+    await db.insert(telegramActionTokens).values({
+      token: finalToken,
+      telegramUserId: params.telegramUserId,
+      userId: params.userId,
+      action: params.action,
+      payloadJson: params.payload ? JSON.stringify(params.payload) : null,
+      expiresAt,
+      usedAt: null,
+    });
+
+    return { token: finalToken, expiresAt };
+  }
+
+  async consumeTelegramActionToken(token: string, telegramUserId: string): Promise<{ action: string; payload: unknown | null; userId: string }> {
+    const [actionToken] = await db
+      .select()
+      .from(telegramActionTokens)
+      .where(eq(telegramActionTokens.token, token))
+      .limit(1);
+
+    if (!actionToken) {
+      throw new Error("INVALID_TOKEN");
+    }
+
+    // Verify telegramUserId matches
+    if (actionToken.telegramUserId !== telegramUserId) {
+      throw new Error("TOKEN_USER_MISMATCH");
+    }
+
+    // Check if already used
+    if (actionToken.usedAt) {
+      throw new Error("TOKEN_ALREADY_USED");
+    }
+
+    // Check if expired
+    if (new Date() > actionToken.expiresAt) {
+      throw new Error("TOKEN_EXPIRED");
+    }
+
+    // Mark as used
+    await db
+      .update(telegramActionTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(telegramActionTokens.id, actionToken.id));
+
+    // Parse payload JSON
+    let payload: unknown | null = null;
+    if (actionToken.payloadJson) {
+      try {
+        payload = typeof actionToken.payloadJson === "string" 
+          ? JSON.parse(actionToken.payloadJson) 
+          : actionToken.payloadJson;
+      } catch {
+        payload = null;
+      }
+    }
+
+    return {
+      action: actionToken.action,
+      payload,
+      userId: actionToken.userId,
+    };
+  }
+
   async getBalances(userId: string): Promise<Balance[]> {
     return db.select().from(balances).where(eq(balances.userId, userId));
   }
@@ -821,15 +1027,46 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getSimTrades(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimTrade[]> {
-    return db.select().from(simTrades)
-      .where(and(
-        eq(simTrades.userId, userId),
-        eq(simTrades.strategyId, strategyId),
-        gte(simTrades.entryTs, fromTs),
-        lte(simTrades.entryTs, toTs)
-      ))
-      .orderBy(desc(simTrades.entryTs));
+  async getSimTrades(
+    userId: string,
+    strategyId: string,
+    fromTs: number,
+    toTs: number,
+    limit: number = 100,
+    cursor?: string
+  ): Promise<{ trades: SimTrade[]; nextCursor?: string }> {
+    const conditions = [
+      eq(simTrades.userId, userId),
+      eq(simTrades.strategyId, strategyId),
+      gte(simTrades.entryTs, fromTs),
+      lte(simTrades.entryTs, toTs),
+    ];
+
+    // If cursor is provided, decode it (exitTs timestamp) and filter
+    if (cursor) {
+      const cursorTs = parseInt(cursor, 10);
+      if (!isNaN(cursorTs)) {
+        conditions.push(lt(simTrades.exitTs, cursorTs));
+      }
+    }
+
+    // Fetch limit + 1 to check if there are more items
+    const rows = await db
+      .select()
+      .from(simTrades)
+      .where(and(...conditions))
+      .orderBy(desc(simTrades.exitTs))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const trades = rows.slice(0, limit);
+
+    // Generate nextCursor from the last trade's exitTs
+    const nextCursor = hasMore && trades.length > 0 && trades[trades.length - 1].exitTs
+      ? trades[trades.length - 1].exitTs.toString()
+      : undefined;
+
+    return { trades, nextCursor };
   }
 
   async createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot> {
@@ -882,6 +1119,16 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  async getActiveInvestments(): Promise<Array<{ userId: string; strategyId: string }>> {
+    const states = await db.select({
+      userId: investState.userId,
+      strategyId: investState.strategyId,
+    })
+      .from(investState)
+      .where(eq(investState.state, "INVESTED_ACTIVE"));
+    return states;
   }
 
   async upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number> {

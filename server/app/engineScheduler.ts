@@ -19,6 +19,20 @@ export interface EngineHealthReport {
     lastError: string | null;
     running: boolean;
   }>;
+  metrics: {
+    tickDurations: {
+      p50: number | null;
+      p95: number | null;
+      p99: number | null;
+      count: number;
+    };
+    lockStats: {
+      totalAttempts: number;
+      successful: number;
+      failed: number;
+      contentionRate: number;
+    };
+  };
 }
 
 function hashKey(value: string): number {
@@ -30,10 +44,19 @@ function hashKey(value: string): number {
   return hash >>> 0;
 }
 
-async function withAdvisoryLock(lockKey: number, fn: () => Promise<void>): Promise<boolean> {
+async function withAdvisoryLock(
+  lockKey: number,
+  fn: () => Promise<void>,
+  stats?: { totalAttempts: number; successful: number; failed: number }
+): Promise<boolean> {
+  if (stats) stats.totalAttempts++;
   const result = await db.execute(sql`SELECT pg_try_advisory_lock(${lockKey}) as locked`);
   const locked = Boolean((result as { rows?: Array<{ locked: boolean }> }).rows?.[0]?.locked);
-  if (!locked) return false;
+  if (!locked) {
+    if (stats) stats.failed++;
+    return false;
+  }
+  if (stats) stats.successful++;
   try {
     await fn();
   } finally {
@@ -44,6 +67,8 @@ async function withAdvisoryLock(lockKey: number, fn: () => Promise<void>): Promi
 
 class EngineScheduler {
   private loops = new Map<string, { config: EngineLoopConfig; timer: NodeJS.Timeout | null; lastTickTs: number | null; lastError: string | null; running: boolean }>();
+  private tickDurations: number[] = []; // Keep last 1000 durations for percentile calculation
+  private lockStats = { totalAttempts: 0, successful: 0, failed: 0 };
 
   registerLoop(config: EngineLoopConfig): void {
     const key = `${config.userId}:${config.strategyId}`;
@@ -61,21 +86,91 @@ class EngineScheduler {
   }
 
   start(): void {
+    let startedCount = 0;
     for (const [key, loop] of this.loops.entries()) {
       if (loop.timer) continue;
       loop.timer = setInterval(() => {
         void this.tickLoop(key);
       }, loop.config.intervalMs);
+      startedCount++;
+    }
+    
+    if (startedCount > 0) {
+      // Log startup (async import to avoid circular dependency)
+      import("../lib/logger").then(({ logger }) => {
+        logger.info("Engine scheduler started", "engine-scheduler", {
+          activeLoops: this.loops.size,
+          startedCount,
+          tickIntervalMs: Array.from(this.loops.values())[0]?.config.intervalMs ?? 0,
+        });
+      }).catch(() => {
+        // Ignore logging errors during startup
+      });
     }
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
+    // Stop all timers first
     for (const loop of this.loops.values()) {
       if (loop.timer) {
         clearInterval(loop.timer);
         loop.timer = null;
       }
     }
+    
+    // Wait for in-flight ticks to complete (with timeout)
+    const promises: Promise<void>[] = [];
+    const runningLoops: Array<{ key: string; userId: string; strategyId: string }> = [];
+    
+    for (const [key, loop] of this.loops.entries()) {
+      if (loop.running) {
+        runningLoops.push({
+          key,
+          userId: loop.config.userId,
+          strategyId: loop.config.strategyId,
+        });
+        
+        // Wait for in-flight tick to complete (with timeout)
+        promises.push(
+          new Promise<void>((resolve) => {
+            const startTime = Date.now();
+            const check = setInterval(() => {
+              if (!loop.running) {
+                clearInterval(check);
+                resolve();
+              } else {
+                // Check timeout
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= 5000) {
+                  clearInterval(check);
+                  resolve();
+                }
+              }
+            }, 100);
+            
+            // Safety timeout
+            setTimeout(() => {
+              clearInterval(check);
+              resolve();
+            }, 5000); // 5s timeout
+          })
+        );
+      }
+    }
+    
+    if (runningLoops.length > 0) {
+      // Log which loops are still running
+      const { logger } = await import("../lib/logger");
+      logger.info("Waiting for in-flight engine ticks to complete", "engine-scheduler", {
+        runningLoops: runningLoops.length,
+        loops: runningLoops.map(l => `${l.userId}:${l.strategyId}`),
+      });
+    }
+    
+    await Promise.all(promises);
+    
+    // Clear all loops
+    this.loops.clear();
   }
 
   async tickLoop(key: string): Promise<void> {
@@ -83,14 +178,28 @@ class EngineScheduler {
     if (!loop || loop.running) return;
     loop.running = true;
     const lockKey = hashKey(key);
+    const startTs = Date.now();
 
     try {
-      const acquired = await withAdvisoryLock(lockKey, loop.config.tick);
+      const acquired = await withAdvisoryLock(lockKey, loop.config.tick, this.lockStats);
+      const duration = Date.now() - startTs;
+      
+      // Track tick duration (keep last 1000)
+      this.tickDurations.push(duration);
+      if (this.tickDurations.length > 1000) {
+        this.tickDurations.shift();
+      }
+      
       if (acquired) {
         loop.lastTickTs = Date.now();
         loop.lastError = null;
       }
     } catch (error) {
+      const duration = Date.now() - startTs;
+      this.tickDurations.push(duration);
+      if (this.tickDurations.length > 1000) {
+        this.tickDurations.shift();
+      }
       loop.lastError = error instanceof Error ? error.message : "Unknown error";
     } finally {
       loop.running = false;
@@ -108,9 +217,35 @@ class EngineScheduler {
       running: loop.running,
     }));
 
+    // Calculate percentiles for tick durations
+    const sortedDurations = [...this.tickDurations].sort((a, b) => a - b);
+    const calculatePercentile = (p: number): number | null => {
+      if (sortedDurations.length === 0) return null;
+      const index = Math.floor(sortedDurations.length * p);
+      return sortedDurations[Math.min(index, sortedDurations.length - 1)];
+    };
+
+    const contentionRate = this.lockStats.totalAttempts > 0
+      ? this.lockStats.failed / this.lockStats.totalAttempts
+      : 0;
+
     return {
       activeLoops: loops.length,
       loops,
+      metrics: {
+        tickDurations: {
+          p50: calculatePercentile(0.5),
+          p95: calculatePercentile(0.95),
+          p99: calculatePercentile(0.99),
+          count: sortedDurations.length,
+        },
+        lockStats: {
+          totalAttempts: this.lockStats.totalAttempts,
+          successful: this.lockStats.successful,
+          failed: this.lockStats.failed,
+          contentionRate: Math.round(contentionRate * 10000) / 100, // Percentage with 2 decimals
+        },
+      },
     };
   }
 }
