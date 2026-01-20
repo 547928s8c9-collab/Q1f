@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBaseStrategy, type SignalGenerator } from "../strategies/executor";
 import type { StrategyConfig, StrategyMeta, StrategyState } from "../strategies/types";
 import type {
@@ -9,13 +9,23 @@ import type {
   Strategy,
   StrategyProfile,
 } from "@shared/schema";
-import { alignToGrid } from "../marketData/loadCandles";
+import { alignToGrid, loadCandles } from "../marketData/loadCandles";
 import { timeframeToMs } from "../marketData/utils";
 import {
   computeDriftPerBar,
   createSimTrader,
   type SimTraderStore,
 } from "../services/simTrader";
+
+vi.mock("../marketData/loadCandles", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../marketData/loadCandles")>();
+  return {
+    ...actual,
+    loadCandles: vi.fn(),
+  };
+});
+
+const mockedLoadCandles = loadCandles as unknown as ReturnType<typeof vi.fn>;
 
 class TestSignalGenerator implements SignalGenerator {
   private step = 0;
@@ -62,6 +72,15 @@ const testConfig: StrategyConfig = {
     maxHoldBars: 100,
   },
 };
+
+const baseCandle = (ts: number): Candle => ({
+  ts,
+  open: 100,
+  high: 105,
+  low: 95,
+  close: 100,
+  volume: 1000,
+});
 
 function buildStrategyFactory() {
   return (_slug: string, config: StrategyConfig, meta: StrategyMeta) => {
@@ -158,6 +177,14 @@ function createMemoryStore(overrides?: {
   };
 }
 
+beforeEach(() => {
+  mockedLoadCandles.mockResolvedValue({
+    candles: [baseCandle(Date.now())],
+    gaps: [],
+    source: "cache",
+  });
+});
+
 describe("computeDriftPerBar", () => {
   it("produces a per-bar drift that sums to the monthly target", () => {
     const perBar = computeDriftPerBar(600, "15m");
@@ -171,6 +198,11 @@ describe("SimTrader", () => {
   it("ticks forward and writes trades/positions/snapshots", async () => {
     const stepMs = timeframeToMs("15m");
     const nowAligned = alignToGrid(Date.now(), stepMs);
+    mockedLoadCandles.mockResolvedValue({
+      candles: [baseCandle(nowAligned)],
+      gaps: [],
+      source: "cache",
+    });
     const position = {
       id: "pos-1",
       strategyId: "strategy-1",
@@ -218,5 +250,96 @@ describe("SimTrader", () => {
       expect(BigInt(result.position.cashMinor)).toBeGreaterThanOrEqual(0n);
       expect(BigInt(result.position.equityMinor)).toBeGreaterThanOrEqual(0n);
     });
+  });
+
+  it("does not double-close trades when multiple trade events occur", async () => {
+    const stepMs = timeframeToMs("15m");
+    const nowAligned = alignToGrid(Date.now(), stepMs);
+    mockedLoadCandles.mockResolvedValue({
+      candles: [baseCandle(nowAligned)],
+      gaps: [],
+      source: "cache",
+    });
+
+    const trades: SimTrade[] = [];
+    const store = createMemoryStore();
+    const testStore: SimTraderStore = {
+      ...store,
+      async insertTrade(trade) {
+        const created = await store.insertTrade(trade);
+        trades.push(created);
+        return created;
+      },
+      async getOpenTrade() {
+        return null;
+      },
+    };
+
+    const strategyFactory = () => ({
+      onCandle: (_candle: Candle) => [
+        {
+          ts: nowAligned,
+          seq: 1,
+          payload: {
+            type: "trade",
+            data: {
+              side: "LONG",
+              entryPrice: 100,
+              exitPrice: 101,
+              qty: 1,
+              grossPnl: 1,
+              fees: 0.1,
+              netPnl: 0.9,
+              holdBars: 1,
+              reason: "test",
+            },
+          },
+        },
+        {
+          ts: nowAligned,
+          seq: 2,
+          payload: {
+            type: "trade",
+            data: {
+              side: "LONG",
+              entryPrice: 100,
+              exitPrice: 102,
+              qty: 1,
+              grossPnl: 2,
+              fees: 0.1,
+              netPnl: 1.9,
+              holdBars: 1,
+              reason: "test",
+            },
+          },
+        },
+      ],
+      getState: () => ({
+        barIndex: 0,
+        cash: 10000,
+        position: { side: "FLAT", qty: 0, entryPrice: 0, entryTs: 0, entryBarIndex: 0 },
+        equity: 10000,
+        openOrders: [],
+        stats: { totalTrades: 0, wins: 0, losses: 0, grossPnl: 0, fees: 0, netPnl: 0 },
+        rollingWins: [],
+        rollingPnls: [],
+      }),
+      reset: () => undefined,
+    });
+
+    const trader = createSimTrader(
+      {
+        strategyId: "strategy-1",
+        profileSlug: "btc_squeeze_breakout",
+        strategyConfigOverride: testConfig,
+        strategyFactory,
+        snapshotIntervalMs: stepMs,
+      },
+      testStore
+    );
+
+    const results = await trader.tickForward(1);
+    expect(results).toHaveLength(1);
+    expect(trades.filter((trade) => trade.status === "CLOSED")).toHaveLength(1);
   });
 });

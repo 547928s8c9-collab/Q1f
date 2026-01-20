@@ -34,6 +34,13 @@ describe("syntheticMarket", () => {
 
     expect(candles).toHaveLength(5);
 
+    for (let i = 0; i < candles.length; i += 1) {
+      const candle = candles[i];
+      expect(candle.high).toBeGreaterThanOrEqual(Math.max(candle.open, candle.close));
+      expect(candle.low).toBeLessThanOrEqual(Math.min(candle.open, candle.close));
+      expect(candle.low).toBeGreaterThan(0);
+    }
+
     for (let i = 1; i < candles.length; i += 1) {
       const prev = candles[i - 1];
       const curr = candles[i];
