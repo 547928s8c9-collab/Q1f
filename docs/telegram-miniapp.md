@@ -2,6 +2,25 @@
 
 This document describes the minimal infrastructure needed to prepare the project for a Telegram Mini App while preserving existing web flows.
 
+## TG Strategy Mini App v2
+
+New TG UI lives at `/tg/v2` (and `/tg` after switch-over), while legacy `/tg/legacy` remains available for rollback.
+
+### Screens
+
+- **Overview**: Total equity, ROI / max drawdown, top 3 strategies, sparkline.
+- **Strategies**: Risk tier filter + live metrics + sparkline.
+- **Strategy detail**: Metrics, equity sparkline, optional price chart (capped candles), recent trades, trade detail bottom sheet.
+- **Activity**: Recent trades feed + unread notifications.
+
+### Polling plan
+
+- `/api/tg/bootstrap`: on session start and manual refresh
+- `/api/tg/strategies`: every 12s
+- `/api/tg/strategies/:id`: every 12s while detail is open
+- `/api/tg/strategies/:id/trades`: every 12s while detail is open
+- `/api/tg/activity`: every 12s
+
 ## Environment variables
 
 Add these variables to the server environment:
@@ -89,6 +108,25 @@ For backward compatibility, the system still supports linking via `antiPhishingC
 - `POST /api/telegram/link-token` - Generate a new one-time link token (requires web authentication)
 - `POST /api/telegram/link/confirm` - Confirm linking with a code (from Telegram Mini App, requires `initData`)
 - `POST /api/telegram/auth` - Authenticate and get Telegram JWT token (requires `initData` and linked account)
+
+### TG v2 endpoints (Telegram JWT required)
+
+- `GET /api/tg/bootstrap` - Balances, positions, unread notifications
+- `GET /api/tg/engine/status` - Engine status (state/last tick/loops/error)
+- `GET /api/tg/strategies` - Compact strategy list + sparklines
+- `GET /api/tg/strategies/:id` - Strategy detail + equity series
+- `GET /api/tg/strategies/:id/candles` - Capped candles for mini price chart
+- `GET /api/tg/strategies/:id/trades` - Trades with cursor pagination
+- `GET /api/tg/strategies/:id/trade-events` - Trade events (limit ≤ 200)
+- `GET /api/tg/activity` - Aggregated recent trades + notifications
+
+### Limits
+
+- `/api/tg/strategies`: `limit` ≤ 50, `sparkline` ≤ 30 points
+- `/api/tg/strategies/:id`: `periodDays` ≤ 180, `equitySeries` ≤ 200
+- `/api/tg/strategies/:id/candles`: `limit` ≤ 600, `periodDays` ≤ 30
+- `/api/tg/strategies/:id/trades`: `limit` ≤ 50
+- `/api/tg/strategies/:id/trade-events`: `limit` ≤ 200
 
 ## Database Migrations
 
