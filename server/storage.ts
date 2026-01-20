@@ -6,6 +6,12 @@ import {
   strategies,
   strategyProfiles,
   strategyPerformance,
+  simAllocations,
+  simPositions,
+  simTrades,
+  simEquitySnapshots,
+  benchmarkSeries,
+  investState,
   positions,
   operations,
   portfolioSeries,
@@ -40,6 +46,18 @@ import {
   type InsertStrategyProfile,
   type StrategyPerformance,
   type InsertStrategyPerformance,
+  type SimAllocation,
+  type InsertSimAllocation,
+  type SimPosition,
+  type InsertSimPosition,
+  type SimTrade,
+  type InsertSimTrade,
+  type SimEquitySnapshot,
+  type InsertSimEquitySnapshot,
+  type BenchmarkSeries,
+  type InsertBenchmarkSeries,
+  type InvestState,
+  type InsertInvestState,
   type Position,
   type InsertPosition,
   type Operation,
@@ -115,6 +133,25 @@ export interface IStorage {
 
   getStrategyProfiles(): Promise<StrategyProfile[]>;
   seedStrategyProfiles(): Promise<{ inserted: number; updated: number }>;
+
+  createSimAllocation(allocation: InsertSimAllocation): Promise<SimAllocation>;
+  updateSimAllocation(id: string, updates: Partial<SimAllocation>): Promise<SimAllocation | undefined>;
+  getSimAllocationByRequest(userId: string, strategyId: string, requestId: string): Promise<SimAllocation | undefined>;
+
+  getSimPosition(userId: string, strategyId: string): Promise<SimPosition | undefined>;
+  upsertSimPosition(position: InsertSimPosition): Promise<SimPosition>;
+
+  createSimTrade(trade: InsertSimTrade): Promise<SimTrade>;
+  getSimTrades(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimTrade[]>;
+
+  createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot>;
+  getSimEquitySnapshots(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimEquitySnapshot[]>;
+  getLatestSimEquitySnapshot(userId: string, strategyId: string): Promise<SimEquitySnapshot | undefined>;
+
+  getInvestState(userId: string, strategyId: string): Promise<InvestState | undefined>;
+  upsertInvestState(state: InsertInvestState): Promise<InvestState>;
+
+  upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number>;
 
   getPositions(userId: string): Promise<Position[]>;
   getPosition(userId: string, strategyId: string): Promise<Position | undefined>;
@@ -735,6 +772,122 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { inserted, updated };
+  }
+
+  async createSimAllocation(allocation: InsertSimAllocation): Promise<SimAllocation> {
+    const [created] = await db.insert(simAllocations).values(allocation).returning();
+    return created;
+  }
+
+  async updateSimAllocation(id: string, updates: Partial<SimAllocation>): Promise<SimAllocation | undefined> {
+    const [updated] = await db.update(simAllocations).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(simAllocations.id, id)).returning();
+    return updated;
+  }
+
+  async getSimAllocationByRequest(userId: string, strategyId: string, requestId: string): Promise<SimAllocation | undefined> {
+    const [result] = await db.select().from(simAllocations)
+      .where(and(
+        eq(simAllocations.userId, userId),
+        eq(simAllocations.strategyId, strategyId),
+        eq(simAllocations.requestId, requestId)
+      ));
+    return result;
+  }
+
+  async getSimPosition(userId: string, strategyId: string): Promise<SimPosition | undefined> {
+    const [result] = await db.select().from(simPositions)
+      .where(and(eq(simPositions.userId, userId), eq(simPositions.strategyId, strategyId)));
+    return result;
+  }
+
+  async upsertSimPosition(position: InsertSimPosition): Promise<SimPosition> {
+    const [result] = await db.insert(simPositions).values(position)
+      .onConflictDoUpdate({
+        target: [simPositions.userId, simPositions.strategyId],
+        set: {
+          ...position,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async createSimTrade(trade: InsertSimTrade): Promise<SimTrade> {
+    const [created] = await db.insert(simTrades).values(trade).returning();
+    return created;
+  }
+
+  async getSimTrades(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimTrade[]> {
+    return db.select().from(simTrades)
+      .where(and(
+        eq(simTrades.userId, userId),
+        eq(simTrades.strategyId, strategyId),
+        gte(simTrades.entryTs, fromTs),
+        lte(simTrades.entryTs, toTs)
+      ))
+      .orderBy(desc(simTrades.entryTs));
+  }
+
+  async createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot> {
+    const [created] = await db.insert(simEquitySnapshots).values(snapshot)
+      .onConflictDoNothing()
+      .returning();
+    if (created) return created;
+    const [existing] = await db.select().from(simEquitySnapshots)
+      .where(and(
+        eq(simEquitySnapshots.userId, snapshot.userId),
+        eq(simEquitySnapshots.strategyId, snapshot.strategyId),
+        eq(simEquitySnapshots.ts, snapshot.ts)
+      ));
+    return existing!;
+  }
+
+  async getSimEquitySnapshots(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimEquitySnapshot[]> {
+    return db.select().from(simEquitySnapshots)
+      .where(and(
+        eq(simEquitySnapshots.userId, userId),
+        eq(simEquitySnapshots.strategyId, strategyId),
+        gte(simEquitySnapshots.ts, fromTs),
+        lte(simEquitySnapshots.ts, toTs)
+      ))
+      .orderBy(desc(simEquitySnapshots.ts));
+  }
+
+  async getLatestSimEquitySnapshot(userId: string, strategyId: string): Promise<SimEquitySnapshot | undefined> {
+    const [snapshot] = await db.select().from(simEquitySnapshots)
+      .where(and(eq(simEquitySnapshots.userId, userId), eq(simEquitySnapshots.strategyId, strategyId)))
+      .orderBy(desc(simEquitySnapshots.ts))
+      .limit(1);
+    return snapshot;
+  }
+
+  async getInvestState(userId: string, strategyId: string): Promise<InvestState | undefined> {
+    const [state] = await db.select().from(investState)
+      .where(and(eq(investState.userId, userId), eq(investState.strategyId, strategyId)));
+    return state;
+  }
+
+  async upsertInvestState(state: InsertInvestState): Promise<InvestState> {
+    const [result] = await db.insert(investState).values(state)
+      .onConflictDoUpdate({
+        target: [investState.userId, investState.strategyId],
+        set: {
+          ...state,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number> {
+    if (series.length === 0) return 0;
+    const result = await db.insert(benchmarkSeries).values(series).onConflictDoNothing();
+    return result.rowCount ?? 0;
   }
 
   async getPositions(userId: string): Promise<Position[]> {

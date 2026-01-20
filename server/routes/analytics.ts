@@ -1,5 +1,6 @@
 import type { RouteDeps } from "./types";
 import { storage } from "../storage";
+import { getPortfolioSummary } from "../app/portfolioService";
 
 export function registerAnalyticsRoutes(deps: RouteDeps): void {
   const { app, isAuthenticated, getUserId } = deps;
@@ -11,38 +12,17 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
       const days = 30;
 
       // Parallel fetch all required data
-      const [balances, vaults, positions, portfolioSeries, allStrategies] = await Promise.all([
-        storage.getBalances(userId),
-        storage.getVaults(userId),
+      const [positions, portfolioSeries, allStrategies, portfolioSummary] = await Promise.all([
         storage.getPositions(userId),
         storage.getPortfolioSeries(userId, days),
         storage.getStrategies(),
+        getPortfolioSummary(userId),
       ]);
 
       // Build strategy lookup map
       const strategyMap = new Map(allStrategies.map((s) => [s.id, s]));
 
-      // Calculate total equity (balances + vaults + positions)
-      let totalEquityMinor = BigInt(0);
-
-      // Sum wallet balances (USDT only for now)
-      for (const b of balances) {
-        if (b.asset === "USDT") {
-          totalEquityMinor += BigInt(b.available || "0") + BigInt(b.locked || "0");
-        }
-      }
-
-      // Sum vault balances
-      for (const v of vaults) {
-        if (v.asset === "USDT") {
-          totalEquityMinor += BigInt(v.balance || "0");
-        }
-      }
-
-      // Sum positions (investedCurrentMinor = current value including gains/losses)
-      for (const p of positions) {
-        totalEquityMinor += BigInt(p.investedCurrentMinor || "0");
-      }
+      const totalEquityMinor = BigInt(portfolioSummary.totalEquityMinor);
 
       // Calculate PnL and ROI from portfolio series
       let pnl30dMinor = BigInt(0);

@@ -17,6 +17,7 @@ import {
 import { registerExtractedRoutes } from "./routes/index";
 import { buildGaps, loadCandles } from "./marketData/loadCandles";
 import { ensureCandleRange, buildSyntheticSeed } from "./services/syntheticMarket";
+import { getPortfolioSummary, reconcilePortfolio } from "./app/portfolioService";
 
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
@@ -407,7 +408,7 @@ export async function registerRoutes(
       const [
         balances,
         vaults,
-        positions,
+        portfolioSummary,
         portfolioSeries,
         security,
         latestConsent,
@@ -419,7 +420,7 @@ export async function registerRoutes(
       ] = await Promise.all([
         storage.getBalances(userId),
         storage.getVaults(userId),
-        storage.getPositions(userId),
+        getPortfolioSummary(userId),
         storage.getPortfolioSeries(userId, 90),
         storage.getSecuritySettings(userId),
         storage.getLatestConsent(userId, "combined"),
@@ -439,14 +440,15 @@ export async function registerRoutes(
       const kycApplicantStatus = kycApplicant?.status || "NOT_STARTED";
       const isKycApproved = kycApplicantStatus === "APPROVED";
 
-      // Calculate invested amounts
-      const invested = positions.reduce(
-        (acc, p) => ({
-          current: (BigInt(acc.current) + BigInt(p.currentValue)).toString(),
-          principal: (BigInt(acc.principal) + BigInt(p.principal)).toString(),
-        }),
-        { current: "0", principal: "0" }
-      );
+      const invested = {
+        current: portfolioSummary.totalEquityMinor,
+        principal: portfolioSummary.totalAllocatedMinor,
+      };
+
+      const reconciliation = reconcilePortfolio(portfolioSummary);
+      if (!reconciliation.ok) {
+        console.warn("Portfolio reconciliation warnings", reconciliation.issues);
+      }
 
       const latestBtc = btcQuotes[btcQuotes.length - 1];
       const latestEth = ethQuotes[ethQuotes.length - 1];

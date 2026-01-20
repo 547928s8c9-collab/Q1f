@@ -31,9 +31,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  type Candle,
-  type InvestMetrics,
-  type InvestTrade,
   type Strategy,
   type StrategyPerformance,
   type PayoutInstruction,
@@ -41,6 +38,7 @@ import {
   type Timeframe,
   formatMoney,
 } from "@shared/schema";
+import type { InvestCandlesResponse, InvestInsightsResponse } from "@shared/contracts/invest";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
@@ -71,22 +69,6 @@ function toMajorUnits(minorUnits: string, decimals: number = 6): number {
   return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
 }
 
-interface InvestCandlesResponse {
-  candles: Candle[];
-  gaps: { startMs: number; endMs: number; reason: string }[];
-  source: string;
-  symbol: string;
-  timeframe: Timeframe;
-  periodDays: number;
-}
-
-interface InvestInsightsResponse {
-  trades: InvestTrade[];
-  metrics: InvestMetrics;
-  timeframe: Timeframe;
-  periodDays: number;
-  symbol: string;
-}
 
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
@@ -147,7 +129,7 @@ export default function StrategyDetail() {
       "/api/invest/strategies",
       params.id,
       "candles",
-      { timeframe: chartTimeframe, period: periodDays.toString() },
+      { timeframe: chartTimeframe, periodDays: periodDays.toString() },
     ],
     enabled: !!params.id,
   });
@@ -161,7 +143,7 @@ export default function StrategyDetail() {
       "/api/invest/strategies",
       params.id,
       "insights",
-      { timeframe: chartTimeframe, period: periodDays.toString() },
+      { timeframe: chartTimeframe, periodDays: periodDays.toString() },
     ],
     enabled: !!params.id,
   });
@@ -287,10 +269,12 @@ export default function StrategyDetail() {
   const fees = strategy?.feesJson as { management?: string; performance?: string } | null;
   const terms = strategy?.termsJson as { profitPayout?: string; principalRedemption?: string } | null;
 
-  const candleData = candleResponse?.candles ?? [];
+  const candlePayload = candleResponse?.ok ? candleResponse.data : null;
+  const insightsPayload = insightsResponse?.ok ? insightsResponse.data : null;
+  const candleData = candlePayload?.candles ?? [];
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
-  const trades = insightsResponse?.trades ?? [];
-  const metrics = insightsResponse?.metrics;
+  const trades = insightsPayload?.trades ?? [];
+  const metrics = insightsPayload?.metrics;
   const chartMarkers = useMemo<CandlestickMarker[]>(() => {
     if (!trades.length) return [];
 
@@ -314,7 +298,7 @@ export default function StrategyDetail() {
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
-  const benchmarkLabel = candleResponse?.symbol ? `${candleResponse.symbol} Benchmark` : "Market Benchmark";
+  const benchmarkLabel = candlePayload?.symbol ? `${candlePayload.symbol} Benchmark` : "Market Benchmark";
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -427,9 +411,9 @@ export default function StrategyDetail() {
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" />
                 <h3 className="text-lg font-semibold">Market Activity</h3>
-                {candleResponse?.symbol && (
+                {candlePayload?.symbol && (
                   <Badge variant="outline" className="text-xs">
-                    {candleResponse.symbol}
+                    {candlePayload.symbol}
                   </Badge>
                 )}
               </div>
@@ -475,7 +459,7 @@ export default function StrategyDetail() {
                 <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {periodDays}D · {candleData.length} candles · {candleResponse?.source ?? "source"}
+                    {periodDays}D · {candleData.length} candles · {candlePayload?.source ?? "source"}
                   </span>
                   {candleData[candleData.length - 1] && (
                     <span className="tabular-nums">
