@@ -9,19 +9,20 @@ import request from "supertest";
 import express from "express";
 import { createServer } from "http";
 import { registerRoutes } from "../routes";
-import { storage } from "../storage";
-import { db } from "../db";
-import { strategies } from "@shared/schema";
-import { eq } from "drizzle-orm";
 
 const TEST_USER_ID = "test-user-api";
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const describeDb = hasDatabaseUrl ? describe : describe.skip;
 
-describe("Invest API Endpoints", () => {
+describeDb("Invest API Endpoints", () => {
   let app: express.Application;
   let httpServer: any;
   let testStrategyId: string;
+  let storage: (typeof import("../storage"))["storage"];
 
   beforeAll(async () => {
+    ({ storage } = await import("../storage"));
+
     app = express();
     app.use(express.json());
     

@@ -1,10 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { loadCandles, findMissingRanges, buildGaps, alignToGrid } from "./loadCandles";
-import { storage } from "../storage";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import type { Candle, Timeframe } from "@shared/schema";
-import { BinanceSpotDataSource } from "../data/binanceSpot";
+import type { BinanceSpotDataSource } from "../data/binanceSpot";
 
 const HOUR_MS = 3600000;
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const describeDb = hasDatabaseUrl ? describe : describe.skip;
+
+let loadCandles!: typeof import("./loadCandles").loadCandles;
+let findMissingRanges!: typeof import("./loadCandles").findMissingRanges;
+let buildGaps!: typeof import("./loadCandles").buildGaps;
+let alignToGrid!: typeof import("./loadCandles").alignToGrid;
+
+beforeAll(async () => {
+  if (!hasDatabaseUrl) {
+    vi.doMock("../storage", () => ({
+      storage: {
+        getCandlesFromCache: vi.fn().mockResolvedValue([]),
+        upsertCandles: vi.fn().mockResolvedValue(undefined),
+      },
+    }));
+  }
+
+  ({ loadCandles, findMissingRanges, buildGaps, alignToGrid } = await import("./loadCandles"));
+});
 
 function makeCandle(ts: number, overrides: Partial<Candle> = {}): Candle {
   return {
@@ -101,7 +119,7 @@ describe("buildGaps", () => {
   });
 });
 
-describe("deduplication and sorting", () => {
+describeDb("deduplication and sorting", () => {
   it("deduplicates and sorts candles by ts asc", async () => {
     const exchange = "test_exchange";
     const symbol = "TESTUSDT";
@@ -114,6 +132,7 @@ describe("deduplication and sorting", () => {
       makeCandle(0, { close: 100.5 }),
     ];
 
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, candles);
 
     const result = await storage.getCandlesFromCache(exchange, symbol, timeframe, 0, 3 * HOUR_MS);
@@ -126,7 +145,7 @@ describe("deduplication and sorting", () => {
   });
 });
 
-describe("upsert idempotency", () => {
+describeDb("upsert idempotency", () => {
   it("does not create duplicates on repeated upsert", async () => {
     const exchange = "test_exchange_2";
     const symbol = "IDEMPOTENT";
@@ -137,6 +156,7 @@ describe("upsert idempotency", () => {
       makeCandle(HOUR_MS, { close: 110.0 }),
     ];
 
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, candles);
     const firstResult = await storage.getCandlesFromCache(exchange, symbol, timeframe, 0, 2 * HOUR_MS);
     const firstCount = firstResult.length;
@@ -154,6 +174,7 @@ describe("upsert idempotency", () => {
     const timeframe: Timeframe = "1h";
 
     const original: Candle[] = [makeCandle(0, { close: 100.0 })];
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, original);
 
     const updated: Candle[] = [makeCandle(0, { close: 999.99 })];
@@ -165,7 +186,7 @@ describe("upsert idempotency", () => {
   });
 });
 
-describe("range filtering [start, end)", () => {
+describeDb("range filtering [start, end)", () => {
   it("correctly filters by half-open interval", async () => {
     const exchange = "test_exchange_4";
     const symbol = "RANGETEST";
@@ -178,6 +199,7 @@ describe("range filtering [start, end)", () => {
       makeCandle(3 * HOUR_MS),
     ];
 
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, candles);
 
     const result = await storage.getCandlesFromCache(exchange, symbol, timeframe, HOUR_MS, 3 * HOUR_MS);
@@ -193,6 +215,7 @@ describe("range filtering [start, end)", () => {
     const timeframe: Timeframe = "1h";
 
     const candles: Candle[] = [makeCandle(0), makeCandle(HOUR_MS)];
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, candles);
 
     const result = await storage.getCandlesFromCache(exchange, symbol, timeframe, 0, HOUR_MS);
@@ -207,6 +230,7 @@ describe("range filtering [start, end)", () => {
     const timeframe: Timeframe = "1h";
 
     const candles: Candle[] = [makeCandle(HOUR_MS), makeCandle(2 * HOUR_MS)];
+    const { storage } = await import("../storage");
     await storage.upsertCandles(exchange, symbol, timeframe, candles);
 
     const result = await storage.getCandlesFromCache(exchange, symbol, timeframe, HOUR_MS, 3 * HOUR_MS);
@@ -216,7 +240,7 @@ describe("range filtering [start, end)", () => {
   });
 });
 
-describe("loadCandles determinism", () => {
+describeDb("loadCandles determinism", () => {
   it("returns same output for same input with mocked datasource", async () => {
     const mockDataSource: BinanceSpotDataSource = {
       fetchCandles: vi.fn().mockResolvedValue([

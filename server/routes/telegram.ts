@@ -46,32 +46,13 @@ const telegramLinkConfirmLimiter = rateLimit({
   validate: { xForwardedForHeader: false },
 });
 
-// Rate limiter for /api/tg/bootstrap: 60/min per telegramUserId (or IP fallback)
+// Rate limiter for /api/tg/bootstrap: 60/min per IP
 const telegramBootstrapLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } },
-  validate: { xForwardedForHeader: false },
-  keyGenerator: (req) => {
-    // Try to extract telegramUserId from JWT token if available
-    const header = req.headers.authorization;
-    const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
-    if (token) {
-      try {
-        const payload = verifyTelegramJwt(token);
-        if (payload.telegramUserId) {
-          return `tg-bootstrap:${payload.telegramUserId}`;
-        }
-      } catch {
-        // If JWT is invalid, fallback to IP
-      }
-    }
-    // Fallback to IP
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    return `tg-bootstrap:ip:${ip}`;
-  },
 });
 
 // Rate limiter for /api/tg/engine/status: 60/min per telegramUserId
