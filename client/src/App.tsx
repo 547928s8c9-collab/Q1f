@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,9 +11,7 @@ import { GateGuard } from "@/components/onboarding/gate-guard";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
-import Analytics from "@/pages/analytics";
 import Invest from "@/pages/invest/index";
-import StrategyDetail from "@/pages/invest/strategy-detail";
 import InvestConfirm from "@/pages/invest/confirm";
 import Wallet from "@/pages/wallet/index";
 import Vaults from "@/pages/wallet/vaults";
@@ -34,44 +33,57 @@ import OnboardingDone from "@/pages/onboarding/done";
 import SmartStart from "@/pages/onboarding/smart-start";
 import SmartStartResults from "@/pages/onboarding/smart-start-results";
 import Inbox from "@/pages/inbox";
-import Dashboard from "@/pages/dashboard";
 import AdminKyc from "@/pages/admin/kyc";
 import AdminWithdrawals from "@/pages/admin/withdrawals";
 import AdminDashboard from "@/pages/admin/dashboard";
-import TelegramMiniApp from "@/pages/tg";
 import { Loader2 } from "lucide-react";
+
+const LazyAnalytics = lazy(() => import("@/pages/analytics"));
+const LazyDashboard = lazy(() => import("@/pages/dashboard"));
+const LazyStrategyDetail = lazy(() => import("@/pages/invest/strategy-detail"));
+const LazyTelegramMiniApp = lazy(() => import("@/pages/tg"));
+
+function LazyFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 
 function ProtectedRouter() {
   return (
     <GateGuard>
       <AppShell>
-        <Switch>
-          <Route path="/" component={Home} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/risk" component={Risk} />
-          <Route path="/analytics" component={Analytics} />
-          <Route path="/invest" component={Invest} />
-          <Route path="/invest/:id" component={StrategyDetail} />
-          <Route path="/invest/:id/confirm" component={InvestConfirm} />
-          <Route path="/wallet" component={Wallet} />
-          <Route path="/wallet/vaults" component={Vaults} />
-          <Route path="/deposit/usdt" component={DepositUSDT} />
-          <Route path="/deposit/card" component={DepositCard} />
-          <Route path="/withdraw" component={Withdraw} />
-          <Route path="/activity" component={ActivityEvents} />
-          <Route path="/activity/transactions" component={Activity} />
-          <Route path="/activity/:operationId" component={Receipt} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/settings/security" component={SecuritySettings} />
-          <Route path="/statements" component={Statements} />
-          <Route path="/status" component={StatusPage} />
-          <Route path="/inbox" component={Inbox} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/dashboard" component={AdminDashboard} />
-          <Route path="/admin/kyc" component={AdminKyc} />
-          <Route path="/admin/withdrawals" component={AdminWithdrawals} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense fallback={<LazyFallback />}>
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/dashboard" component={LazyDashboard} />
+            <Route path="/risk" component={Risk} />
+            <Route path="/analytics" component={LazyAnalytics} />
+            <Route path="/invest" component={Invest} />
+            <Route path="/invest/:id" component={LazyStrategyDetail} />
+            <Route path="/invest/:id/confirm" component={InvestConfirm} />
+            <Route path="/wallet" component={Wallet} />
+            <Route path="/wallet/vaults" component={Vaults} />
+            <Route path="/deposit/usdt" component={DepositUSDT} />
+            <Route path="/deposit/card" component={DepositCard} />
+            <Route path="/withdraw" component={Withdraw} />
+            <Route path="/activity" component={ActivityEvents} />
+            <Route path="/activity/transactions" component={Activity} />
+            <Route path="/activity/:operationId" component={Receipt} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/settings/security" component={SecuritySettings} />
+            <Route path="/statements" component={Statements} />
+            <Route path="/status" component={StatusPage} />
+            <Route path="/inbox" component={Inbox} />
+            <Route path="/admin" component={AdminDashboard} />
+            <Route path="/admin/dashboard" component={AdminDashboard} />
+            <Route path="/admin/kyc" component={AdminKyc} />
+            <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </AppShell>
     </GateGuard>
   );
@@ -122,11 +134,13 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <Switch>
-            <Route path="/tg" component={TelegramMiniApp} />
-            <Route path="/telegram" component={TelegramMiniApp} />
-            <Route component={AuthenticatedApp} />
-          </Switch>
+          <Suspense fallback={<LazyFallback />}>
+            <Switch>
+              <Route path="/tg" component={LazyTelegramMiniApp} />
+              <Route path="/telegram" component={LazyTelegramMiniApp} />
+              <Route component={AuthenticatedApp} />
+            </Switch>
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
