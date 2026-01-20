@@ -38,6 +38,14 @@ interface TooltipState {
   close: number;
 }
 
+interface OhlcState {
+  timeLabel: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 const toChartTime = (timestamp: number): UTCTimestamp =>
   Math.floor(timestamp / 1000) as UTCTimestamp;
 
@@ -77,6 +85,7 @@ export function CandlestickChart({
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const hasFitRef = useRef(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [ohlc, setOhlc] = useState<OhlcState | null>(null);
 
   const candleData = useMemo<CandlestickData[]>(
     () =>
@@ -137,6 +146,17 @@ export function CandlestickChart({
       },
       crosshair: {
         mode: CrosshairMode.Normal,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
       },
     });
 
@@ -210,6 +230,13 @@ export function CandlestickChart({
         low: ohlc.low,
         close: ohlc.close,
       });
+      setOhlc({
+        timeLabel: format(new Date(param.time * 1000), "MMM d, HH:mm"),
+        open: ohlc.open,
+        high: ohlc.high,
+        low: ohlc.low,
+        close: ohlc.close,
+      });
     };
 
     chart.subscribeCrosshairMove(handleCrosshairMove);
@@ -268,6 +295,17 @@ export function CandlestickChart({
     } else {
       chartRef.current?.timeScale().scrollToRealTime();
     }
+
+    const last = candleData[candleData.length - 1];
+    if (last) {
+      setOhlc({
+        timeLabel: format(new Date(Number(last.time) * 1000), "MMM d, HH:mm"),
+        open: last.open,
+        high: last.high,
+        low: last.low,
+        close: last.close,
+      });
+    }
   }, [candleData]);
 
   useEffect(() => {
@@ -292,6 +330,18 @@ export function CandlestickChart({
   return (
     <div className="relative w-full" style={{ height }}>
       <div ref={containerRef} className="w-full h-full" />
+      {ohlc && (
+        <div className="absolute left-3 top-3 rounded-md border border-border/60 bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+          <span className="mr-2 text-[10px] uppercase tracking-wide">{ohlc.timeLabel}</span>
+          <span className="tabular-nums text-foreground">O {ohlc.open.toFixed(2)}</span>
+          <span className="mx-1 text-muted-foreground/60">·</span>
+          <span className="tabular-nums text-foreground">H {ohlc.high.toFixed(2)}</span>
+          <span className="mx-1 text-muted-foreground/60">·</span>
+          <span className="tabular-nums text-foreground">L {ohlc.low.toFixed(2)}</span>
+          <span className="mx-1 text-muted-foreground/60">·</span>
+          <span className="tabular-nums text-foreground">C {ohlc.close.toFixed(2)}</span>
+        </div>
+      )}
       {tooltip && (
         <div
           className="absolute rounded-md border border-border/60 bg-card/95 px-3 py-2 text-xs shadow-lg text-muted-foreground"

@@ -194,6 +194,8 @@ export class CryptoCompareDataSource {
 
   private getEndpoint(tf: Timeframe): string {
     switch (tf) {
+      case "1m": return "v2/histominute";
+      case "5m": return "v2/histominute";
       case "15m": return "v2/histominute";
       case "1h": return "v2/histohour";
       case "1d": return "v2/histoday";
@@ -202,6 +204,8 @@ export class CryptoCompareDataSource {
 
   private getAggregate(tf: Timeframe): number {
     switch (tf) {
+      case "1m": return 1;
+      case "5m": return 5;
       case "15m": return 15;
       case "1h": return 1;
       case "1d": return 1;
@@ -210,6 +214,8 @@ export class CryptoCompareDataSource {
 
   private timeframeToMs(tf: Timeframe): number {
     switch (tf) {
+      case "1m": return 60_000;
+      case "5m": return 300_000;
       case "15m": return 900000;
       case "1h": return 3600000;
       case "1d": return 86400000;

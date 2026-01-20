@@ -12,11 +12,15 @@ async function selftest() {
   const tests: Array<[string, () => boolean]> = [
     ["normalizeSymbol('BTC/USDT') = 'BTCUSDT'", () => normalizeSymbol("BTC/USDT") === "BTCUSDT"],
     ["normalizeSymbol('eth-usdt') = 'ETHUSDT'", () => normalizeSymbol("eth-usdt") === "ETHUSDT"],
+    ["normalizeTimeframe('1m') = '1m'", () => normalizeTimeframe("1m") === "1m"],
+    ["normalizeTimeframe('5m') = '5m'", () => normalizeTimeframe("5m") === "5m"],
     ["normalizeTimeframe('1h') = '1h'", () => normalizeTimeframe("1h") === "1h"],
     ["normalizeTimeframe('15m') = '15m'", () => normalizeTimeframe("15m") === "15m"],
     ["normalizeTimeframe('1d') = '1d'", () => normalizeTimeframe("1d") === "1d"],
     ["isValidTimeframe('1h') = true", () => isValidTimeframe("1h") === true],
     ["isValidTimeframe('2h') = false", () => isValidTimeframe("2h") === false],
+    ["timeframeToMs('1m') = 60000", () => timeframeToMs("1m") === 60000],
+    ["timeframeToMs('5m') = 300000", () => timeframeToMs("5m") === 300000],
     ["timeframeToMs('15m') = 900000", () => timeframeToMs("15m") === 900000],
     ["timeframeToMs('1h') = 3600000", () => timeframeToMs("1h") === 3600000],
   ];

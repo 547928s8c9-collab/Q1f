@@ -627,6 +627,8 @@ export async function registerRoutes(
   const MAX_CANDLES_PER_REQUEST = 35040; // ~1 year of 15m candles
 
   const TIMEFRAME_MS: Record<Timeframe, number> = {
+    "1m": 60 * 1000,
+    "5m": 5 * 60 * 1000,
     "15m": 15 * 60 * 1000,
     "1h": 60 * 60 * 1000,
     "1d": 24 * 60 * 60 * 1000,
