@@ -6,7 +6,10 @@ import { StrategyDetailsSheet } from "@/components/strategy/strategy-details-she
 import { InvestSheet } from "@/components/operations/invest-sheet";
 import { StrategyCardSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LiveBadge } from "@/components/ui/live-badge";
 import { useSetPageTitle } from "@/hooks/use-page-title";
+import { useEngineStream } from "@/hooks/use-engine-stream";
+import { useLiveMetrics } from "@/hooks/use-live-metrics";
 import { TrendingUp } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
 
@@ -15,6 +18,9 @@ export default function Invest() {
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [investOpen, setInvestOpen] = useState(false);
+  
+  const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
+  const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
 
   const { data: strategies, isLoading } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
@@ -77,6 +83,7 @@ export default function Invest() {
           key={strategy.id} 
           strategy={strategy}
           sparklineData={getSparklineData(strategy.id)}
+          liveMetrics={getMetrics(strategy.id)}
           onViewDetails={() => handleViewDetails(strategy)}
           onInvest={() => handleInvest(strategy)}
         />
@@ -89,6 +96,12 @@ export default function Invest() {
       <PageHeader
         title="Investment Strategies"
         subtitle="Choose a strategy that matches your risk profile"
+        badge={
+          <LiveBadge 
+            status={isRunning ? "running" : engineStatus?.state === "idle" ? "idle" : "error"}
+            lastUpdated={lastUpdated}
+          />
+        }
       />
 
       {isLoading ? (

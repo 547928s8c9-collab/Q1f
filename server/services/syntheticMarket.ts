@@ -2,12 +2,36 @@ import type { Candle, Timeframe } from "@shared/schema";
 import { storage } from "../storage";
 import { findMissingRanges } from "../marketData/loadCandles";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "../marketData/utils";
+import { getCalibration } from "../app/marketCalibrationService";
+import { logger } from "../lib/logger";
 
 const MAX_STEP_CHANGE_PCT = 0.05;
 const MAX_WICK_PCT = 0.02;
 const MIN_PRICE = 0.0001;
 const BASE_PRICE_MIN = 50;
 const BASE_PRICE_MAX = 50000;
+
+// In-memory cache for calibrations (TTL 10 minutes)
+const calibrationCache = new Map<string, { cal: Awaited<ReturnType<typeof getCalibration>>; expiresAt: number }>();
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function getCachedCalibration(
+  exchange: string,
+  symbol: string,
+  timeframe: Timeframe
+): Promise<Awaited<ReturnType<typeof getCalibration>> | null> {
+  const key = `${exchange}:${symbol}:${timeframe}`;
+  const cached = calibrationCache.get(key);
+  
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.cal;
+  }
+  
+  const cal = await getCalibration({ exchange, symbol, timeframe });
+  calibrationCache.set(key, { cal, expiresAt: Date.now() + CACHE_TTL_MS });
+  
+  return cal;
+}
 
 export interface EnsureCandleRangeParams {
   exchange: "synthetic";
@@ -70,9 +94,30 @@ function initialPrice(seed: string, symbol: string, timeframe: Timeframe, ts: nu
   return Math.max(MIN_PRICE, base * (1 + jitter));
 }
 
-function buildCandle(seed: string, ts: number, prevClose: number, maxStepChangePct: number, maxWickPct: number): Candle {
-  const changeRaw = (randomFor(seed, ts, "change") * 2 - 1) * maxStepChangePct;
-  const change = clamp(changeRaw, -maxStepChangePct, maxStepChangePct);
+function buildCandle(
+  seed: string,
+  ts: number,
+  prevClose: number,
+  maxStepChangePct: number,
+  maxWickPct: number,
+  perBarMu?: number,
+  perBarSigma?: number
+): Candle {
+  let change: number;
+  
+  if (perBarMu !== undefined && perBarSigma !== undefined) {
+    // Use calibrated parameters: Box-Muller approximation for Normal distribution
+    const u1 = randomFor(seed, ts, "change");
+    const u2 = randomFor(seed, ts, "change2");
+    const z = Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2);
+    const r = perBarMu + perBarSigma * z;
+    change = clamp(r, -maxStepChangePct, maxStepChangePct);
+  } else {
+    // Default: uniform distribution
+    const changeRaw = (randomFor(seed, ts, "change") * 2 - 1) * maxStepChangePct;
+    change = clamp(changeRaw, -maxStepChangePct, maxStepChangePct);
+  }
+  
   const open = prevClose;
   const close = Math.max(MIN_PRICE, open * (1 + change));
 
@@ -105,7 +150,7 @@ function alignEnd(ts: number, stepMs: number): number {
   return Math.floor((ts - 1) / stepMs) * stepMs + stepMs;
 }
 
-export function generateSyntheticCandles(params: {
+export async function generateSyntheticCandles(params: {
   seed: string;
   symbol: string;
   timeframe: Timeframe | string;
@@ -113,11 +158,31 @@ export function generateSyntheticCandles(params: {
   toTs: number;
   maxStepChangePct?: number;
   maxWickPct?: number;
-}): Candle[] {
+  exchange?: string;
+}): Promise<Candle[]> {
   const symbol = normalizeSymbol(params.symbol);
   const timeframe = normalizeTimeframe(params.timeframe);
   const stepMs = timeframeToMs(timeframe);
-  const maxStepChangePct = params.maxStepChangePct ?? MAX_STEP_CHANGE_PCT;
+  const exchange = params.exchange || "synthetic";
+  
+  // Try to get calibration
+  let perBarMu: number | undefined;
+  let perBarSigma: number | undefined;
+  let clampPct: number | undefined;
+  
+  if (exchange === "binance_spot") {
+    const cal = await getCachedCalibration("binance_spot", symbol, timeframe);
+    if (cal) {
+      const barsPerDay = 86400000 / stepMs;
+      perBarMu = parseFloat(cal.driftPctPerDay) / 100 / barsPerDay;
+      perBarSigma = parseFloat(cal.volPctPerDay) / 100 / Math.sqrt(barsPerDay);
+      clampPct = parseFloat(cal.stepClampPct) / 100;
+    } else {
+      logger.debug("No calibration found, using defaults", "synthetic-market", { symbol, timeframe });
+    }
+  }
+  
+  const maxStepChangePct = clampPct ?? params.maxStepChangePct ?? MAX_STEP_CHANGE_PCT;
   const maxWickPct = params.maxWickPct ?? MAX_WICK_PCT;
   const alignedStart = alignStart(params.fromTs, stepMs);
   const alignedEnd = alignEnd(params.toTs, stepMs);
@@ -126,7 +191,7 @@ export function generateSyntheticCandles(params: {
   let prevClose = initialPrice(params.seed, symbol, timeframe, alignedStart);
 
   for (let ts = alignedStart; ts < alignedEnd; ts += stepMs) {
-    const candle = buildCandle(params.seed, ts, prevClose, maxStepChangePct, maxWickPct);
+    const candle = buildCandle(params.seed, ts, prevClose, maxStepChangePct, maxWickPct, perBarMu, perBarSigma);
     candles.push(candle);
     prevClose = candle.close;
   }
@@ -169,6 +234,23 @@ export async function ensureCandleRange(params: EnsureCandleRangeParams): Promis
   );
   const candleByTs = new Map<number, Candle>(knownCandles.map((c) => [c.ts, c]));
 
+  // Get calibration if available
+  let perBarMu: number | undefined;
+  let perBarSigma: number | undefined;
+  let clampPct: number | undefined;
+  
+  if (params.exchange === "binance_spot") {
+    const cal = await getCachedCalibration("binance_spot", symbol, timeframe);
+    if (cal) {
+      const barsPerDay = 86400000 / stepMs;
+      perBarMu = parseFloat(cal.driftPctPerDay) / 100 / barsPerDay;
+      perBarSigma = parseFloat(cal.volPctPerDay) / 100 / Math.sqrt(barsPerDay);
+      clampPct = parseFloat(cal.stepClampPct) / 100;
+    }
+  }
+  
+  const effectiveClampPct = clampPct ?? maxStepChangePct;
+
   for (const range of missingRanges) {
     const candles: Candle[] = [];
     let prevClose =
@@ -176,7 +258,7 @@ export async function ensureCandleRange(params: EnsureCandleRangeParams): Promis
       initialPrice(params.seed, symbol, timeframe, range.startMs);
 
     for (let ts = range.startMs; ts < range.endMs; ts += stepMs) {
-      const candle = buildCandle(params.seed, ts, prevClose, maxStepChangePct, maxWickPct);
+      const candle = buildCandle(params.seed, ts, prevClose, effectiveClampPct, maxWickPct, perBarMu, perBarSigma);
       candles.push(candle);
       prevClose = candle.close;
       candleByTs.set(candle.ts, candle);

@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Search, CheckCircle, XCircle, AlertTriangle, Clock, ArrowLeft, Shield } from "lucide-react";
 import { Link } from "wouter";
 import type { AdminKycApplicantListItem, AdminKycApplicantDetail } from "@shared/admin/dto";
+import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 
 const STATUS_COLORS: Record<string, string> = {
   NOT_STARTED: "bg-muted text-muted-foreground",
@@ -52,8 +53,24 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
 
 type DecisionType = "APPROVED" | "REJECTED" | "NEEDS_ACTION" | "ON_HOLD";
 
+interface AdminMeResponse {
+  ok: boolean;
+  data: {
+    adminUserId: string;
+    userId: string;
+    email: string;
+    roles: string[];
+    permissions: string[];
+    isDemo?: boolean;
+  };
+}
+
 export default function AdminKyc() {
   const { toast } = useToast();
+  const { data: adminMeData } = useQuery<AdminMeResponse>({
+    queryKey: ["/api/admin/me"],
+  });
+  const isDemo = adminMeData?.data?.isDemo ?? false;
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null);
@@ -146,6 +163,7 @@ export default function AdminKyc() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
+        <DemoModeBanner isDemo={isDemo} />
         <div className="flex items-center gap-4 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

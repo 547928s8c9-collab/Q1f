@@ -66,9 +66,10 @@ async function withAdvisoryLock(
 }
 
 class EngineScheduler {
-  private loops = new Map<string, { config: EngineLoopConfig; timer: NodeJS.Timeout | null; lastTickTs: number | null; lastError: string | null; running: boolean }>();
+  private loops = new Map<string, { config: EngineLoopConfig; timer: NodeJS.Timeout | null; lastTickTs: number | null; lastError: string | null; running: boolean; tickCount: number }>();
   private tickDurations: number[] = []; // Keep last 1000 durations for percentile calculation
   private lockStats = { totalAttempts: 0, successful: 0, failed: 0 };
+  private readonly TICK_OK_THROTTLE = 30; // Log TICK_OK every 30 ticks
 
   registerLoop(config: EngineLoopConfig): void {
     const key = `${config.userId}:${config.strategyId}`;
@@ -82,6 +83,7 @@ class EngineScheduler {
       lastTickTs: existing?.lastTickTs ?? null,
       lastError: existing?.lastError ?? null,
       running: false,
+      tickCount: existing?.tickCount ?? 0,
     });
   }
 
@@ -179,6 +181,7 @@ class EngineScheduler {
     loop.running = true;
     const lockKey = hashKey(key);
     const startTs = Date.now();
+    const { userId, strategyId } = loop.config;
 
     try {
       const acquired = await withAdvisoryLock(lockKey, loop.config.tick, this.lockStats);
@@ -193,6 +196,26 @@ class EngineScheduler {
       if (acquired) {
         loop.lastTickTs = Date.now();
         loop.lastError = null;
+        loop.tickCount = (loop.tickCount || 0) + 1;
+
+        // Log TICK_OK throttled (every N ticks)
+        if (loop.tickCount % this.TICK_OK_THROTTLE === 0) {
+          // Async log to avoid blocking
+          import("../storage").then(({ storage }) => {
+            storage.createEngineEvent({
+              userId,
+              strategyId,
+              type: "TICK_OK",
+              severity: "info",
+              message: `Engine tick completed (${loop.tickCount} ticks)`,
+              payloadJson: { duration, tickCount: loop.tickCount },
+            }).catch(() => {
+              // Ignore logging errors
+            });
+          }).catch(() => {
+            // Ignore import errors
+          });
+        }
       }
     } catch (error) {
       const duration = Date.now() - startTs;
@@ -200,7 +223,24 @@ class EngineScheduler {
       if (this.tickDurations.length > 1000) {
         this.tickDurations.shift();
       }
-      loop.lastError = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      loop.lastError = errorMessage;
+
+      // Always log TICK_FAIL
+      import("../storage").then(({ storage }) => {
+        storage.createEngineEvent({
+          userId,
+          strategyId,
+          type: "TICK_FAIL",
+          severity: "error",
+          message: `Engine tick failed: ${errorMessage}`,
+          payloadJson: { duration, error: errorMessage },
+        }).catch(() => {
+          // Ignore logging errors
+        });
+      }).catch(() => {
+        // Ignore import errors
+      });
     } finally {
       loop.running = false;
     }

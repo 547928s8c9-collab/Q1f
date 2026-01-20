@@ -13,6 +13,7 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
+import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 
 interface OverviewData {
   usersTotal: number;
@@ -247,7 +248,23 @@ function generateInvestments() {
   });
 }
 
+interface AdminMeResponse {
+  ok: boolean;
+  data: {
+    adminUserId: string;
+    userId: string;
+    email: string;
+    roles: string[];
+    permissions: string[];
+    isDemo?: boolean;
+  };
+}
+
 export default function AdminDashboard() {
+  const { data: adminMeData } = useQuery<AdminMeResponse>({
+    queryKey: ["/api/admin/me"],
+  });
+
   const { data, isLoading, error } = useQuery<{ ok: boolean; data: OverviewData }>({
     queryKey: ["/api/admin/overview"],
   });
@@ -263,9 +280,11 @@ export default function AdminDashboard() {
   );
 
   const overview = data?.data ?? generated.overview;
+  const isDemo = adminMeData?.data?.isDemo ?? false;
 
   return (
     <div className="p-6 space-y-6">
+      <DemoModeBanner isDemo={isDemo} />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold" data-testid="text-admin-dashboard-title">Admin Dashboard</h1>
       </div>

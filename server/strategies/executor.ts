@@ -19,14 +19,30 @@ export interface SignalGenerator {
   getIndicators(): Record<string, number>;
 }
 
+// Deterministic RNG for signal throttling
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function deterministicRandom(seed: string): number {
+  const hash = hashString(seed);
+  return (hash % 10000) / 10000;
+}
+
 export function createBaseStrategy(
   config: StrategyConfig,
-  _meta: StrategyMeta,
+  meta: StrategyMeta,
   signalGenerator: SignalGenerator
 ): Strategy {
   let seq = 0;
   let state: StrategyState = createInitialState();
   let peakEquity = state.equity;
+  let lastEntryBarIndex: number | null = null;
 
   function createInitialState(): StrategyState {
     return {
@@ -167,6 +183,7 @@ export function createBaseStrategy(
           entryBarIndex: state.barIndex,
         };
         state.stats.fees += fees;
+        lastEntryBarIndex = state.barIndex; // Track entry for cooldown
       } else if (order.side === "SELL" && state.position.side === "LONG") {
         const entryPrice = state.position.entryPrice;
         const exitPrice = fillPrice;
@@ -241,6 +258,25 @@ export function createBaseStrategy(
 
       if (signal.direction === "LONG" && state.position.side === "FLAT") {
         if (passesWalkForwardFilter()) {
+          // Cooldown check
+          const cooldownBars = config.cooldownBars ?? 0;
+          if (lastEntryBarIndex !== null && state.barIndex - lastEntryBarIndex < cooldownBars) {
+            // Skip entry due to cooldown
+            return events;
+          }
+
+          // Signal throttle check
+          const throttlePct = config.signalThrottlePct ?? 100;
+          if (throttlePct < 100) {
+            // Deterministic RNG for throttling
+            const throttleSeed = `${meta.symbol}:${meta.timeframe}:${state.barIndex}:throttle`;
+            const rng = deterministicRandom(throttleSeed);
+            if (rng > throttlePct / 100) {
+              // Skip entry due to throttling
+              return events;
+            }
+          }
+
           const positionSize = (state.cash * config.maxPositionPct) / candle.close;
           const order: Order = {
             id: `ORD-${state.barIndex}-BUY`,
@@ -378,6 +414,7 @@ export function createBaseStrategy(
     seq = 0;
     state = createInitialState();
     peakEquity = state.equity;
+    lastEntryBarIndex = null;
     signalGenerator.reset();
   }
 

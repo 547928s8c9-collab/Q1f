@@ -297,6 +297,31 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
     }
   });
 
+  // GET /api/invest/strategies/:id/trade-events - Get events for a specific trade
+  app.get("/api/invest/strategies/:id/trade-events", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    try {
+      const tradeId = req.query.tradeId as string;
+      if (!tradeId) {
+        return res.status(400).json(fail("MISSING_TRADE_ID", "tradeId query parameter is required"));
+      }
+
+      // Verify trade belongs to user and strategy
+      const trades = await storage.getSimTrades(userId, req.params.id, 0, Date.now(), 1000);
+      const trade = trades.trades.find((t) => t.id === tradeId);
+      if (!trade) {
+        return res.status(404).json(fail("NOT_FOUND", "Trade not found"));
+      }
+
+      const events = await storage.getSimTradeEvents(tradeId);
+
+      res.json(ok({ events }));
+    } catch (error) {
+      logger.error("Get trade events error", "invest-routes", { userId, strategyId: req.params.id }, error);
+      res.status(500).json(fail("INTERNAL_ERROR", "Internal server error"));
+    }
+  });
+
   app.post("/api/invest/strategies/:id/invest", isAuthenticated, investRateLimiter, async (req, res) => {
     try {
       const body = InvestMutationSchema.safeParse(req.body);

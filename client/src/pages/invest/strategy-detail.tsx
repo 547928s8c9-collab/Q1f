@@ -42,6 +42,9 @@ import type { InvestCandlesResponse, InvestInsightsResponse } from "@shared/cont
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
+import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -55,11 +58,6 @@ const timeframeOptions: { value: Timeframe; label: string }[] = [
   { value: "1d", label: "1d" },
 ];
 
-const periodOptions: Array<{ value: 7 | 30 | 90; label: string }> = [
-  { value: 7, label: "7D" },
-  { value: 30, label: "30D" },
-  { value: 90, label: "90D" },
-];
 
 function toMajorUnits(minorUnits: string, decimals: number = 6): number {
   const value = BigInt(minorUnits || "0");
@@ -73,10 +71,14 @@ function toMajorUnits(minorUnits: string, decimals: number = 6): number {
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
-  const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
+  const [range, setRange] = useState<RangeOption>("30D");
+  const periodDays = rangeToDays(range);
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("15m");
   const [amount, setAmount] = useState("1000");
   const [performanceView, setPerformanceView] = useState<"strategy" | "benchmark" | "both">("both");
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [tradeDetailsOpen, setTradeDetailsOpen] = useState(false);
+  const [tradesCursor, setTradesCursor] = useState<string | undefined>(undefined);
 
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
@@ -146,6 +148,40 @@ export default function StrategyDetail() {
       { timeframe: chartTimeframe, periodDays: periodDays.toString() },
     ],
     enabled: !!params.id,
+  });
+
+  // Fetch trades with pagination
+  const {
+    data: tradesResponse,
+    isLoading: tradesLoading,
+  } = useQuery({
+    queryKey: [
+      "/api/invest/strategies",
+      params.id,
+      "trades",
+      { periodDays: periodDays.toString(), cursor: tradesCursor },
+    ],
+    queryFn: async () => {
+      const url = `/api/invest/strategies/${params.id}/trades?limit=100${tradesCursor ? `&cursor=${tradesCursor}` : ""}`;
+      const response = await apiRequest<{ ok: true; data: { trades: any[]; nextCursor?: string } }>("GET", url);
+      return response;
+    },
+    enabled: !!params.id,
+  });
+
+  // Fetch trade events for selected trade
+  const {
+    data: tradeEventsResponse,
+    isLoading: tradeEventsLoading,
+  } = useQuery({
+    queryKey: ["/api/invest/strategies", params.id, "trade-events", selectedTradeId],
+    queryFn: async () => {
+      if (!selectedTradeId) return null;
+      const url = `/api/invest/strategies/${params.id}/trade-events?tradeId=${selectedTradeId}`;
+      const response = await apiRequest<{ ok: true; data: { events: any[] } }>("GET", url);
+      return response;
+    },
+    enabled: !!selectedTradeId && tradeDetailsOpen,
   });
 
   const minInvestmentMajor = useMemo(() => {
@@ -283,7 +319,8 @@ export default function StrategyDetail() {
       c.high >= c.low
   );
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
-  const trades = insightsPayload?.trades ?? [];
+  // Use trades from tradesResponse if available, otherwise fallback to insights
+  const trades = (tradesResponse?.ok ? tradesResponse.data.trades : []) || insightsPayload?.trades || [];
   const metrics = insightsPayload?.metrics;
   
   // Compute valid timestamp range from candles to filter markers
@@ -330,6 +367,8 @@ export default function StrategyDetail() {
             color: "hsl(var(--success))",
             shape: "arrowUp" as const,
             text: "Buy",
+            tradeId: trade.id,
+            type: "entry" as const,
           },
           {
             time: exitTs,
@@ -337,6 +376,8 @@ export default function StrategyDetail() {
             color: "hsl(var(--danger))",
             shape: "arrowDown" as const,
             text: "Sell",
+            tradeId: trade.id,
+            type: "exit" as const,
           },
         ];
       });
@@ -403,6 +444,7 @@ export default function StrategyDetail() {
                 <h3 className="text-lg font-semibold">Performance</h3>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <RangeSelector value={range} onChange={setRange} />
                 {[
                   { value: "strategy", label: "Strategy" },
                   { value: "benchmark", label: "Benchmark" },
@@ -421,7 +463,9 @@ export default function StrategyDetail() {
               </div>
             </div>
             {perfLoading ? (
-              <ChartSkeleton height={360} />
+              <div style={{ height: 360 }}>
+                <ChartSkeleton height={360} />
+              </div>
             ) : perfError ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 Unable to load performance data. Please try again shortly.
@@ -476,22 +520,13 @@ export default function StrategyDetail() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={String(periodDays)} onValueChange={(value) => setPeriodDays(Number(value) as 7 | 30 | 90)}>
-                  <SelectTrigger className="w-[96px]" data-testid="select-period">
-                    <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {periodOptions.map((option) => (
-                      <SelectItem key={option.value} value={String(option.value)}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <RangeSelector value={range} onChange={setRange} />
               </div>
             </div>
             {candlesLoading ? (
-              <ChartSkeleton height={360} />
+              <div style={{ height: 360 }}>
+                <ChartSkeleton height={360} />
+              </div>
             ) : candlesError ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 Unable to load market data. Please try again shortly.
@@ -502,7 +537,17 @@ export default function StrategyDetail() {
               </div>
             ) : (
               <div className="space-y-3">
-                <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
+                <CandlestickChart 
+                  candles={candleData} 
+                  markers={chartMarkers} 
+                  height={360}
+                  onMarkerClick={(marker) => {
+                    if (marker.tradeId) {
+                      setSelectedTradeId(marker.tradeId);
+                      setTradeDetailsOpen(true);
+                    }
+                  }}
+                />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     {periodDays}D · {candleData.length} candles · {candlePayload?.source ?? "source"}
@@ -1013,6 +1058,171 @@ export default function StrategyDetail() {
           </Link>
         </>
       )}
+
+      {/* Trade Details Sheet */}
+      <Sheet open={tradeDetailsOpen} onOpenChange={setTradeDetailsOpen}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Trade Details</SheetTitle>
+            <SheetDescription>
+              Timeline and breakdown of trade execution
+            </SheetDescription>
+          </SheetHeader>
+          
+          {selectedTradeId && (
+            <TradeDetailsContent
+              tradeId={selectedTradeId}
+              trades={(tradesResponse?.ok ? tradesResponse.data.trades : []) || (insightsPayload?.trades || [])}
+              events={tradeEventsResponse?.ok ? tradeEventsResponse.data.events : []}
+              loading={tradeEventsLoading}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+// Trade Details Component
+function TradeDetailsContent({ 
+  tradeId, 
+  trades, 
+  events, 
+  loading 
+}: { 
+  tradeId: string; 
+  trades: any[]; 
+  events: any[]; 
+  loading: boolean;
+}) {
+  const trade = trades.find((t) => t.id === tradeId);
+  
+  if (!trade) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        Trade not found
+      </div>
+    );
+  }
+
+  const sortedEvents = [...events].sort((a, b) => a.ts - b.ts);
+  const entryEvent = sortedEvents.find((e) => e.type === "FILLED");
+  const exitEvent = sortedEvents.find((e) => e.type === "CLOSED");
+  
+  const fee = parseFloat(trade.feesMinor || "0") / 1_000_000;
+  const slippage = 0; // TODO: calculate from events
+  const netPnl = trade.netPnl || 0;
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Trade Summary */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Entry Price</span>
+          <span className="text-sm font-medium tabular-nums">
+            ${trade.entryPrice?.toFixed(2) || "0.00"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Exit Price</span>
+          <span className="text-sm font-medium tabular-nums">
+            ${trade.exitPrice?.toFixed(2) || "0.00"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Quantity</span>
+          <span className="text-sm font-medium tabular-nums">
+            {trade.qty?.toFixed(4) || "0.0000"}
+          </span>
+        </div>
+        <Separator />
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Fee</span>
+          <span className="text-sm font-medium tabular-nums">
+            ${fee.toFixed(2)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Slippage</span>
+          <span className="text-sm font-medium tabular-nums">
+            ${slippage.toFixed(2)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Net P&L</span>
+          <span className={cn(
+            "text-sm font-semibold tabular-nums",
+            netPnl >= 0 ? "text-positive" : "text-negative"
+          )}>
+            {netPnl >= 0 ? "+" : ""}${netPnl.toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Timeline */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold">Timeline</h3>
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-16 bg-muted/50 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : sortedEvents.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-4">
+            No events available
+          </div>
+        ) : (
+          <div className="space-y-3">
+          {sortedEvents.map((event, index) => (
+            <div key={event.id || index} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <div className={cn(
+                  "w-2 h-2 rounded-full",
+                  event.type === "TRADE_INTENT" ? "bg-blue-500" :
+                  event.type === "ORDER_PLACED" ? "bg-yellow-500" :
+                  event.type === "FILLED" ? "bg-green-500" :
+                  event.type === "CLOSED" ? "bg-red-500" : "bg-gray-500"
+                )} />
+                {index < sortedEvents.length - 1 && (
+                  <div className="w-px h-8 bg-border mt-1" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    {event.type === "TRADE_INTENT" ? "Trade Intent" :
+                     event.type === "ORDER_PLACED" ? "Order Placed" :
+                     event.type === "FILLED" ? "Filled" :
+                     event.type === "CLOSED" ? "Closed" : event.type}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {format(new Date(event.ts), "MMM d, HH:mm:ss")}
+                  </span>
+                </div>
+                {event.payloadJson && (
+                  <div className="text-xs text-muted-foreground">
+                    {event.type === "FILLED" || event.type === "CLOSED" ? (
+                      <>
+                        Price: ${event.payloadJson.price?.toFixed(2) || "0.00"} · 
+                        Qty: {event.payloadJson.qty?.toFixed(4) || "0.0000"}
+                      </>
+                    ) : event.type === "TRADE_INTENT" ? (
+                      <>
+                        Intended: ${event.payloadJson.intendedPrice?.toFixed(2) || "0.00"} · 
+                        {event.payloadJson.reason || ""}
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        )}
+      </div>
     </div>
   );
 }

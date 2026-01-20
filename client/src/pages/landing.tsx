@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine } from "lucide-react";
+import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Check if demo endpoints should be shown
 // Show demo buttons only if: NODE_ENV !== "production" AND ALLOW_DEMO_ENDPOINTS === "true"
@@ -9,6 +11,9 @@ const allowDemoEndpoints = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 const showDemoButtons = isDevMode && allowDemoEndpoints;
 
 export default function Landing() {
+  const { toast } = useToast();
+  const [isDemoAdminLoading, setIsDemoAdminLoading] = useState(false);
+
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
@@ -18,18 +23,34 @@ export default function Landing() {
   };
   
   const handleDemoAdmin = async () => {
+    setIsDemoAdminLoading(true);
     try {
       const res = await fetch("/api/admin/auth/demo", {
         method: "POST",
         credentials: "include",
       });
-      if (res.ok) {
+      
+      const data = await res.json();
+      
+      if (res.ok && data.ok) {
         window.location.href = "/admin";
       } else {
-        console.error("Demo admin login failed");
+        const errorMessage = data?.error?.message || "Demo admin login failed";
+        toast({
+          title: "Demo Admin Login Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setIsDemoAdminLoading(false);
       }
     } catch (error) {
       console.error("Demo admin login error", error);
+      toast({
+        title: "Demo Admin Login Error",
+        description: "Failed to connect to server. Please try again.",
+        variant: "destructive",
+      });
+      setIsDemoAdminLoading(false);
     }
   };
 
@@ -49,8 +70,20 @@ export default function Landing() {
                 <Button variant="outline" onClick={handleDemoLogin} data-testid="button-demo-header">
                   Demo
                 </Button>
-                <Button variant="outline" onClick={handleDemoAdmin} data-testid="button-demo-admin-header">
-                  Demo Admin
+                <Button 
+                  variant="outline" 
+                  onClick={handleDemoAdmin} 
+                  disabled={isDemoAdminLoading}
+                  data-testid="button-demo-admin-header"
+                >
+                  {isDemoAdminLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Demo Admin"
+                  )}
                 </Button>
               </>
             )}
@@ -82,8 +115,21 @@ export default function Landing() {
                   <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
                     Demo
                   </Button>
-                  <Button size="lg" variant="outline" onClick={handleDemoAdmin} data-testid="button-demo-admin-access">
-                    Demo Admin
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    onClick={handleDemoAdmin} 
+                    disabled={isDemoAdminLoading}
+                    data-testid="button-demo-admin-access"
+                  >
+                    {isDemoAdminLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Demo Admin"
+                    )}
                   </Button>
                   <span className="text-xs text-muted-foreground">Dev only</span>
                 </>
@@ -150,8 +196,21 @@ export default function Landing() {
                     <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-cta">
                       Demo
                     </Button>
-                    <Button size="lg" variant="outline" onClick={handleDemoAdmin} data-testid="button-demo-admin-cta">
-                      Demo Admin
+                    <Button 
+                      size="lg" 
+                      variant="outline" 
+                      onClick={handleDemoAdmin} 
+                      disabled={isDemoAdminLoading}
+                      data-testid="button-demo-admin-cta"
+                    >
+                      {isDemoAdminLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Demo Admin"
+                      )}
                     </Button>
                     <span className="text-xs text-muted-foreground">Dev only</span>
                   </>

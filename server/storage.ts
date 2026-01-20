@@ -9,6 +9,7 @@ import {
   simAllocations,
   simPositions,
   simTrades,
+  simTradeEvents,
   simEquitySnapshots,
   benchmarkSeries,
   investState,
@@ -54,6 +55,8 @@ import {
   type InsertSimPosition,
   type SimTrade,
   type InsertSimTrade,
+  type SimTradeEvent,
+  type InsertSimTradeEvent,
   type SimEquitySnapshot,
   type InsertSimEquitySnapshot,
   type BenchmarkSeries,
@@ -102,6 +105,15 @@ import {
   type TelegramActionToken,
   type InsertTelegramActionToken,
   type User,
+  engineEvents,
+  type EngineEvent,
+  type InsertEngineEvent,
+  riskRules,
+  type RiskRule,
+  type InsertRiskRule,
+  riskEvents,
+  type RiskEvent,
+  type InsertRiskEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -169,14 +181,26 @@ export interface IStorage {
     limit?: number,
     cursor?: string
   ): Promise<{ trades: SimTrade[]; nextCursor?: string }>;
+  createSimTradeEvent(event: InsertSimTradeEvent): Promise<SimTradeEvent>;
+  getSimTradeEvents(tradeId: string): Promise<SimTradeEvent[]>;
 
   createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot>;
   getSimEquitySnapshots(userId: string, strategyId: string, fromTs: number, toTs: number): Promise<SimEquitySnapshot[]>;
   getLatestSimEquitySnapshot(userId: string, strategyId: string): Promise<SimEquitySnapshot | undefined>;
+  getLatestSimEquitySnapshotsForUser(userId: string, strategyIds: string[]): Promise<Map<string, SimEquitySnapshot>>;
+  getLatestSimEquitySnapshotsForUserLightweight(userId: string): Promise<Array<{ strategyId: string; equityMinor: string; ts: number }>>;
 
   getInvestState(userId: string, strategyId: string): Promise<InvestState | undefined>;
   upsertInvestState(state: InsertInvestState): Promise<InvestState>;
   getActiveInvestments(): Promise<Array<{ userId: string; strategyId: string }>>;
+
+  createEngineEvent(event: InsertEngineEvent): Promise<EngineEvent>;
+  getEngineEvents(userId: string, limit?: number, cursor?: string): Promise<{ events: EngineEvent[]; nextCursor?: string }>;
+
+  getRiskRule(userId: string, strategyId: string): Promise<RiskRule | undefined>;
+  upsertRiskRule(rule: InsertRiskRule): Promise<RiskRule>;
+  createRiskEvent(event: InsertRiskEvent): Promise<RiskEvent>;
+  getRiskEvents(userId: string, strategyId?: string, limit?: number, cursor?: string): Promise<{ events: RiskEvent[]; nextCursor?: string }>;
 
   upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number>;
 
@@ -1069,6 +1093,18 @@ export class DatabaseStorage implements IStorage {
     return { trades, nextCursor };
   }
 
+  async createSimTradeEvent(event: InsertSimTradeEvent): Promise<SimTradeEvent> {
+    const [created] = await db.insert(simTradeEvents).values(event).returning();
+    return created;
+  }
+
+  async getSimTradeEvents(tradeId: string): Promise<SimTradeEvent[]> {
+    return db.select()
+      .from(simTradeEvents)
+      .where(eq(simTradeEvents.tradeId, tradeId))
+      .orderBy(sql`${simTradeEvents.ts} ASC NULLS LAST`);
+  }
+
   async createSimEquitySnapshot(snapshot: InsertSimEquitySnapshot): Promise<SimEquitySnapshot> {
     const [created] = await db.insert(simEquitySnapshots).values(snapshot)
       .onConflictDoNothing()
@@ -1102,6 +1138,57 @@ export class DatabaseStorage implements IStorage {
     return snapshot;
   }
 
+  async getLatestSimEquitySnapshotsForUser(userId: string, strategyIds: string[]): Promise<Map<string, SimEquitySnapshot>> {
+    if (strategyIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch fetch all snapshots for user's strategies, ordered by ts DESC
+    // This is more efficient than N+1 queries
+    const snapshots = await db
+      .select()
+      .from(simEquitySnapshots)
+      .where(
+        and(
+          eq(simEquitySnapshots.userId, userId),
+          inArray(simEquitySnapshots.strategyId, strategyIds)
+        )
+      )
+      .orderBy(desc(simEquitySnapshots.ts));
+
+    // Group by strategyId and take the first (latest) for each
+    // Since we ordered by ts DESC, first occurrence is the latest
+    const snapshotMap = new Map<string, SimEquitySnapshot>();
+    
+    for (const snapshot of snapshots) {
+      if (!snapshotMap.has(snapshot.strategyId)) {
+        snapshotMap.set(snapshot.strategyId, snapshot);
+      }
+    }
+
+    return snapshotMap;
+  }
+
+  async getLatestSimEquitySnapshotsForUserLightweight(userId: string): Promise<Array<{ strategyId: string; equityMinor: string; ts: number }>> {
+    // Use DISTINCT ON to get the latest snapshot per strategyId for the user
+    // PostgreSQL-specific: DISTINCT ON (strategy_id) with ORDER BY strategy_id, ts DESC
+    const results = await db.execute(sql`
+      SELECT DISTINCT ON (strategy_id)
+        strategy_id as "strategyId",
+        equity_minor as "equityMinor",
+        ts
+      FROM sim_equity_snapshots
+      WHERE user_id = ${userId}
+      ORDER BY strategy_id, ts DESC
+    `);
+
+    return results.rows.map((row: any) => ({
+      strategyId: row.strategyId,
+      equityMinor: row.equityMinor,
+      ts: Number(row.ts),
+    }));
+  }
+
   async getInvestState(userId: string, strategyId: string): Promise<InvestState | undefined> {
     const [state] = await db.select().from(investState)
       .where(and(eq(investState.userId, userId), eq(investState.strategyId, strategyId)));
@@ -1129,6 +1216,97 @@ export class DatabaseStorage implements IStorage {
       .from(investState)
       .where(eq(investState.state, "INVESTED_ACTIVE"));
     return states;
+  }
+
+  async createEngineEvent(event: InsertEngineEvent): Promise<EngineEvent> {
+    const [created] = await db.insert(engineEvents).values(event).returning();
+    return created;
+  }
+
+  async getEngineEvents(userId: string, limit: number = 50, cursor?: string): Promise<{ events: EngineEvent[]; nextCursor?: string }> {
+    const conditions = [eq(engineEvents.userId, userId)];
+    
+    if (cursor) {
+      // Parse cursor as ISO timestamp
+      const cursorDate = new Date(cursor);
+      if (!isNaN(cursorDate.getTime())) {
+        conditions.push(lt(engineEvents.createdAt, cursorDate));
+      }
+    }
+
+    const results = await db.select()
+      .from(engineEvents)
+      .where(and(...conditions))
+      .orderBy(desc(engineEvents.createdAt))
+      .limit(limit + 1);
+
+    // Check if there are more results
+    const hasMore = results.length > limit;
+    const events = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && events.length > 0 ? events[events.length - 1].createdAt?.toISOString() : undefined;
+
+    return { events, nextCursor };
+  }
+
+  async getRiskRule(userId: string, strategyId: string): Promise<RiskRule | undefined> {
+    const [rule] = await db.select()
+      .from(riskRules)
+      .where(and(eq(riskRules.userId, userId), eq(riskRules.strategyId, strategyId)))
+      .limit(1);
+    return rule;
+  }
+
+  async upsertRiskRule(rule: InsertRiskRule): Promise<RiskRule> {
+    const [existing] = await db.select()
+      .from(riskRules)
+      .where(and(eq(riskRules.userId, rule.userId), eq(riskRules.strategyId, rule.strategyId)))
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db.update(riskRules)
+        .set({
+          ...rule,
+          updatedAt: new Date(),
+        })
+        .where(eq(riskRules.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db.insert(riskRules).values(rule).returning();
+    return created;
+  }
+
+  async createRiskEvent(event: InsertRiskEvent): Promise<RiskEvent> {
+    const [created] = await db.insert(riskEvents).values(event).returning();
+    return created;
+  }
+
+  async getRiskEvents(userId: string, strategyId?: string, limit: number = 50, cursor?: string): Promise<{ events: RiskEvent[]; nextCursor?: string }> {
+    const conditions = [eq(riskEvents.userId, userId)];
+    
+    if (strategyId) {
+      conditions.push(eq(riskEvents.strategyId, strategyId));
+    }
+
+    if (cursor) {
+      const cursorDate = new Date(cursor);
+      if (!isNaN(cursorDate.getTime())) {
+        conditions.push(lt(riskEvents.createdAt, cursorDate));
+      }
+    }
+
+    const results = await db.select()
+      .from(riskEvents)
+      .where(and(...conditions))
+      .orderBy(desc(riskEvents.createdAt))
+      .limit(limit + 1);
+
+    const hasMore = results.length > limit;
+    const events = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && events.length > 0 ? events[events.length - 1].createdAt?.toISOString() : undefined;
+
+    return { events, nextCursor };
   }
 
   async upsertBenchmarkSeries(series: InsertBenchmarkSeries[]): Promise<number> {

@@ -45,6 +45,11 @@ import {
 } from "@shared/admin/dto";
 import { requireIdempotencyKey, wrapMutation } from "./audit";
 import { engineScheduler } from "../app/engineScheduler";
+import { seedAdminDemoData } from "./demoSeed";
+import { getMarketUniverse } from "../app/marketUniverse";
+import { storage } from "../storage";
+import { calibrateAllProfiles } from "../app/strategyCalibrationService";
+import { marketCandles, marketCalibration } from "@shared/schema";
 
 export const adminRouter = Router();
 
@@ -60,12 +65,16 @@ adminRouter.get("/me", async (req, res) => {
     const roles = res.locals.roleKeys || [];
     const permissions = Array.from(res.locals.permissionKeys || []);
 
+    // Check if this is a demo admin user
+    const isDemo = email === "demo-admin@local" || userId === "demo-admin-001";
+
     ok(res, {
       adminUserId,
       userId,
       email,
       roles,
       permissions,
+      isDemo,
     });
   } catch (error) {
     console.error("[GET /admin/me]", error);
@@ -125,9 +134,28 @@ adminRouter.get("/overview", requirePermission("users.read"), async (req, res) =
   }
 });
 
-adminRouter.get("/health/engine", requirePermission("users.read"), async (_req, res) => {
+adminRouter.get("/health/engine", requirePermission("config.read"), async (_req, res) => {
   try {
-    ok(res, engineScheduler.getHealth());
+    const health = engineScheduler.getHealth();
+    
+    // Calculate summary stats
+    const now = Date.now();
+    const loopsWithRecentTicks = health.loops.filter(
+      (loop) => loop.lastTickTs && now - loop.lastTickTs < loop.intervalMs * 2
+    );
+    const loopsWithErrors = health.loops.filter((loop) => loop.lastError !== null);
+    const runningLoops = health.loops.filter((loop) => loop.running);
+    
+    ok(res, {
+      ...health,
+      summary: {
+        activeLoops: health.activeLoops,
+        runningNow: runningLoops.length,
+        healthy: loopsWithRecentTicks.length,
+        withErrors: loopsWithErrors.length,
+        lastUpdate: now,
+      },
+    });
   } catch (error) {
     console.error("[GET /admin/health/engine]", error);
     fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to load engine health", 500);
@@ -1710,6 +1738,126 @@ adminRouter.post(
     };
   })
 );
+
+// Demo seeding endpoint (dev-only, requires super_admin)
+adminRouter.post(
+  "/demo/seed",
+  requirePermission("config.write"), // Only super_admin has this
+  async (req, res) => {
+    try {
+      // Guard: only in dev mode
+      if (process.env.NODE_ENV === "production") {
+        return fail(res, ErrorCodes.RBAC_DENIED, "Demo seeding is not available in production", 403);
+      }
+
+      if (process.env.ALLOW_DEMO_ENDPOINTS !== "true") {
+        return fail(res, ErrorCodes.RBAC_DENIED, "Demo endpoints are disabled. Set ALLOW_DEMO_ENDPOINTS=true to enable.", 403);
+      }
+
+      const adminUserId = res.locals.adminUserId!;
+      const result = await seedAdminDemoData({ adminUserId });
+
+      if (result.seeded) {
+        ok(res, {
+          message: "Demo data seeded successfully",
+          counts: result.counts,
+        });
+      } else {
+        ok(res, {
+          message: "Demo data already seeded",
+          counts: result.counts,
+        });
+      }
+    } catch (error) {
+      console.error("[POST /admin/demo/seed]", error);
+      fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to seed demo data", 500);
+    }
+  }
+);
+
+// Market data status endpoint
+adminRouter.get("/market/status", requirePermission("config.read"), async (req, res) => {
+  try {
+    const universe = await getMarketUniverse(storage);
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    
+    const marketStatuses = await Promise.all(
+      universe.map(async (market) => {
+        // Count candles in last 7 days
+        const [candlesCount] = await db
+          .select({ count: count() })
+          .from(marketCandles)
+          .where(
+            and(
+              eq(marketCandles.exchange, market.exchange),
+              eq(marketCandles.symbol, market.symbol),
+              eq(marketCandles.timeframe, market.timeframe),
+              gte(marketCandles.ts, sevenDaysAgo)
+            )
+          );
+        
+        // Get calibration status
+        const [cal] = await db
+          .select()
+          .from(marketCalibration)
+          .where(
+            and(
+              eq(marketCalibration.exchange, market.exchange),
+              eq(marketCalibration.symbol, market.symbol),
+              eq(marketCalibration.timeframe, market.timeframe)
+            )
+          )
+          .limit(1);
+        
+        return {
+          symbol: market.symbol,
+          timeframe: market.timeframe,
+          exchange: market.exchange,
+          candlesCountLast7Days: candlesCount.count,
+          calibration: cal
+            ? {
+                exists: true,
+                updatedAt: cal.updatedAt?.toISOString() || null,
+                driftPctPerDay: cal.driftPctPerDay,
+                volPctPerDay: cal.volPctPerDay,
+                stepClampPct: cal.stepClampPct,
+              }
+            : { exists: false },
+        };
+      })
+    );
+    
+    ok(res, {
+      universe: marketStatuses,
+      totalMarkets: universe.length,
+    });
+  } catch (error) {
+    console.error("[GET /admin/market/status]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to get market status", 500);
+  }
+});
+
+// Strategy calibration endpoint
+adminRouter.post("/strategies/calibrate", requirePermission("config.write"), async (req, res) => {
+  try {
+    const { windowDays, profiles, dryRun } = req.body;
+    
+    const report = await calibrateAllProfiles({
+      windowDays: windowDays ? parseInt(String(windowDays), 10) : undefined,
+      profiles: profiles ? (Array.isArray(profiles) ? profiles : [profiles]) : undefined,
+      dryRun: dryRun === true,
+    });
+    
+    ok(res, {
+      summary: report.summary,
+      perProfile: report.perProfile,
+    });
+  } catch (error) {
+    console.error("[POST /admin/strategies/calibrate]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to calibrate strategies", 500);
+  }
+});
 
 adminRouter.post(
   "/withdrawals/:id/process",

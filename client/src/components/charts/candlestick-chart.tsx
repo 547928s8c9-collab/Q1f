@@ -19,6 +19,8 @@ export interface CandlestickMarker {
   color: string;
   shape: "arrowUp" | "arrowDown" | "circle";
   text?: string;
+  tradeId?: string; // For click handling
+  type?: "entry" | "exit"; // For identifying marker type
 }
 
 interface CandlestickChartProps {
@@ -26,6 +28,7 @@ interface CandlestickChartProps {
   markers?: CandlestickMarker[];
   showVolume?: boolean;
   height?: number;
+  onMarkerClick?: (marker: CandlestickMarker) => void;
 }
 
 interface TooltipState {
@@ -69,6 +72,7 @@ export function CandlestickChart({
   markers = [],
   showVolume = true,
   height = 320,
+  onMarkerClick,
 }: CandlestickChartProps) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,13 +84,29 @@ export function CandlestickChart({
 
   const candleData = useMemo<CandlestickData[]>(
     () =>
-      candles.map((candle) => ({
-        time: toChartTime(candle.ts),
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      })),
+      candles
+        .filter((candle) => {
+          // Filter out invalid candles
+          return (
+            Number.isFinite(candle.ts) &&
+            Number.isFinite(candle.open) &&
+            Number.isFinite(candle.high) &&
+            Number.isFinite(candle.low) &&
+            Number.isFinite(candle.close) &&
+            candle.high >= candle.low &&
+            candle.high >= candle.open &&
+            candle.high >= candle.close &&
+            candle.low <= candle.open &&
+            candle.low <= candle.close
+          );
+        })
+        .map((candle) => ({
+          time: toChartTime(candle.ts),
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        })),
     [candles]
   );
 
@@ -214,15 +234,48 @@ export function CandlestickChart({
 
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
+    // Handle marker clicks via crosshair click
+    const handleClick = (param: { time?: UTCTimestamp; point?: { x: number; y: number } }) => {
+      if (!onMarkerClick || !param.time) return;
+      
+      // Find the closest marker to the clicked time
+      const clickedTime = param.time * 1000; // Convert to ms
+      const closestMarker = markers.reduce<{ marker: CandlestickMarker; distance: number } | null>((closest, marker) => {
+        const distance = Math.abs(marker.time - clickedTime);
+        if (!closest || distance < closest.distance) {
+          return { marker, distance };
+        }
+        return closest;
+      }, null);
+
+      // If marker is within 5 minutes of click, trigger callback
+      if (closestMarker && closestMarker.distance < 5 * 60 * 1000) {
+        onMarkerClick(closestMarker.marker);
+      }
+    };
+
+    const handleContainerClick = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const coordinate = chart.timeScale().coordinateToTime(x);
+      if (coordinate) {
+        handleClick({ time: coordinate, point: { x, y } });
+      }
+    };
+
+    container.addEventListener("click", handleContainerClick);
+
     return () => {
       resizeObserver.disconnect();
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
+      container.removeEventListener("click", handleContainerClick);
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
     };
-  }, [height, showVolume]);
+  }, [height, showVolume, markers, onMarkerClick]);
 
   useEffect(() => {
     const container = containerRef.current;

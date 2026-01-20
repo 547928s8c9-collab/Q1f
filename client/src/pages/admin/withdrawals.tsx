@@ -54,6 +54,7 @@ interface AdminMeResponse {
     email: string;
     roles: string[];
     permissions: string[];
+    isDemo?: boolean;
   };
 }
 
@@ -102,6 +103,7 @@ export default function AdminWithdrawals() {
   const { data: adminMeData } = useQuery<AdminMeResponse>({
     queryKey: ["/api/admin/me"],
   });
+  const isDemo = adminMeData?.data?.isDemo ?? false;
 
   const permissions = useMemo(() => {
     const perms = new Set(adminMeData?.data?.permissions || []);
@@ -389,6 +391,7 @@ export default function AdminWithdrawals() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
+        <DemoModeBanner isDemo={isDemo} />
         <div className="flex items-center gap-4 mb-6 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

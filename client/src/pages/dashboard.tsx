@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -6,11 +7,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Badge } from "@/components/ui/badge";
+import { LiveBadge } from "@/components/ui/live-badge";
 import { formatMoney } from "@shared/schema";
+import { formatDistanceToNow } from "date-fns";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { RefreshCw, TrendingUp, TrendingDown, AlertCircle, Wallet } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { useEngineStream } from "@/hooks/use-engine-stream";
+import { useLiveMetrics } from "@/hooks/use-live-metrics";
+import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
+import { ProofOfSafety } from "@/components/proof-of-safety";
 
 interface AnalyticsOverview {
   updatedAt: string;
@@ -37,10 +44,21 @@ interface AnalyticsOverview {
 }
 
 export default function Dashboard() {
+  const [range, setRange] = useState<RangeOption>("30D");
+  const days = rangeToDays(range);
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AnalyticsOverview>({
-    queryKey: ["/api/analytics/overview"],
+    queryKey: ["/api/analytics/overview", { days }],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/overview?days=${days}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch analytics");
+      return res.json();
+    },
     refetchOnWindowFocus: false,
   });
+
+  const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
+  const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
 
   const chartData = data?.equitySeries.map((d) => ({
     date: d.ts,
@@ -77,6 +95,12 @@ export default function Dashboard() {
       <PageHeader 
         title="Dashboard" 
         subtitle="Your investment overview"
+        badge={
+          <LiveBadge 
+            status={isRunning ? "running" : engineStatus?.state === "idle" ? "idle" : "error"}
+            lastUpdated={lastUpdated}
+          />
+        }
         action={
           <Button 
             variant="ghost" 
@@ -151,9 +175,14 @@ export default function Dashboard() {
 
       {/* Equity Chart */}
       <Card className="p-5 mb-6" data-testid="card-equity-chart">
-        <h2 className="text-lg font-semibold mb-4">Portfolio Growth (30 days)</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Portfolio Growth</h2>
+          <RangeSelector value={range} onChange={setRange} />
+        </div>
         {isLoading ? (
-          <ChartSkeleton height={280} />
+          <div style={{ height: 280 }}>
+            <ChartSkeleton height={280} />
+          </div>
         ) : chartData.length === 0 ? (
           <EmptyState
             icon={TrendingUp}
@@ -255,8 +284,14 @@ export default function Dashboard() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {data?.strategies.map((strategy) => {
-              const pnl = BigInt(strategy.pnlMinor);
+              const liveMetric = getMetrics(strategy.strategyId);
+              const pnl = liveMetric ? BigInt(liveMetric.pnlMinor) : BigInt(strategy.pnlMinor);
               const isProfitable = pnl >= 0n;
+              const equity = liveMetric?.equityMinor || strategy.currentMinor;
+              const pnlMinor = liveMetric?.pnlMinor || strategy.pnlMinor;
+              const roiPct = liveMetric ? liveMetric.roi30dBps / 100 : strategy.roiPct;
+              const trades24h = liveMetric?.trades24h;
+              const state = liveMetric?.state || strategy.status;
 
               return (
                 <Card key={strategy.strategyId} className="p-5" data-testid={`card-strategy-${strategy.strategyId}`}>
@@ -271,10 +306,10 @@ export default function Dashboard() {
                           {strategy.riskTier}
                         </Badge>
                         <Badge 
-                          variant={strategy.status === "active" ? "default" : "outline"}
+                          variant={state === "INVESTED_ACTIVE" || state === "active" ? "default" : state === "PAUSED" || state === "paused" ? "secondary" : "outline"}
                           className="text-xs"
                         >
-                          {strategy.status}
+                          {state === "INVESTED_ACTIVE" ? "ACTIVE" : state === "PAUSED" ? "PAUSED" : state === "active" ? "active" : state === "paused" ? "paused" : "NOT_INVESTED"}
                         </Badge>
                       </div>
                     </div>
@@ -287,29 +322,39 @@ export default function Dashboard() {
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Allocated</span>
+                      <span className="text-muted-foreground">Equity</span>
                       <span className="font-medium tabular-nums">
-                        {formatMoney(strategy.allocatedMinor, "USDT")} USDT
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Current Value</span>
-                      <span className="font-medium tabular-nums">
-                        {formatMoney(strategy.currentMinor, "USDT")} USDT
+                        {formatMoney(equity, "USDT")} USDT
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">PnL</span>
                       <span className={cn("font-medium tabular-nums", isProfitable ? "text-positive" : "text-negative")}>
-                        {isProfitable ? "+" : ""}{formatMoney(strategy.pnlMinor, "USDT")} USDT
+                        {isProfitable ? "+" : ""}{formatMoney(pnlMinor, "USDT")} USDT
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">ROI</span>
-                      <span className={cn("font-medium tabular-nums", isProfitable ? "text-positive" : "text-negative")}>
-                        {strategy.roiPct >= 0 ? "+" : ""}{strategy.roiPct.toFixed(2)}%
+                      <span className="text-muted-foreground">30d ROI</span>
+                      <span className={cn("font-medium tabular-nums", roiPct >= 0 ? "text-positive" : "text-negative")}>
+                        {roiPct >= 0 ? "+" : ""}{roiPct.toFixed(2)}%
                       </span>
                     </div>
+                    {trades24h !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Trades 24h</span>
+                        <span className="font-medium tabular-nums">
+                          {trades24h}
+                        </span>
+                      </div>
+                    )}
+                    {liveMetric?.maxDrawdown30dBps !== undefined && liveMetric.maxDrawdown30dBps > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Max DD 30d</span>
+                        <span className="font-medium tabular-nums text-muted-foreground">
+                          {(liveMetric.maxDrawdown30dBps / 100).toFixed(2)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </Card>
               );
@@ -317,6 +362,137 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Proof of Safety & Latest Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <ProofOfSafety />
+        
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Latest Activity</h2>
+            <Link href="/activity">
+              <Button variant="outline" size="sm">
+                View all
+              </Button>
+            </Link>
+          </div>
+          <LatestActivityWidget />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function LatestActivityWidget() {
+  const { data, isLoading } = useQuery<{ events: Array<{ id: string; type: string; severity: string; message: string; strategyId: string | null; createdAt: string | null; payloadJson: unknown }> }>({
+    queryKey: ["/api/activity", { limit: 5 }],
+    queryFn: async () => {
+      const res = await fetch("/api/activity?limit=5", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      return res.json();
+    },
+  });
+
+  const { data: strategies } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["/api/strategies"],
+    select: (data) => data?.map((s) => ({ id: s.id, name: s.name })) || [],
+  });
+
+  const getStrategyName = (strategyId: string | null) => {
+    if (!strategyId) return undefined;
+    return strategies?.find((s) => s.id === strategyId)?.name;
+  };
+
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case "TICK_OK":
+        return CheckCircle2;
+      case "TICK_FAIL":
+        return AlertCircle;
+      case "TRADE_OPEN":
+        return TrendingUp;
+      case "TRADE_CLOSE":
+        return TrendingDown;
+      case "DD_TRIGGER":
+        return AlertCircle;
+      default:
+        return Activity;
+    }
+  };
+
+  const getEventColor = (type: string, severity: string) => {
+    if (severity === "error") return "text-red-500 bg-red-500/10";
+    if (severity === "warn") return "text-yellow-500 bg-yellow-500/10";
+    if (type === "TICK_OK") return "text-green-500 bg-green-500/10";
+    if (type === "TRADE_OPEN") return "text-blue-500 bg-blue-500/10";
+    if (type === "TRADE_CLOSE") return "text-purple-500 bg-purple-500/10";
+    return "text-muted-foreground bg-muted";
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="p-5">
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start gap-3">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
+  const events = data?.events || [];
+
+  if (events.length === 0) {
+    return (
+      <Card className="p-5">
+        <EmptyState
+          icon={Activity}
+          title="No recent activity"
+          description="Engine events will appear here when the trading engine is active"
+          className="py-8"
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="space-y-3">
+        {events.map((event) => {
+          const Icon = getEventIcon(event.type);
+          const colorClass = getEventColor(event.type, event.severity);
+          const strategyName = getStrategyName(event.strategyId);
+
+          return (
+            <div key={event.id} className="flex items-start gap-3">
+              <div className={cn("h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0", colorClass)}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <Badge variant={event.severity === "error" ? "destructive" : event.severity === "warn" ? "secondary" : "default"} className="text-xs">
+                    {event.type.replace(/_/g, " ")}
+                  </Badge>
+                  {strategyName && (
+                    <span className="text-xs text-muted-foreground truncate">{strategyName}</span>
+                  )}
+                </div>
+                <p className="text-sm font-medium truncate">{event.message}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : "Just now"}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

@@ -7,9 +7,10 @@ interface PageHeaderProps {
   subtitle?: string;
   backHref?: string;
   action?: React.ReactNode;
+  badge?: React.ReactNode;
 }
 
-export function PageHeader({ title, subtitle, backHref, action }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, backHref, action, badge }: PageHeaderProps) {
   const [, setLocation] = useLocation();
 
   return (
@@ -25,11 +26,16 @@ export function PageHeader({ title, subtitle, backHref, action }: PageHeaderProp
             <ArrowLeft className="w-5 h-5" />
           </Button>
         )}
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
-          )}
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+              {subtitle && (
+                <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+              )}
+            </div>
+            {badge && <div>{badge}</div>}
+          </div>
         </div>
       </div>
       {action && <div>{action}</div>}

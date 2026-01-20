@@ -9,7 +9,7 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
   app.get("/api/analytics/overview", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const days = 30;
+      const days = req.query.days ? parseInt(req.query.days as string, 10) : 30;
 
       // Parallel fetch all required data
       const [positions, portfolioSeries, allStrategies, portfolioSummary] = await Promise.all([

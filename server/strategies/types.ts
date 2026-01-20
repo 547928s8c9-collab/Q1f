@@ -38,6 +38,8 @@ export interface StrategyConfig {
   minBarsWarmup: number;
   walkForward: WalkForwardConfig;
   oracleExit: OracleExitConfig;
+  cooldownBars?: number; // Minimum bars between entries (default: 0)
+  signalThrottlePct?: number; // Percentage of signals to allow (1-100, default: 100)
 }
 
 export interface StrategyMeta {

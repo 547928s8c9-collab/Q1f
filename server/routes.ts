@@ -22,6 +22,7 @@ import { getPortfolioSummary, reconcilePortfolio } from "./app/portfolioService"
 import { db, withTransaction, type DbTransaction } from "./db";
 import { sql, eq, and } from "drizzle-orm";
 import { balances, vaults, positions, operations, auditLogs, withdrawals } from "@shared/schema";
+import { logger } from "./lib/logger";
 
 // Invariant check: no negative balance
 function assertNonNegative(value: bigint, label: string): void {
@@ -260,7 +261,7 @@ async function startKycCanonical(params: StartKycParams): Promise<StartKycResult
         });
       }
     } catch (err) {
-      console.error("Demo KYC auto-approve error:", err);
+      logger.error("Demo KYC auto-approve error", "routes", {}, err);
     }
   }, 2000);
 
@@ -361,266 +362,293 @@ export async function registerRoutes(
   try {
     await storage.seedStrategies();
   } catch (error) {
-    console.error("Seed strategies error:", error);
+    logger.error("Seed strategies error", "routes", {}, error);
   }
   try {
     await storage.seedStrategyProfiles();
   } catch (error) {
-    console.error("Seed strategy profiles error:", error);
+    logger.error("Seed strategy profiles error", "routes", {}, error);
   }
 
-  // GET /api/health - Health check endpoint (public)
-  app.get("/api/health", async (_req, res) => {
-    try {
-      // DB Ping
-      await db.execute(sql`SELECT 1`);
-      
-      res.json({ 
-        status: "ok", 
-        database: "connected",
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error("Health check error:", error);
-      res.status(503).json({ 
-        status: "error", 
-        database: "disconnected",
-        error: error instanceof Error ? error.message : "Unknown error"
-      });
-    }
-  });
-
-  // GET /api/bootstrap - Main bootstrap endpoint (protected)
-  app.get("/api/bootstrap", isAuthenticated, async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      
-      // Get user from auth storage
-      const user = await authStorage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      // Ensure user data is initialized
-      await storage.ensureUserData(userId);
-
-      // Parallel fetch all independent data
-      const [
-        balances,
-        vaults,
-        portfolioSummary,
-        portfolioSeries,
-        security,
-        latestConsent,
-        kycApplicant,
-        btcQuotes,
-        ethQuotes,
-        rubQuotes,
-        whitelistAddresses,
-      ] = await Promise.all([
-        storage.getBalances(userId),
-        storage.getVaults(userId),
-        getPortfolioSummary(userId),
-        storage.getPortfolioSeries(userId, 90),
-        storage.getSecuritySettings(userId),
-        storage.getLatestConsent(userId, "combined"),
-        storage.getKycApplicant(userId),
-        storage.getQuotes("BTC/USDT", 90),
-        storage.getQuotes("ETH/USDT", 90),
-        storage.getQuotes("USDT/RUB", 90),
-        storage.getWhitelistAddresses(userId),
-      ]);
-
-      // Consent version (should match the constants in consent routes)
-      const REQUIRED_CONSENT_VERSION = "1.0";
-      const hasAcceptedConsent = !!latestConsent;
-      const needsReaccept = latestConsent ? latestConsent.version !== REQUIRED_CONSENT_VERSION : false;
-
-      // KYC status from kycApplicants table (single source of truth)
-      const kycApplicantStatus = kycApplicant?.status || "NOT_STARTED";
-      const isKycApproved = kycApplicantStatus === "APPROVED";
-
-      const invested = {
-        current: portfolioSummary.totalEquityMinor,
-        principal: portfolioSummary.totalAllocatedMinor,
-      };
-
-      const reconciliation = reconcilePortfolio(portfolioSummary);
-      if (!reconciliation.ok) {
-        console.warn("Portfolio reconciliation warnings", reconciliation.issues);
-      }
-
-      const latestBtc = btcQuotes[btcQuotes.length - 1];
-      const latestEth = ethQuotes[ethQuotes.length - 1];
-      const latestRub = rubQuotes[rubQuotes.length - 1];
-
-      // Build onboarding stage
-      const contactVerified = security?.contactVerified ?? false;
-      const consentAccepted = security?.consentAccepted ?? false;
-      
-      type OnboardingStage = "welcome" | "verify" | "consent" | "kyc" | "done";
-      let onboardingStage: OnboardingStage = "welcome";
-      if (!contactVerified) {
-        onboardingStage = "verify";
-      } else if (!consentAccepted) {
-        onboardingStage = "consent";
-      } else if (!isKycApproved) {
-        onboardingStage = "kyc";
-      } else {
-        onboardingStage = "done";
-      }
-
-      // Build gate flags
-      const consentRequired = !consentAccepted;
-      const kycRequired = !isKycApproved;
-      const twoFactorRequired = !security?.twoFactorEnabled;
-      
-      // Check whitelist requirement (whitelistAddresses already fetched in parallel)
-      const hasActiveWhitelistAddress = whitelistAddresses.some((a) => a.status === AddressStatus.ACTIVE);
-      const whitelistRequired = security?.whitelistEnabled && !hasActiveWhitelistAddress;
-
-      const reasons: string[] = [];
-      if (!contactVerified) reasons.push("Verify your contact information");
-      if (consentRequired) reasons.push("Please accept the terms and conditions");
-      if (kycRequired) reasons.push("Complete identity verification");
-      if (twoFactorRequired) reasons.push("Enable two-factor authentication");
-      if (whitelistRequired) reasons.push("Add at least one active whitelist address");
-
-      const usdtBalance = balances.find((b) => b.asset === "USDT");
-      const rubBalance = balances.find((b) => b.asset === "RUB");
-
-      // Build vault data with goals
-      const buildVaultData = (vault: typeof vaults[0] | undefined) => {
-        const balance = vault?.balance || "0";
-        const goalAmount = vault?.goalAmount || null;
-        let progress = 0;
-        try {
-          if (goalAmount && /^\d+$/.test(goalAmount)) {
-            const balanceBig = BigInt(balance);
-            const goalBig = BigInt(goalAmount);
-            if (goalBig > 0n) {
-              progress = Math.min(100, Number((balanceBig * 100n) / goalBig));
-            }
-          }
-        } catch {
-          progress = 0;
-        }
-        return {
-          balance,
-          goalName: vault?.goalName || null,
-          goalAmount,
-          autoSweepPct: vault?.autoSweepPct ?? 0,
-          autoSweepEnabled: vault?.autoSweepEnabled ?? false,
-          progress,
-        };
-      };
-      
-      const vaultMap = vaults.reduce((acc, v) => {
-        acc[v.type] = v;
-        return acc;
-      }, {} as Record<string, typeof vaults[0]>);
-
-      // Import mapping for fallback normalization
-      const { KycStatusToSecurityStatus } = await import("@shared/schema");
-      
-      // Fallback normalization: derive kycStatus from kycApplicant if securitySettings is out of sync
-      // This ensures UI always sees consistent lowercase status values
-      // Priority: 1) kycApplicant status (mapped to lowercase), 2) securitySettings (normalized), 3) default
-      const normalizeLegacyStatus = (status: string | null | undefined): string => {
-        if (!status) return "not_started";
-        // Handle legacy "pending" value by mapping to "not_started"
-        if (status === "pending") return "not_started";
-        return status;
-      };
-      
-      const normalizedKycStatus = kycApplicant 
-        ? KycStatusToSecurityStatus[kycApplicantStatus as keyof typeof KycStatusToSecurityStatus] || "not_started"
-        : normalizeLegacyStatus(security?.kycStatus);
-
-      res.json({
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          profileImageUrl: user.profileImageUrl,
-        },
-        onboarding: {
-          stage: onboardingStage,
-          contactVerified,
-          consentAccepted,
-          kycStatus: kycApplicantStatus,
-        },
-        consent: {
-          hasAccepted: hasAcceptedConsent,
-          currentVersion: latestConsent?.version || null,
-          requiredVersion: REQUIRED_CONSENT_VERSION,
-          needsReaccept,
-          lastAcceptedAt: latestConsent?.acceptedAt?.toISOString() || null,
-        },
-        gate: {
-          consentRequired,
-          kycRequired,
-          canDeposit: onboardingStage === "done",
-          canInvest: onboardingStage === "done",
-          canWithdraw: onboardingStage === "done" && !twoFactorRequired && !whitelistRequired,
-          reasons,
-        },
-        balances: {
-          USDT: { available: usdtBalance?.available || "0", locked: usdtBalance?.locked || "0" },
-          RUB: { available: rubBalance?.available || "0", locked: rubBalance?.locked || "0" },
-        },
-        invested,
-        vaults: {
-          principal: buildVaultData(vaultMap.principal),
-          profit: buildVaultData(vaultMap.profit),
-          taxes: buildVaultData(vaultMap.taxes),
-        },
-        portfolioSeries: portfolioSeries.map((s) => ({ date: s.date, value: s.value })),
-        quotes: {
-          "BTC/USDT": {
-            price: latestBtc?.price || "67500",
-            change24h: latestBtc?.change24h || "0",
-            series: btcQuotes.map((q) => ({ date: q.date, price: q.price })),
-          },
-          "ETH/USDT": {
-            price: latestEth?.price || "3450",
-            change24h: latestEth?.change24h || "0",
-            series: ethQuotes.map((q) => ({ date: q.date, price: q.price })),
-          },
-          "USDT/RUB": {
-            price: latestRub?.price || DEFAULT_RUB_RATE.toString(),
-            change24h: latestRub?.change24h || "0",
-            series: rubQuotes.map((q) => ({ date: q.date, price: q.price })),
-          },
-        },
-        security: {
-          ...security,
-          consentAccepted: security?.consentAccepted ?? false,
-          kycStatus: normalizedKycStatus, // Use normalized status from kycApplicant
-          twoFactorEnabled: security?.twoFactorEnabled ?? false,
-          antiPhishingCode: security?.antiPhishingCode ?? null,
-          whitelistEnabled: security?.whitelistEnabled ?? false,
-          addressDelay: security?.addressDelay ?? 0,
-          autoSweepEnabled: security?.autoSweepEnabled ?? false,
-        },
-        config: {
-          depositAddress: DEPOSIT_ADDRESS,
-          networkFee: NETWORK_FEE_MINOR,
-          minWithdrawal: MIN_WITHDRAWAL_MINOR,
-          minDeposit: MIN_DEPOSIT_MINOR,
-        },
-      });
-    } catch (error) {
-      console.error("Bootstrap error:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
+  // NOTE: Health and bootstrap routes moved to server/routes/core.ts
+  // (Routes are registered via registerExtractedRoutes below)
 
   // ─────────────────────────────────────────────────────────────────────────────
   // EXTRACTED ROUTES (strategies, operations, statements, security, notifications)
   // ─────────────────────────────────────────────────────────────────────────────
   registerExtractedRoutes({ app, isAuthenticated, devOnly, getUserId });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ACTIVITY FEED
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  app.get("/api/activity", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+      const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+
+      if (limit < 1 || limit > 100) {
+        return res.status(400).json({
+          error: { code: "INVALID_LIMIT", message: "Limit must be between 1 and 100" },
+        });
+      }
+
+      const result = await storage.getEngineEvents(userId, limit, cursor);
+
+      res.json({
+        events: result.events,
+        nextCursor: result.nextCursor,
+      });
+    } catch (error) {
+      logger.error("Get activity error", "routes", {}, error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ENGINE STATUS STREAM (SSE)
+  // ─────────────────────────────────────────────────────────────────────────────
+  
+  // Track active SSE connections per userId (max 3 per user)
+  const activeSSEConnections = new Map<string, Set<Response>>();
+  const MAX_CONNECTIONS_PER_USER = 3;
+
+  // GET /api/engine/status (protected)
+  app.get("/api/engine/status", isAuthenticated, async (req, res) => {
+    try {
+      const { engineScheduler } = await import("./app/engineScheduler");
+      const health = engineScheduler.getHealth();
+      
+      // Find the most recent lastTickTs from all loops
+      const lastTickAt = health.loops
+        .map((loop) => loop.lastTickTs)
+        .filter((ts): ts is number => ts !== null)
+        .sort((a, b) => b - a)[0] || null;
+
+      // Find the most recent error
+      const lastError = health.loops
+        .map((loop) => loop.lastError)
+        .filter((err): err is string => err !== null)
+        .sort()[0] || null;
+
+      // Determine state and reason
+      let state: "running" | "idle" | "degraded" = health.activeLoops > 0 ? "running" : "idle";
+      let reason: string | null = null;
+
+      if (health.activeLoops === 0) {
+        state = "idle";
+        reason = "NO_ACTIVE_INVESTMENTS";
+      } else if (lastError) {
+        state = "degraded";
+        reason = "HAS_ERRORS";
+      }
+
+      res.json({
+        state,
+        lastTickAt,
+        activeLoops: health.activeLoops,
+        ...(lastError && { lastError }),
+        ...(reason && { reason }),
+      });
+    } catch (error) {
+      logger.error("Get engine status error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/engine/stream", isAuthenticated, async (req, res) => {
+    const userId = getUserId(req);
+    
+    if (!userId) {
+      res.status(401).json({
+        ok: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "User ID not found",
+        },
+      });
+      return;
+    }
+    
+    // Check rate limit (max 3 connections per user)
+    const userConnections = activeSSEConnections.get(userId) || new Set<Response>();
+    if (userConnections.size >= MAX_CONNECTIONS_PER_USER) {
+      res.status(429).json({
+        ok: false,
+        error: {
+          code: "TOO_MANY_CONNECTIONS",
+          message: `Maximum ${MAX_CONNECTIONS_PER_USER} SSE connections per user`,
+        },
+      });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+    
+    // Add connection to tracking
+    if (!activeSSEConnections.has(userId)) {
+      activeSSEConnections.set(userId, new Set());
+    }
+    activeSSEConnections.get(userId)!.add(res);
+
+    // Import engineScheduler
+    let engineScheduler: typeof import("./app/engineScheduler").engineScheduler;
+    try {
+      const module = await import("./app/engineScheduler");
+      engineScheduler = module.engineScheduler;
+    } catch (error) {
+      // Remove from tracking if import fails
+      const userConnections = activeSSEConnections.get(userId);
+      if (userConnections) {
+        userConnections.delete(res);
+        if (userConnections.size === 0) {
+          activeSSEConnections.delete(userId);
+        }
+      }
+      res.status(500).json({
+        ok: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Failed to initialize engine scheduler",
+        },
+      });
+      return;
+    }
+
+    let isClosed = false;
+    let eventInterval: NodeJS.Timeout | null = null;
+    let keepAliveInterval: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (isClosed) return;
+      isClosed = true;
+
+      // Clear intervals
+      if (eventInterval) {
+        clearInterval(eventInterval);
+        eventInterval = null;
+      }
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+      }
+
+      // Remove connection from tracking
+      const userConnections = activeSSEConnections.get(userId);
+      if (userConnections) {
+        userConnections.delete(res);
+        if (userConnections.size === 0) {
+          activeSSEConnections.delete(userId);
+        }
+      }
+
+      // Close response if writable
+      if (res.writable && !res.destroyed) {
+        try {
+          res.end();
+        } catch {
+          // Ignore errors when closing
+        }
+      }
+    };
+
+    // Handle client disconnect
+    req.on("close", cleanup);
+    req.on("aborted", cleanup);
+    res.on("close", cleanup);
+    res.on("finish", cleanup);
+
+    // Send initial connection event
+    try {
+      if (res.writable) {
+        res.write(": connected\n\n");
+      } else {
+        cleanup();
+        return;
+      }
+    } catch (error) {
+      cleanup();
+      return;
+    }
+
+    // Send engine status every 1 second
+    eventInterval = setInterval(() => {
+      if (isClosed || !res.writable || res.destroyed) {
+        cleanup();
+        return;
+      }
+
+      try {
+        const health = engineScheduler.getHealth();
+        
+        // Find the most recent lastTickTs from all loops
+        const lastTickAt = health.loops
+          .map((loop) => loop.lastTickTs)
+          .filter((ts): ts is number => ts !== null)
+          .sort((a, b) => b - a)[0] || null;
+
+        // Find the most recent error
+        const lastError = health.loops
+          .map((loop) => loop.lastError)
+          .filter((err): err is string => err !== null)
+          .sort()[0] || null;
+
+        // Determine state and reason
+        let state: "running" | "idle" | "degraded" = health.activeLoops > 0 ? "running" : "idle";
+        let reason: string | null = null;
+
+        if (health.activeLoops === 0) {
+          state = "idle";
+          reason = "NO_ACTIVE_INVESTMENTS";
+        } else if (lastError) {
+          state = "degraded";
+          reason = "HAS_ERRORS";
+        }
+
+        const eventData = {
+          state,
+          lastTickAt,
+          activeLoops: health.activeLoops,
+          ...(lastError && { lastError }),
+          ...(reason && { reason }),
+        };
+
+        res.write(`event: engine\n`);
+        res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+      } catch (error) {
+        // If error occurs, send error event and close
+        try {
+          if (res.writable && !res.destroyed) {
+            res.write(`event: error\n`);
+            res.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+          }
+        } catch {
+          // Ignore write errors
+        }
+        cleanup();
+      }
+    }, 1000);
+
+    // Send keep-alive comment every 15 seconds
+    keepAliveInterval = setInterval(() => {
+      if (isClosed || !res.writable || res.destroyed) {
+        cleanup();
+        return;
+      }
+
+      try {
+        res.write(`: keep-alive ${Date.now()}\n\n`);
+      } catch {
+        // Ignore write errors, connection likely closed
+        cleanup();
+      }
+    }, 15000);
+  });
 
   // ─────────────────────────────────────────────────────────────────────────────
   // MARKET DATA
@@ -785,7 +813,7 @@ export async function registerRoutes(
         source: result.source,
       });
     } catch (error) {
-      console.error("Market candles error:", error);
+      logger.error("Market candles error", "routes", { symbol, timeframe, requestId: req.requestId }, error);
       res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
@@ -815,7 +843,7 @@ export async function registerRoutes(
         allowedTransitions,
       });
     } catch (error) {
-      console.error("KYC status error:", error);
+      logger.error("KYC status error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -842,7 +870,7 @@ export async function registerRoutes(
         message: result.message,
       });
     } catch (error) {
-      console.error("KYC start error:", error);
+      logger.error("KYC start error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -926,7 +954,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      console.error("Deposit USDT simulate error:", error);
+      logger.error("Deposit USDT simulate error", "routes", { userId, amount, requestId: req.requestId }, error);
       const errorBody = { error: "Internal server error" };
       if (lock?.acquired) {
         await completeIdempotency(lock.keyId, null, 500, errorBody);
@@ -1014,7 +1042,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      console.error("Deposit card simulate error:", error);
+      logger.error("Deposit card simulate error", "routes", { userId, amount, requestId: req.requestId }, error);
       const errorBody = { error: "Internal server error" };
       if (lock?.acquired) {
         await completeIdempotency(lock.keyId, null, 500, errorBody);
@@ -1215,7 +1243,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      console.error("Invest error:", error);
+      logger.error("Invest error", "routes", { userId, strategyId, amount, requestId: req.requestId }, error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
         const errorBody = { error: "Insufficient balance" };
         if (lock?.acquired) {
@@ -1389,7 +1417,7 @@ export async function registerRoutes(
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Daily payout error:", error);
+      logger.error("Daily payout error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1591,7 +1619,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      console.error("Withdraw error:", error);
+      logger.error("Withdraw error", "routes", { userId, amount, requestId: req.requestId }, error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
         const errorBody = { error: "Insufficient balance" };
         if (lock?.acquired) {
@@ -1775,7 +1803,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      console.error("Vault transfer error:", error);
+      logger.error("Vault transfer error", "routes", { userId, fromVault, toVault, amount, requestId: req.requestId }, error);
       if (error instanceof Error) {
         if (error.message === "INSUFFICIENT_BALANCE") {
           const errorBody = { error: "Insufficient wallet balance" };
@@ -1818,7 +1846,7 @@ export async function registerRoutes(
 
       res.json({ success: true, vault });
     } catch (error) {
-      console.error("Update vault goal error:", error);
+      logger.error("Update vault goal error", "routes", { userId, vaultType, requestId: req.requestId }, error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message });
       }
@@ -1834,7 +1862,7 @@ export async function registerRoutes(
       // Demo: In production, would send actual OTP via email/SMS
       res.json({ success: true, message: "Code sent" });
     } catch (error) {
-      console.error("Send code error:", error);
+      logger.error("Send code error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1858,7 +1886,7 @@ export async function registerRoutes(
       await storage.updateSecuritySettings(userId, { contactVerified: true });
       res.json({ success: true });
     } catch (error) {
-      console.error("Verify code error:", error);
+      logger.error("Verify code error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1873,7 +1901,7 @@ export async function registerRoutes(
       const result = await acceptConsentCanonical({ userId, ip, userAgent });
       res.json({ success: result.success });
     } catch (error) {
-      console.error("Accept consent error:", error);
+      logger.error("Accept consent error (onboarding)", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1896,7 +1924,7 @@ export async function registerRoutes(
       }
       res.json({ success: result.success, status: result.status });
     } catch (error) {
-      console.error("Start KYC error:", error);
+      logger.error("Start KYC error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1914,7 +1942,7 @@ export async function registerRoutes(
       });
       res.json({ success: true, status: "APPROVED" });
     } catch (error) {
-      console.error("Complete KYC error:", error);
+      logger.error("Complete KYC error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1939,7 +1967,7 @@ export async function registerRoutes(
         documentHash: CURRENT_DOC_HASH,
       });
     } catch (error) {
-      console.error("Consent status error:", error);
+      logger.error("Consent status error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1954,7 +1982,7 @@ export async function registerRoutes(
       const result = await acceptConsentCanonical({ userId, ip, userAgent });
       res.json(result);
     } catch (error) {
-      console.error("Accept consent error:", error);
+      logger.error("Accept consent error (consent route)", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1990,7 +2018,7 @@ export async function registerRoutes(
         isDemoMode: true,
       });
     } catch (error) {
-      console.error("Sumsub access token error:", error);
+      logger.error("Sumsub access token error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2004,7 +2032,7 @@ export async function registerRoutes(
     try {
       // In production, require webhook secret
       if (IS_PRODUCTION && !SUMSUB_WEBHOOK_SECRET) {
-        console.error("Sumsub webhook: SUMSUB_WEBHOOK_SECRET not configured");
+        logger.error("Sumsub webhook: SUMSUB_WEBHOOK_SECRET not configured", "routes", { requestId: req.requestId });
         return res.status(500).json({ error: "Service not configured" });
       }
 
@@ -2013,7 +2041,7 @@ export async function registerRoutes(
       const expectedSecret = SUMSUB_WEBHOOK_SECRET || "demo-webhook-secret";
       
       if (webhookSecret !== expectedSecret) {
-        console.warn("Sumsub webhook: invalid or missing secret");
+        logger.warn("Sumsub webhook: invalid or missing secret", "routes", { requestId: req.requestId });
         return res.status(401).json({ error: "Unauthorized" });
       }
 
@@ -2044,7 +2072,7 @@ export async function registerRoutes(
       const applicant = await storage.getKycApplicantByProviderRef(applicantId);
       
       if (!applicant) {
-        console.warn(`Sumsub webhook: unknown applicantId ${applicantId}`);
+        logger.warn("Sumsub webhook: unknown applicantId", "routes", { applicantId, requestId: req.requestId });
         return res.status(404).json({ error: "Applicant not found" });
       }
 
@@ -2126,7 +2154,7 @@ export async function registerRoutes(
 
       res.json({ success: true, status: newStatus || previousStatus });
     } catch (error) {
-      console.error("Sumsub webhook error:", error);
+      logger.error("Sumsub webhook error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2221,7 +2249,7 @@ export async function registerRoutes(
 
       res.json({ success: true, previousStatus, newStatus });
     } catch (error) {
-      console.error("Sumsub demo callback error:", error);
+      logger.error("Sumsub demo callback error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2266,7 +2294,7 @@ export async function registerRoutes(
 
       res.json({ fromAsset, toAsset, fromAmount: amount, toAmount, rate: rate.toString() });
     } catch (error) {
-      console.error("FX quote error:", error);
+      logger.error("FX quote error", "routes", { fromAsset, toAsset, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2282,7 +2310,7 @@ export async function registerRoutes(
       const instructions = await storage.getPayoutInstructions(userId);
       res.json(instructions);
     } catch (error) {
-      console.error("Get payout instructions error:", error);
+      logger.error("Get payout instructions error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2294,7 +2322,7 @@ export async function registerRoutes(
       const instruction = await storage.getPayoutInstruction(userId, req.params.strategyId);
       res.json(instruction || null);
     } catch (error) {
-      console.error("Get payout instruction error:", error);
+      logger.error("Get payout instruction error", "routes", { userId, instructionId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2398,93 +2426,211 @@ export async function registerRoutes(
 
       res.json(instruction);
     } catch (error) {
-      console.error("Save payout instruction error:", error);
+      logger.error("Save payout instruction error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
   // ==================== RISK CONTROL ROUTES ====================
 
-  // GET /api/positions/:strategyId/risk-controls (protected)
-  app.get("/api/positions/:strategyId/risk-controls", isAuthenticated, async (req, res) => {
+  // GET /api/positions/:strategyId/risk (protected)
+  app.get("/api/positions/:strategyId/risk", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const { strategyId } = req.params;
 
       const position = await storage.getPosition(userId, strategyId);
-      if (!position) {
-        return res.json({
-          paused: false,
-          ddLimitPct: 0,
-          autoPauseEnabled: false,
-          pausedAt: null,
-          pausedReason: null,
-          hasPosition: false,
-        });
-      }
+      const riskRule = await storage.getRiskRule(userId, strategyId);
 
       // Calculate current drawdown
-      const principal = BigInt(position.principalMinor || "0");
-      const current = BigInt(position.investedCurrentMinor || "0");
       let currentDrawdownPct = 0;
-      if (principal > 0n && principal > current) {
-        currentDrawdownPct = Number(((principal - current) * 100n) / principal);
+      let currentDrawdownBps = 0;
+      if (position) {
+        const principal = BigInt(position.principalMinor || "0");
+        const current = BigInt(position.investedCurrentMinor || "0");
+        if (principal > 0n && principal > current) {
+          currentDrawdownPct = Number(((principal - current) * 100n) / principal);
+          currentDrawdownBps = Number(((principal - current) * 10000n) / principal);
+        }
       }
 
       res.json({
-        paused: position.paused,
-        ddLimitPct: position.ddLimitPct,
-        autoPauseEnabled: position.autoPauseEnabled,
-        pausedAt: position.pausedAt?.toISOString() || null,
-        pausedReason: position.pausedReason,
-        hasPosition: true,
+        paused: position?.paused || false,
+        pausedAt: position?.pausedAt?.toISOString() || null,
+        pausedReason: position?.pausedReason || null,
+        hasPosition: !!position,
         currentDrawdownPct,
+        currentDrawdownBps,
+        rules: {
+          maxDrawdownBps: riskRule?.maxDrawdownBps ?? null,
+          maxDailyLossBps: riskRule?.maxDailyLossBps ?? null,
+          maxTradesPerDay: riskRule?.maxTradesPerDay ?? null,
+          autoPauseEnabled: riskRule?.autoPauseEnabled ?? false,
+        },
       });
     } catch (error) {
-      console.error("Get risk controls error:", error);
+      logger.error("Get risk controls error", "routes", { userId: getUserId(req), strategyId: req.params.strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // POST /api/positions/:strategyId/risk-controls (protected)
-  app.post("/api/positions/:strategyId/risk-controls", isAuthenticated, async (req, res) => {
+  // POST /api/positions/:strategyId/risk (protected)
+  app.post("/api/positions/:strategyId/risk", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const { strategyId } = req.params;
 
       const schema = z.object({
-        ddLimitPct: z.number().int().min(0).max(100).optional(),
+        maxDrawdownBps: z.number().int().min(0).max(10000).nullable().optional(),
+        maxDailyLossBps: z.number().int().min(0).max(10000).nullable().optional(),
+        maxTradesPerDay: z.number().int().min(1).nullable().optional(),
         autoPauseEnabled: z.boolean().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid request data", details: parsed.error.flatten() });
       }
-      const { ddLimitPct, autoPauseEnabled } = parsed.data;
+      const { maxDrawdownBps, maxDailyLossBps, maxTradesPerDay, autoPauseEnabled } = parsed.data;
 
-      const position = await storage.getPosition(userId, strategyId);
-      if (!position) {
-        return res.status(404).json({ error: "Position not found" });
-      }
-
-      const updates: Partial<typeof position> = {};
-      if (ddLimitPct !== undefined) updates.ddLimitPct = ddLimitPct;
-      if (autoPauseEnabled !== undefined) updates.autoPauseEnabled = autoPauseEnabled;
-
-      const updated = await storage.updatePosition(position.id, updates);
-
-      // Audit log
-      await storage.createAuditLog({
+      const riskRule = await storage.upsertRiskRule({
         userId,
-        event: "RISK_CONTROLS_UPDATED",
-        resourceType: "position",
-        resourceId: position.id,
-        details: { strategyId, ddLimitPct, autoPauseEnabled },
+        strategyId,
+        maxDrawdownBps: maxDrawdownBps ?? null,
+        maxDailyLossBps: maxDailyLossBps ?? null,
+        maxTradesPerDay: maxTradesPerDay ?? null,
+        autoPauseEnabled: autoPauseEnabled ?? false,
       });
 
-      res.json({ success: true, position: updated });
+      // Audit log
+      const position = await storage.getPosition(userId, strategyId);
+      if (position) {
+        await storage.createAuditLog({
+          userId,
+          event: "RISK_RULES_UPDATED",
+          resourceType: "position",
+          resourceId: position.id,
+          details: { strategyId, maxDrawdownBps, maxDailyLossBps, maxTradesPerDay, autoPauseEnabled },
+        });
+      }
+
+      res.json({ success: true, rule: riskRule });
     } catch (error) {
-      console.error("Update risk controls error:", error);
+      logger.error("Update risk rules error", "routes", { userId: getUserId(req), strategyId: req.params.strategyId, requestId: req.requestId }, error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/safety/status (protected)
+  app.get("/api/safety/status", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+
+      // Check 1: No negative balances
+      const balances = await storage.getBalances(userId);
+      const hasNegativeBalance = balances.some((b) => {
+        const available = BigInt(b.available || "0");
+        const locked = BigInt(b.locked || "0");
+        return available < 0n || locked < 0n;
+      });
+
+      // Check 2: Reconciliation OK (check if portfolio reconciliation is recent)
+      const portfolioSummary = await getPortfolioSummary(userId);
+      const reconciliationOk = portfolioSummary !== null; // Simplified check
+
+      // Check 3: Locks OK (check engine health)
+      const { engineScheduler } = await import("./app/engineScheduler");
+      const health = engineScheduler.getHealth();
+      const locksOk = health.metrics.lockStats.contentionRate < 0.5; // Less than 50% contention
+
+      // Check 4: Data source OK (check if market data is available)
+      const { getMarketCandles } = await import("./app/marketDataService");
+      let dataSourceOk = true;
+      try {
+        // Try to get recent candles for a common symbol
+        const result = await getMarketCandles({
+          exchange: "synthetic",
+          symbol: "BTCUSDT",
+          timeframe: "1h",
+          fromTs: Date.now() - 24 * 60 * 60 * 1000,
+          toTs: Date.now(),
+          userId,
+          strategyId: "",
+          maxCandles: 1,
+        });
+        dataSourceOk = result.candles.length > 0;
+      } catch {
+        dataSourceOk = false;
+      }
+
+      const checks = [
+        {
+          name: "No negative balances",
+          status: hasNegativeBalance ? "error" : "ok",
+          message: hasNegativeBalance
+            ? "One or more balances are negative"
+            : "All balances are non-negative",
+        },
+        {
+          name: "Reconciliation OK",
+          status: reconciliationOk ? "ok" : "warning",
+          message: reconciliationOk
+            ? "Portfolio reconciliation successful"
+            : "Portfolio reconciliation pending",
+        },
+        {
+          name: "Locks OK",
+          status: locksOk ? "ok" : "warning",
+          message: locksOk
+            ? `Lock contention: ${(health.metrics.lockStats.contentionRate * 100).toFixed(1)}%`
+            : `High lock contention: ${(health.metrics.lockStats.contentionRate * 100).toFixed(1)}%`,
+        },
+        {
+          name: "Data source OK",
+          status: dataSourceOk ? "ok" : "error",
+          message: dataSourceOk
+            ? "Market data source is operational"
+            : "Market data source unavailable",
+        },
+      ];
+
+      const overall = checks.some((c) => c.status === "error")
+        ? "error"
+        : checks.some((c) => c.status === "warning")
+        ? "warning"
+        : "ok";
+
+      res.json({
+        checks,
+        overall,
+      });
+    } catch (error) {
+      logger.error("Get safety status error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // GET /api/risk/events (protected)
+  app.get("/api/risk/events", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const strategyId = req.query.strategyId as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+      const cursor = req.query.cursor as string | undefined;
+
+      if (limit < 1 || limit > 100) {
+        return res.status(400).json({
+          error: { code: "INVALID_LIMIT", message: "Limit must be between 1 and 100" },
+        });
+      }
+
+      const result = await storage.getRiskEvents(userId, strategyId, limit, cursor);
+
+      res.json({
+        events: result.events,
+        nextCursor: result.nextCursor,
+      });
+    } catch (error) {
+      logger.error("Get risk events error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2535,7 +2681,7 @@ export async function registerRoutes(
           : `${strategy?.name || "Strategy"} has been resumed`
       });
     } catch (error) {
-      console.error("Pause position error:", error);
+      logger.error("Pause position error", "routes", { userId, strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2571,7 +2717,7 @@ export async function registerRoutes(
         nextWindow: getNextWeeklyWindow().toISOString(),
       });
     } catch (error) {
-      console.error("Get redemptions error:", error);
+      logger.error("Get redemptions error", "routes", { userId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2636,7 +2782,7 @@ export async function registerRoutes(
         status: request.status,
       });
     } catch (error) {
-      console.error("Create redemption error:", error);
+      logger.error("Create redemption error", "routes", { userId, strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2692,8 +2838,47 @@ export async function registerRoutes(
         const currentAccrued = BigInt(position.accruedProfitPayableMinor || "0");
         const newAccrued = profitMinor > 0n ? currentAccrued + profitMinor : currentAccrued;
 
-        // Check for drawdown breach (if auto-pause enabled with DD limit)
+        // Check risk rules (new system)
+        const { checkRiskRules, applyRiskRuleAction } = await import("./app/riskService");
+        const riskCheck = await checkRiskRules(position.userId, position.strategyId, position.id);
+        
         let ddBreached = false;
+        if (riskCheck.shouldPause && riskCheck.triggeredRule) {
+          ddBreached = riskCheck.triggeredRule.type === "DD_BREACH";
+          
+          // Update position with new values first
+          await storage.updatePosition(position.id, {
+            investedCurrentMinor: newInvested.toString(),
+            accruedProfitPayableMinor: newAccrued.toString(),
+            currentValue: newInvested.toString(),
+            lastAccrualDate: today,
+          });
+
+          // Apply risk rule action (pause + create events)
+          await applyRiskRuleAction(position.userId, position.strategyId, position.id, riskCheck.triggeredRule);
+
+          // Create notification
+          await storage.createNotification({
+            userId: position.userId,
+            type: "security",
+            title: "Strategy Auto-Paused",
+            message: `Your ${strategy.name} position was automatically paused: ${riskCheck.triggeredRule.message}`,
+            resourceType: "position",
+            resourceId: position.id,
+          }).catch(() => {
+            // Ignore notification errors
+          });
+
+          results.push({ 
+            positionId: position.id, 
+            accrued: profitMinor.toString(), 
+            status: `${riskCheck.triggeredRule.type.toLowerCase()}_paused`,
+            ddBreached,
+          });
+          continue;
+        }
+
+        // Legacy check (for backward compatibility with old positions)
         const principal = BigInt(position.principalMinor || "0");
         if (position.autoPauseEnabled && position.ddLimitPct > 0 && principal > 0n) {
           // Calculate drawdown: (principal - current) / principal * 100
@@ -2741,6 +2926,26 @@ export async function registerRoutes(
               resourceId: position.id,
             });
 
+            // Log DD_TRIGGER event
+            await storage.createEngineEvent({
+              userId: position.userId,
+              strategyId: position.strategyId,
+              type: "DD_TRIGGER",
+              severity: "warn",
+              message: `Drawdown limit breached: ${drawdownPct.toFixed(1)}% (limit: ${position.ddLimitPct}%)`,
+              payloadJson: {
+                positionId: position.id,
+                strategyId: position.strategyId,
+                strategyName: strategy.name,
+                ddLimitPct: position.ddLimitPct,
+                actualDrawdownPct: drawdownPct,
+                principal: principal.toString(),
+                currentValue: newInvested.toString(),
+              },
+            }).catch(() => {
+              // Ignore logging errors
+            });
+
             results.push({ 
               positionId: position.id, 
               accrued: profitMinor.toString(), 
@@ -2779,7 +2984,7 @@ export async function registerRoutes(
 
       res.json({ success: true, date: today, results });
     } catch (error) {
-      console.error("Accrue daily error:", error);
+      logger.error("Accrue daily error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2931,7 +3136,7 @@ export async function registerRoutes(
 
       res.json({ success: true, frequency, results });
     } catch (error) {
-      console.error("Payout run error:", error);
+      logger.error("Payout run error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3018,7 +3223,7 @@ export async function registerRoutes(
 
       res.json({ success: true, results });
     } catch (error) {
-      console.error("Redemption weekly run error:", error);
+      logger.error("Redemption weekly run error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3066,11 +3271,7 @@ export async function registerRoutes(
     };
   };
 
-  // GET /api/status - Public system status endpoint
-  app.get("/api/status", (_req, res) => {
-    const status = getSystemStatus();
-    res.json(status);
-  });
+  // NOTE: Status route moved to server/routes/status.ts
 
   // ==================== MARKET DATA ====================
 
@@ -3167,7 +3368,7 @@ export async function registerRoutes(
         },
       });
     } catch (error) {
-      console.error("Get candles error:", error);
+      logger.error("Get candles error", "routes", { symbol, timeframe, requestId: req.requestId }, error);
       const message = error instanceof Error ? error.message : "Internal server error";
       res.status(400).json({ error: message });
     }

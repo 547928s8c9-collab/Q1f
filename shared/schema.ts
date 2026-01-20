@@ -246,6 +246,84 @@ export const insertInvestStateSchema = createInsertSchema(investState).omit({ id
 export type InsertInvestState = z.infer<typeof insertInvestStateSchema>;
 export type InvestState = typeof investState.$inferSelect;
 
+// ==================== ENGINE EVENTS ====================
+export const engineEvents = pgTable("engine_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").references(() => strategies.id),
+  type: text("type").notNull(), // TICK_OK, TICK_FAIL, TRADE_OPEN, TRADE_CLOSE, DD_TRIGGER, DATA_SOURCE_SWITCH, HISTORY_LOADING
+  severity: text("severity").notNull().default("info"), // info, warn, error
+  message: text("message").notNull(),
+  payloadJson: jsonb("payload_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("engine_events_user_created_idx").on(table.userId, table.createdAt),
+]);
+
+export const insertEngineEventSchema = createInsertSchema(engineEvents).omit({ id: true, createdAt: true });
+export type InsertEngineEvent = z.infer<typeof insertEngineEventSchema>;
+export type EngineEvent = typeof engineEvents.$inferSelect;
+
+// ==================== TRADE EVENTS ====================
+export const simTradeEvents = pgTable("sim_trade_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  tradeId: varchar("trade_id").notNull().references(() => simTrades.id),
+  type: text("type").notNull(), // TRADE_INTENT, ORDER_PLACED, FILLED, CLOSED
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  payloadJson: jsonb("payload_json"), // price, qty, fee, slippage, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("sim_trade_events_trade_id_idx").on(table.tradeId),
+  index("sim_trade_events_user_strategy_ts_idx").on(table.userId, table.strategyId, table.ts),
+]);
+
+export const insertSimTradeEventSchema = createInsertSchema(simTradeEvents).omit({ id: true, createdAt: true });
+export type InsertSimTradeEvent = z.infer<typeof insertSimTradeEventSchema>;
+export type SimTradeEvent = typeof simTradeEvents.$inferSelect;
+
+// ==================== RISK RULES ====================
+export const riskRules = pgTable("risk_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  maxDrawdownBps: integer("max_drawdown_bps"), // Max drawdown in basis points (null = no limit)
+  maxDailyLossBps: integer("max_daily_loss_bps"), // Max daily loss in basis points (null = no limit)
+  maxTradesPerDay: integer("max_trades_per_day"), // Max trades per day (null = no limit)
+  autoPauseEnabled: boolean("auto_pause_enabled").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("risk_rules_user_strategy_idx").on(table.userId, table.strategyId),
+]);
+
+export const insertRiskRuleSchema = createInsertSchema(riskRules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRiskRule = z.infer<typeof insertRiskRuleSchema>;
+export type RiskRule = typeof riskRules.$inferSelect;
+
+// ==================== RISK EVENTS ====================
+export const riskEvents = pgTable("risk_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  positionId: varchar("position_id").references(() => positions.id),
+  ruleType: text("rule_type").notNull(), // DD_BREACH, DAILY_LOSS_BREACH, MAX_TRADES_BREACH
+  ruleValue: integer("rule_value"), // The limit that was breached
+  actualValue: integer("actual_value"), // The actual value that triggered the breach
+  action: text("action").notNull(), // PAUSED, ALERT, etc.
+  message: text("message").notNull(),
+  payloadJson: jsonb("payload_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("risk_events_user_strategy_created_idx").on(table.userId, table.strategyId, table.createdAt),
+  index("risk_events_position_idx").on(table.positionId),
+]);
+
+export const insertRiskEventSchema = createInsertSchema(riskEvents).omit({ id: true, createdAt: true });
+export type InsertRiskEvent = z.infer<typeof insertRiskEventSchema>;
+export type RiskEvent = typeof riskEvents.$inferSelect;
+
 // ==================== POSITIONS ====================
 export const positions = pgTable("positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -744,6 +822,52 @@ export const marketCandles = pgTable("market_candles", {
 export const insertMarketCandleSchema = createInsertSchema(marketCandles).omit({ id: true });
 export type InsertMarketCandle = z.infer<typeof insertMarketCandleSchema>;
 export type MarketCandle = typeof marketCandles.$inferSelect;
+
+// ==================== MARKET CALIBRATION ====================
+export const marketCalibration = pgTable("market_calibration", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchange: text("exchange").notNull().default("binance_spot"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  windowDays: integer("window_days").notNull().default(180),
+  driftPctPerDay: text("drift_pct_per_day").notNull(),
+  volPctPerDay: text("vol_pct_per_day").notNull(),
+  stepClampPct: text("step_clamp_pct").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("market_calibration_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.windowDays),
+  index("market_calibration_symbol_tf_idx").on(table.exchange, table.symbol, table.timeframe),
+]);
+
+export const insertMarketCalibrationSchema = createInsertSchema(marketCalibration).omit({ id: true, createdAt: true });
+export type InsertMarketCalibration = z.infer<typeof insertMarketCalibrationSchema>;
+export type MarketCalibration = typeof marketCalibration.$inferSelect;
+
+// ==================== STRATEGY CALIBRATIONS ====================
+export const strategyCalibrations = pgTable("strategy_calibrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileSlug: text("profile_slug").notNull(),
+  strategyId: varchar("strategy_id"),
+  exchange: text("exchange").notNull().default("binance_spot"),
+  symbol: text("symbol").notNull(),
+  timeframe: text("timeframe").notNull(),
+  windowDays: integer("window_days").notNull().default(180),
+  targetMinBps: integer("target_min_bps").notNull(),
+  targetMaxBps: integer("target_max_bps").notNull(),
+  calibratedConfig: jsonb("calibrated_config").notNull(),
+  metrics: jsonb("metrics").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("strategy_calibrations_unique_idx").on(table.profileSlug, table.windowDays),
+  index("strategy_calibrations_profile_slug_idx").on(table.profileSlug),
+  index("strategy_calibrations_strategy_id_idx").on(table.strategyId),
+]);
+
+export const insertStrategyCalibrationSchema = createInsertSchema(strategyCalibrations).omit({ id: true, createdAt: true });
+export type InsertStrategyCalibration = z.infer<typeof insertStrategyCalibrationSchema>;
+export type StrategyCalibration = typeof strategyCalibrations.$inferSelect;
 
 // ==================== MARKET DATA TYPES ====================
 // Timeframe validation

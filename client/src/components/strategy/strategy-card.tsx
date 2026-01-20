@@ -7,12 +7,15 @@ import { Money } from "@/components/ui/money";
 import { TrendingUp, Shield, Zap, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type Strategy } from "@shared/schema";
+import { useLiveMetrics, type LiveStrategyMetrics } from "@/hooks/use-live-metrics";
+import { formatMoney } from "@shared/schema";
 
 interface StrategyCardProps {
   strategy: Strategy;
   sparklineData?: Array<{ value: number }>;
   onInvest?: () => void;
   onViewDetails?: () => void;
+  liveMetrics?: LiveStrategyMetrics;
 }
 
 const riskConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string }> = {
@@ -29,7 +32,7 @@ function toMajorUnits(minorUnits: string, decimals: number = 6): number {
   return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
 }
 
-export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails }: StrategyCardProps) {
+export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails, liveMetrics }: StrategyCardProps) {
   const tier = strategy.riskTier || "CORE";
   const config = riskConfig[tier] || riskConfig.CORE;
   const Icon = config.icon;
@@ -42,6 +45,18 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails 
   const isPositive = hasSparkline 
     ? sparklineData[sparklineData.length - 1].value >= sparklineData[0].value
     : true;
+
+  // Live metrics
+  const hasLiveMetrics = !!liveMetrics;
+  const equity = liveMetrics?.equityMinor || "0";
+  const pnl = liveMetrics?.pnlMinor || "0";
+  const roi30dBps = liveMetrics?.roi30dBps || 0;
+  const maxDrawdown30dBps = liveMetrics?.maxDrawdown30dBps || 0;
+  const trades24h = liveMetrics?.trades24h || 0;
+  const state = liveMetrics?.state || "NOT_INVESTED";
+  
+  const pnlBigInt = BigInt(pnl);
+  const isProfitable = pnlBigInt >= 0n;
 
   const handleCardClick = () => {
     if (onViewDetails) {
@@ -98,21 +113,66 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails 
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-muted/30 rounded-lg p-2.5">
-          <p className="text-xs text-muted-foreground mb-0.5">Expected Return</p>
-          <p className="text-sm font-semibold text-positive tabular-nums">
-            {minReturn}% - {maxReturn}%
-            <span className="text-xs text-muted-foreground font-normal">/mo</span>
-          </p>
+      {hasLiveMetrics ? (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Equity</p>
+            <p className="text-sm font-semibold tabular-nums">
+              {formatMoney(equity, "USDT")}
+            </p>
+          </div>
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">PnL</p>
+            <p className={cn("text-sm font-semibold tabular-nums", isProfitable ? "text-positive" : "text-negative")}>
+              {isProfitable ? "+" : ""}{formatMoney(pnl, "USDT")}
+            </p>
+          </div>
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">30d ROI</p>
+            <p className={cn("text-sm font-semibold tabular-nums", roi30dBps >= 0 ? "text-positive" : "text-negative")}>
+              {roi30dBps >= 0 ? "+" : ""}{(roi30dBps / 100).toFixed(2)}%
+            </p>
+          </div>
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Trades 24h</p>
+            <p className="text-sm font-semibold tabular-nums">
+              {trades24h}
+            </p>
+          </div>
         </div>
-        <div className="bg-muted/30 rounded-lg p-2.5">
-          <p className="text-xs text-muted-foreground mb-0.5">Min Investment</p>
-          <p className="text-sm font-semibold tabular-nums">
-            {minInvestment.toLocaleString()} USDT
-          </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Expected Return</p>
+            <p className="text-sm font-semibold text-positive tabular-nums">
+              {minReturn}% - {maxReturn}%
+              <span className="text-xs text-muted-foreground font-normal">/mo</span>
+            </p>
+          </div>
+          <div className="bg-muted/30 rounded-lg p-2.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Min Investment</p>
+            <p className="text-sm font-semibold tabular-nums">
+              {minInvestment.toLocaleString()} USDT
+            </p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {hasLiveMetrics && (
+        <div className="mb-4 flex items-center gap-2">
+          <Badge 
+            variant={state === "INVESTED_ACTIVE" ? "default" : state === "PAUSED" ? "secondary" : "outline"}
+            className="text-xs"
+          >
+            {state === "INVESTED_ACTIVE" ? "ACTIVE" : state === "PAUSED" ? "PAUSED" : "NOT_INVESTED"}
+          </Badge>
+          {maxDrawdown30dBps > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Max DD: {(maxDrawdown30dBps / 100).toFixed(2)}%
+            </span>
+          )}
+        </div>
+      )}
 
       <Button 
         className="w-full" 
