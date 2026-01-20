@@ -19,7 +19,6 @@ import DepositUSDT from "@/pages/deposit/usdt";
 import DepositCard from "@/pages/deposit/card";
 import Withdraw from "@/pages/withdraw";
 import Activity from "@/pages/activity/index";
-import ActivityEvents from "@/pages/activity/events";
 import Receipt from "@/pages/activity/receipt";
 import Settings from "@/pages/settings/index";
 import SecuritySettings from "@/pages/settings/security";
@@ -55,35 +54,31 @@ function ProtectedRouter() {
   return (
     <GateGuard>
       <AppShell>
-        <Suspense fallback={<LazyFallback />}>
-          <Switch>
-            <Route path="/" component={Home} />
-            <Route path="/dashboard" component={LazyDashboard} />
-            <Route path="/risk" component={Risk} />
-            <Route path="/analytics" component={LazyAnalytics} />
-            <Route path="/invest" component={Invest} />
-            <Route path="/invest/:id" component={LazyStrategyDetail} />
-            <Route path="/invest/:id/confirm" component={InvestConfirm} />
-            <Route path="/wallet" component={Wallet} />
-            <Route path="/wallet/vaults" component={Vaults} />
-            <Route path="/deposit/usdt" component={DepositUSDT} />
-            <Route path="/deposit/card" component={DepositCard} />
-            <Route path="/withdraw" component={Withdraw} />
-            <Route path="/activity" component={ActivityEvents} />
-            <Route path="/activity/transactions" component={Activity} />
-            <Route path="/activity/:operationId" component={Receipt} />
-            <Route path="/settings" component={Settings} />
-            <Route path="/settings/security" component={SecuritySettings} />
-            <Route path="/statements" component={Statements} />
-            <Route path="/status" component={StatusPage} />
-            <Route path="/inbox" component={Inbox} />
-            <Route path="/admin" component={AdminDashboard} />
-            <Route path="/admin/dashboard" component={AdminDashboard} />
-            <Route path="/admin/kyc" component={AdminKyc} />
-            <Route path="/admin/withdrawals" component={AdminWithdrawals} />
-            <Route component={NotFound} />
-          </Switch>
-        </Suspense>
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/analytics" component={Analytics} />
+          <Route path="/invest" component={Invest} />
+          <Route path="/invest/:id" component={StrategyDetail} />
+          <Route path="/invest/:id/confirm" component={InvestConfirm} />
+          <Route path="/wallet" component={Wallet} />
+          <Route path="/wallet/vaults" component={Vaults} />
+          <Route path="/deposit/usdt" component={DepositUSDT} />
+          <Route path="/deposit/card" component={DepositCard} />
+          <Route path="/withdraw" component={Withdraw} />
+          <Route path="/activity" component={Activity} />
+          <Route path="/activity/:operationId" component={Receipt} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/settings/security" component={SecuritySettings} />
+          <Route path="/statements" component={Statements} />
+          <Route path="/status" component={StatusPage} />
+          <Route path="/inbox" component={Inbox} />
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/dashboard" component={AdminDashboard} />
+          <Route path="/admin/kyc" component={AdminKyc} />
+          <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+          <Route component={NotFound} />
+        </Switch>
       </AppShell>
     </GateGuard>
   );
