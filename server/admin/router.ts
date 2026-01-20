@@ -44,6 +44,7 @@ import {
   WITHDRAWAL_ADMIN_TRANSITIONS,
 } from "@shared/admin/dto";
 import { requireIdempotencyKey, wrapMutation } from "./audit";
+import { engineScheduler } from "../app/engineScheduler";
 
 export const adminRouter = Router();
 
@@ -121,6 +122,15 @@ adminRouter.get("/overview", requirePermission("users.read"), async (req, res) =
   } catch (error) {
     console.error("[GET /admin/overview]", error);
     fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to get overview metrics", 500);
+  }
+});
+
+adminRouter.get("/health/engine", requirePermission("users.read"), async (_req, res) => {
+  try {
+    ok(res, engineScheduler.getHealth());
+  } catch (error) {
+    console.error("[GET /admin/health/engine]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to load engine health", 500);
   }
 });
 

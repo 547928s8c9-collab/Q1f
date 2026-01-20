@@ -16,6 +16,8 @@ export interface EnsureCandleRangeParams {
   fromTs: number;
   toTs: number;
   seed: string;
+  maxStepChangePct?: number;
+  maxWickPct?: number;
 }
 
 export function buildSyntheticSeed(params: {
@@ -68,14 +70,14 @@ function initialPrice(seed: string, symbol: string, timeframe: Timeframe, ts: nu
   return Math.max(MIN_PRICE, base * (1 + jitter));
 }
 
-function buildCandle(seed: string, ts: number, prevClose: number): Candle {
-  const changeRaw = (randomFor(seed, ts, "change") * 2 - 1) * MAX_STEP_CHANGE_PCT;
-  const change = clamp(changeRaw, -MAX_STEP_CHANGE_PCT, MAX_STEP_CHANGE_PCT);
+function buildCandle(seed: string, ts: number, prevClose: number, maxStepChangePct: number, maxWickPct: number): Candle {
+  const changeRaw = (randomFor(seed, ts, "change") * 2 - 1) * maxStepChangePct;
+  const change = clamp(changeRaw, -maxStepChangePct, maxStepChangePct);
   const open = prevClose;
   const close = Math.max(MIN_PRICE, open * (1 + change));
 
-  const wickUp = randomFor(seed, ts, "wickUp") * MAX_WICK_PCT;
-  const wickDown = randomFor(seed, ts, "wickDown") * MAX_WICK_PCT;
+  const wickUp = randomFor(seed, ts, "wickUp") * maxWickPct;
+  const wickDown = randomFor(seed, ts, "wickDown") * maxWickPct;
   const high = Math.max(open, close) * (1 + wickUp);
   const low = Math.min(open, close) * (1 - wickDown);
 
@@ -100,10 +102,41 @@ function alignEnd(ts: number, stepMs: number): number {
   return Math.ceil(ts / stepMs) * stepMs;
 }
 
+export function generateSyntheticCandles(params: {
+  seed: string;
+  symbol: string;
+  timeframe: Timeframe | string;
+  fromTs: number;
+  toTs: number;
+  maxStepChangePct?: number;
+  maxWickPct?: number;
+}): Candle[] {
+  const symbol = normalizeSymbol(params.symbol);
+  const timeframe = normalizeTimeframe(params.timeframe);
+  const stepMs = timeframeToMs(timeframe);
+  const maxStepChangePct = params.maxStepChangePct ?? MAX_STEP_CHANGE_PCT;
+  const maxWickPct = params.maxWickPct ?? MAX_WICK_PCT;
+  const alignedStart = alignStart(params.fromTs, stepMs);
+  const alignedEnd = alignEnd(params.toTs, stepMs);
+
+  const candles: Candle[] = [];
+  let prevClose = initialPrice(params.seed, symbol, timeframe, alignedStart);
+
+  for (let ts = alignedStart; ts < alignedEnd; ts += stepMs) {
+    const candle = buildCandle(params.seed, ts, prevClose, maxStepChangePct, maxWickPct);
+    candles.push(candle);
+    prevClose = candle.close;
+  }
+
+  return candles;
+}
+
 export async function ensureCandleRange(params: EnsureCandleRangeParams): Promise<void> {
   const symbol = normalizeSymbol(params.symbol);
   const timeframe = normalizeTimeframe(params.timeframe);
   const stepMs = timeframeToMs(timeframe);
+  const maxStepChangePct = params.maxStepChangePct ?? MAX_STEP_CHANGE_PCT;
+  const maxWickPct = params.maxWickPct ?? MAX_WICK_PCT;
   const alignedStart = alignStart(params.fromTs, stepMs);
   const alignedEnd = alignEnd(params.toTs, stepMs);
 
@@ -140,7 +173,7 @@ export async function ensureCandleRange(params: EnsureCandleRangeParams): Promis
       initialPrice(params.seed, symbol, timeframe, range.startMs);
 
     for (let ts = range.startMs; ts < range.endMs; ts += stepMs) {
-      const candle = buildCandle(params.seed, ts, prevClose);
+      const candle = buildCandle(params.seed, ts, prevClose, maxStepChangePct, maxWickPct);
       candles.push(candle);
       prevClose = candle.close;
       candleByTs.set(candle.ts, candle);

@@ -266,7 +266,7 @@ describe("loadCandles determinism", () => {
     };
 
     const result1 = await loadCandles(params);
-    expect(result1.source).toBe("cache+binance");
+    expect(result1.source).toBe(`cache+${params.exchange}`);
     expect(mockDataSource.fetchCandles).toHaveBeenCalledTimes(1);
 
     const result2 = await loadCandles(params);
@@ -298,6 +298,6 @@ describe("loadCandles determinism", () => {
     expect(result.candles.length).toBe(2);
     expect(result.gaps.length).toBeGreaterThan(0);
     expect(result.gaps.some((g) => g.startMs === 21 * HOUR_MS)).toBe(true);
-    expect(result.source).toBe("cache+binance");
+    expect(result.source).toBe(`cache+${params.exchange}`);
   });
 });

@@ -84,6 +84,10 @@ export const strategyProfiles = pgTable("strategy_profiles", {
   description: text("description"),
   riskLevel: text("risk_level").notNull(),
   tags: jsonb("tags"),
+  pairsJson: jsonb("pairs_json"),
+  benchmarksJson: jsonb("benchmarks_json"),
+  expectedReturnMinBps: integer("expected_return_min_bps"),
+  expectedReturnMaxBps: integer("expected_return_max_bps"),
   defaultConfig: jsonb("default_config").notNull(),
   configSchema: jsonb("config_schema"),
   isEnabled: boolean("is_enabled").default(true),
@@ -115,6 +119,7 @@ export type StrategyPerformance = typeof strategyPerformance.$inferSelect;
 // ==================== SIM TRADING ====================
 export const simPositions = pgTable("sim_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
   strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   profileSlug: text("profile_slug").notNull(),
   symbol: text("symbol").notNull(),
@@ -134,7 +139,7 @@ export const simPositions = pgTable("sim_positions", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("sim_positions_strategy_idx").on(table.strategyId),
+  uniqueIndex("sim_positions_user_strategy_idx").on(table.userId, table.strategyId),
 ]);
 
 export const insertSimPositionSchema = createInsertSchema(simPositions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -143,7 +148,10 @@ export type SimPosition = typeof simPositions.$inferSelect;
 
 export const simTrades = pgTable("sim_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
   strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  symbol: text("symbol").notNull(),
+  side: text("side").notNull().default("LONG"),
   status: text("status").notNull().default("OPEN"),
   entryTs: bigint("entry_ts", { mode: "number" }),
   exitTs: bigint("exit_ts", { mode: "number" }),
@@ -158,8 +166,8 @@ export const simTrades = pgTable("sim_trades", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  index("sim_trades_strategy_entry_idx").on(table.strategyId, table.entryTs),
-  index("sim_trades_strategy_status_idx").on(table.strategyId, table.status),
+  index("sim_trades_user_strategy_entry_idx").on(table.userId, table.strategyId, table.entryTs),
+  index("sim_trades_user_strategy_status_idx").on(table.userId, table.strategyId, table.status),
 ]);
 
 export const insertSimTradeSchema = createInsertSchema(simTrades).omit({ id: true, createdAt: true, updatedAt: true });
@@ -168,20 +176,75 @@ export type SimTrade = typeof simTrades.$inferSelect;
 
 export const simEquitySnapshots = pgTable("sim_equity_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
   strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
   ts: bigint("ts", { mode: "number" }).notNull(),
   equityMinor: text("equity_minor").notNull(),
+  allocatedMinor: text("allocated_minor").notNull().default("0"),
+  pnlCumMinor: text("pnl_cum_minor").notNull().default("0"),
   cashMinor: text("cash_minor").notNull(),
   positionValueMinor: text("position_value_minor").notNull(),
   drawdownBps: integer("drawdown_bps").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("sim_equity_snapshots_strategy_ts_idx").on(table.strategyId, table.ts),
+  uniqueIndex("sim_equity_snapshots_user_strategy_ts_idx").on(table.userId, table.strategyId, table.ts),
 ]);
 
 export const insertSimEquitySnapshotSchema = createInsertSchema(simEquitySnapshots).omit({ id: true, createdAt: true });
 export type InsertSimEquitySnapshot = z.infer<typeof insertSimEquitySnapshotSchema>;
 export type SimEquitySnapshot = typeof simEquitySnapshots.$inferSelect;
+
+// ==================== SIM ALLOCATIONS ====================
+export const simAllocations = pgTable("sim_allocations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  amountMinor: text("amount_minor").notNull(),
+  status: text("status").notNull().default("ACTIVE"),
+  requestId: varchar("request_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("sim_allocations_user_strategy_idx").on(table.userId, table.strategyId),
+  index("sim_allocations_request_idx").on(table.userId, table.requestId),
+]);
+
+export const insertSimAllocationSchema = createInsertSchema(simAllocations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSimAllocation = z.infer<typeof insertSimAllocationSchema>;
+export type SimAllocation = typeof simAllocations.$inferSelect;
+
+// ==================== BENCHMARK SERIES ====================
+export const benchmarkSeries = pgTable("benchmark_series", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  benchmark: text("benchmark").notNull(),
+  ts: bigint("ts", { mode: "number" }).notNull(),
+  value: text("value").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("benchmark_series_unique_idx").on(table.benchmark, table.ts),
+  index("benchmark_series_benchmark_ts_idx").on(table.benchmark, table.ts),
+]);
+
+export const insertBenchmarkSeriesSchema = createInsertSchema(benchmarkSeries).omit({ id: true, createdAt: true });
+export type InsertBenchmarkSeries = z.infer<typeof insertBenchmarkSeriesSchema>;
+export type BenchmarkSeries = typeof benchmarkSeries.$inferSelect;
+
+// ==================== INVEST STATE ====================
+export const investState = pgTable("invest_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  strategyId: varchar("strategy_id").notNull().references(() => strategies.id),
+  state: text("state").notNull(),
+  requestId: varchar("request_id"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("invest_state_user_strategy_idx").on(table.userId, table.strategyId),
+  index("invest_state_user_request_idx").on(table.userId, table.requestId),
+]);
+
+export const insertInvestStateSchema = createInsertSchema(investState).omit({ id: true, updatedAt: true });
+export type InsertInvestState = z.infer<typeof insertInvestStateSchema>;
+export type InvestState = typeof investState.$inferSelect;
 
 // ==================== POSITIONS ====================
 export const positions = pgTable("positions", {
