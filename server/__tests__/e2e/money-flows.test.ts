@@ -18,21 +18,26 @@ import request from "supertest";
 import express from "express";
 import { createServer } from "http";
 import { registerRoutes } from "../../routes";
-import { storage } from "../../storage";
-import { db } from "../../db";
 import { balances, operations } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 // Test configuration
 const TEST_USER_ID = "test-user-e2e";
 const BASE_URL = "/api";
+const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const describeDb = hasDatabaseUrl ? describe : describe.skip;
 
-describe("E2E: Money Flows", () => {
+describeDb("E2E: Money Flows", () => {
   let app: express.Application;
   let httpServer: any;
   let authToken: string; // Mock auth token
+  let storage: (typeof import("../../storage"))["storage"];
+  let db: (typeof import("../../db"))["db"];
 
   beforeAll(async () => {
+    ({ storage } = await import("../../storage"));
+    ({ db } = await import("../../db"));
+
     // Setup Express app
     app = express();
     app.use(express.json());
