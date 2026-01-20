@@ -15,7 +15,8 @@ import {
   NETWORK_FEE_MINOR_BIGINT,
 } from "./config";
 import { registerExtractedRoutes } from "./routes/index";
-import { buildGaps, loadCandles } from "./marketData/loadCandles";
+import { alignToGrid, buildGaps, loadCandles } from "./marketData/loadCandles";
+import { aggregateCandles, resolveDownsampleTimeframe } from "./marketData/downsample";
 import { ensureCandleRange, buildSyntheticSeed } from "./services/syntheticMarket";
 
 import { db, withTransaction, type DbTransaction } from "./db";
@@ -625,6 +626,7 @@ export async function registerRoutes(
   // ─────────────────────────────────────────────────────────────────────────────
 
   const MAX_CANDLES_PER_REQUEST = 35040; // ~1 year of 15m candles
+  const DOWNSAMPLE_MAX_BARS = 5000;
 
   const TIMEFRAME_MS: Record<Timeframe, number> = {
     "15m": 15 * 60 * 1000,
@@ -759,11 +761,26 @@ export async function registerRoutes(
           startMs,
           endMs
         );
+        const effectiveTimeframe = resolveDownsampleTimeframe({
+          timeframe: tf,
+          startMs,
+          endMs,
+          maxBars: DOWNSAMPLE_MAX_BARS,
+        });
+        const finalCandles = effectiveTimeframe === tf
+          ? candles
+          : aggregateCandles(candles, tf, effectiveTimeframe);
+        const effectiveStepMs = TIMEFRAME_MS[effectiveTimeframe];
+        const effectiveStart = alignToGrid(startMs, effectiveStepMs);
+        const effectiveEnd = alignToGrid(endMs, effectiveStepMs);
 
         res.json({
-          candles,
-          gaps: buildGaps(candles, startMs, endMs, tfMs),
+          candles: finalCandles,
+          gaps: buildGaps(finalCandles, effectiveStart, effectiveEnd, effectiveStepMs),
           source: "synthetic",
+          requestedTimeframe: tf,
+          effectiveTimeframe,
+          downsampled: effectiveTimeframe !== tf,
         });
         return;
       }
@@ -775,12 +792,16 @@ export async function registerRoutes(
         timeframe: tf,
         startMs,
         endMs,
+        downsampleToMaxBars: DOWNSAMPLE_MAX_BARS,
       });
 
       res.json({
         candles: result.candles,
         gaps: result.gaps,
         source: result.source,
+        requestedTimeframe: result.requestedTimeframe,
+        effectiveTimeframe: result.effectiveTimeframe,
+        downsampled: result.downsampled,
       });
     } catch (error) {
       console.error("Market candles error:", error);
@@ -3102,6 +3123,7 @@ export async function registerRoutes(
       
       const exchangeParam = exchange as string;
       const normalizedSymbol = symbol.toUpperCase();
+      const tf = timeframe as Timeframe;
 
       if (exchangeParam === "synthetic") {
         const userId = getUserId(req);
@@ -3114,13 +3136,13 @@ export async function registerRoutes(
           userId,
           strategyId,
           symbol: normalizedSymbol,
-          timeframe,
+          timeframe: tf,
         });
 
         await ensureCandleRange({
           exchange: "synthetic",
           symbol: normalizedSymbol,
-          timeframe,
+          timeframe: tf,
           fromTs: start,
           toTs: end,
           seed,
@@ -3129,18 +3151,33 @@ export async function registerRoutes(
         const candles = await storage.getCandlesFromCache(
           "synthetic",
           normalizedSymbol,
-          timeframe,
+          tf,
           start,
           end
         );
+        const effectiveTimeframe = resolveDownsampleTimeframe({
+          timeframe: tf,
+          startMs: start,
+          endMs: end,
+          maxBars: DOWNSAMPLE_MAX_BARS,
+        });
+        const finalCandles = effectiveTimeframe === tf
+          ? candles
+          : aggregateCandles(candles, tf, effectiveTimeframe);
+        const effectiveStepMs = TIMEFRAME_MS[effectiveTimeframe];
+        const effectiveStart = alignToGrid(start, effectiveStepMs);
+        const effectiveEnd = alignToGrid(end, effectiveStepMs);
 
         res.json({
           success: true,
           data: {
-            candles,
-            gaps: buildGaps(candles, start, end, TIMEFRAME_MS[timeframe as Timeframe]),
+            candles: finalCandles,
+            gaps: buildGaps(finalCandles, effectiveStart, effectiveEnd, effectiveStepMs),
             source: "synthetic",
-            count: candles.length,
+            count: finalCandles.length,
+            requestedTimeframe: tf,
+            effectiveTimeframe,
+            downsampled: effectiveTimeframe !== tf,
           },
         });
         return;
@@ -3149,10 +3186,11 @@ export async function registerRoutes(
       const result = await loadCandles({
         exchange: exchangeParam,
         symbol: normalizedSymbol,
-        timeframe,
+        timeframe: tf,
         startMs: start,
         endMs: end,
         maxBars: 5000,
+        downsampleToMaxBars: DOWNSAMPLE_MAX_BARS,
       });
       
       res.json({
@@ -3162,6 +3200,9 @@ export async function registerRoutes(
           gaps: result.gaps,
           source: result.source,
           count: result.candles.length,
+          requestedTimeframe: result.requestedTimeframe,
+          effectiveTimeframe: result.effectiveTimeframe,
+          downsampled: result.downsampled,
         },
       });
     } catch (error) {

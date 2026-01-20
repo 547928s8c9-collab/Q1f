@@ -177,6 +177,7 @@ export const simEquitySnapshots = pgTable("sim_equity_snapshots", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   uniqueIndex("sim_equity_snapshots_strategy_ts_idx").on(table.strategyId, table.ts),
+  index("sim_equity_snapshots_strategy_id_idx").on(table.strategyId),
 ]);
 
 export const insertSimEquitySnapshotSchema = createInsertSchema(simEquitySnapshots).omit({ id: true, createdAt: true });
@@ -635,6 +636,7 @@ export const marketCandles = pgTable("market_candles", {
   volume: text("volume").notNull(),
 }, (table) => [
   uniqueIndex("market_candles_unique_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
+  index("market_candles_exchange_symbol_tf_ts_idx").on(table.exchange, table.symbol, table.timeframe, table.ts),
   index("market_candles_symbol_tf_ts_idx").on(table.symbol, table.timeframe, table.ts),
 ]);
 
@@ -694,6 +696,9 @@ export interface LoadCandlesResult {
   candles: Candle[];
   gaps: GapInfo[];
   source: string; // "cache" | "cache+<exchange>"
+  requestedTimeframe: Timeframe;
+  effectiveTimeframe: Timeframe;
+  downsampled: boolean;
 }
 
 // Helper: convert DB row to Candle DTO

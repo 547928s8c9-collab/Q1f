@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/page-header";
 import { StrategyCard } from "@/components/strategy/strategy-card";
@@ -18,6 +18,7 @@ export default function Invest() {
 
   const { data: strategies, isLoading } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
+    staleTime: 60_000,
   });
 
   const { data: bootstrap } = useQuery<BootstrapResponse>({
@@ -27,50 +28,58 @@ export default function Invest() {
   const { data: allPerformance } = useQuery<Record<string, StrategyPerformance[]>>({
     queryKey: ["/api/strategies/performance-all"],
     enabled: !isLoading && !!strategies?.length,
+    staleTime: 60_000,
   });
 
-  const lowRisk = strategies?.filter(s => s.riskTier === "LOW") || [];
-  const coreRisk = strategies?.filter(s => s.riskTier === "CORE") || [];
-  const highRisk = strategies?.filter(s => s.riskTier === "HIGH") || [];
+  const lowRisk = useMemo(() => strategies?.filter(s => s.riskTier === "LOW") || [], [strategies]);
+  const coreRisk = useMemo(() => strategies?.filter(s => s.riskTier === "CORE") || [], [strategies]);
+  const highRisk = useMemo(() => strategies?.filter(s => s.riskTier === "HIGH") || [], [strategies]);
 
-  const getSparklineData = (strategyId: string) => {
-    const perf = allPerformance?.[strategyId];
-    if (!perf || perf.length === 0) return undefined;
-    
-    const last30 = perf.slice(-30);
-    return last30.map(p => ({ value: parseFloat(p.equityMinor) }));
-  };
+  const sparklineById = useMemo<Record<string, { value: number }[] | undefined>>(() => {
+    if (!allPerformance) return {};
+    return Object.fromEntries(
+      Object.entries(allPerformance).map(([strategyId, perf]) => {
+        if (!perf || perf.length === 0) return [strategyId, undefined];
+        const last30 = perf.slice(-30).map((point) => ({ value: parseFloat(point.equityMinor) }));
+        return [strategyId, last30];
+      })
+    );
+  }, [allPerformance]);
 
-  const handleViewDetails = (strategy: Strategy) => {
+  const getSparklineData = useCallback((strategyId: string) => {
+    return sparklineById[strategyId];
+  }, [sparklineById]);
+
+  const handleViewDetails = useCallback((strategy: Strategy) => {
     setSelectedStrategy(strategy);
     setDetailsOpen(true);
-  };
+  }, []);
 
-  const handleInvest = (strategy: Strategy) => {
+  const handleInvest = useCallback((strategy: Strategy) => {
     setSelectedStrategy(strategy);
     setInvestOpen(true);
-  };
+  }, []);
 
-  const handleInvestFromSheet = () => {
+  const handleInvestFromSheet = useCallback(() => {
     setDetailsOpen(false);
     setTimeout(() => setInvestOpen(true), 150);
-  };
+  }, []);
 
-  const handleDetailsOpenChange = (open: boolean) => {
+  const handleDetailsOpenChange = useCallback((open: boolean) => {
     setDetailsOpen(open);
     if (!open) {
       setTimeout(() => setSelectedStrategy(null), 300);
     }
-  };
+  }, []);
 
-  const handleInvestOpenChange = (open: boolean) => {
+  const handleInvestOpenChange = useCallback((open: boolean) => {
     setInvestOpen(open);
     if (!open) {
       setTimeout(() => setSelectedStrategy(null), 300);
     }
-  };
+  }, []);
 
-  const renderStrategyGrid = (strategyList: Strategy[]) => (
+  const renderStrategyGrid = useCallback((strategyList: Strategy[]) => (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {strategyList.map((strategy) => (
         <StrategyCard 
@@ -82,7 +91,7 @@ export default function Invest() {
         />
       ))}
     </div>
-  );
+  ), [getSparklineData, handleViewDetails, handleInvest]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">

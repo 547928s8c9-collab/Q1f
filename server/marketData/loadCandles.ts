@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { cryptoCompare } from "../data/cryptoCompare";
 import { syntheticDataSource } from "./syntheticDataSource";
 import { normalizeSymbol, normalizeTimeframe, timeframeToMs } from "./utils";
+import { aggregateCandles, resolveDownsampleTimeframe } from "./downsample";
 
 function log(msg: string, category?: string, meta?: object) {
   console.log(`[${category || 'marketData'}] ${msg}`, meta ? JSON.stringify(meta) : '');
@@ -30,6 +31,7 @@ export interface LoadCandlesParams {
   dataSource?: MarketDataSource;
   maxBars?: number;
   allowLargeRange?: boolean;
+  downsampleToMaxBars?: number;
 }
 
 export function getDefaultExchange(): string {
@@ -50,6 +52,7 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
     dataSource,
     maxBars = DEFAULT_MAX_BARS,
     allowLargeRange = false,
+    downsampleToMaxBars,
   } = params;
 
   const symbol = normalizeSymbol(rawSymbol);
@@ -61,7 +64,14 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
   let alignedEnd = alignToGrid(endMs, stepMs);
 
   if (alignedStart >= alignedEnd) {
-    return { candles: [], gaps: [], source: "cache" };
+    return {
+      candles: [],
+      gaps: [],
+      source: "cache",
+      requestedTimeframe: timeframe,
+      effectiveTimeframe: timeframe,
+      downsampled: false,
+    };
   }
 
   const requestedBars = Math.ceil((alignedEnd - alignedStart) / stepMs);
@@ -93,12 +103,34 @@ export async function loadCandles(params: LoadCandlesParams): Promise<LoadCandle
 
   const gaps = buildGaps(allCandles, alignedStart, alignedEnd, stepMs);
 
+  let effectiveTimeframe = timeframe;
+  let downsampledCandles = allCandles;
+  let downsampledGaps = gaps;
+  if (downsampleToMaxBars && downsampleToMaxBars > 0) {
+    effectiveTimeframe = resolveDownsampleTimeframe({
+      timeframe,
+      startMs: alignedStart,
+      endMs: alignedEnd,
+      maxBars: downsampleToMaxBars,
+    });
+    if (effectiveTimeframe !== timeframe) {
+      downsampledCandles = aggregateCandles(allCandles, timeframe, effectiveTimeframe);
+      const effectiveStepMs = timeframeToMs(effectiveTimeframe);
+      const effectiveStart = alignToGrid(alignedStart, effectiveStepMs);
+      const effectiveEnd = alignToGrid(alignedEnd, effectiveStepMs);
+      downsampledGaps = buildGaps(downsampledCandles, effectiveStart, effectiveEnd, effectiveStepMs);
+    }
+  }
+
   const sourceLabel = exchange;
 
   return {
-    candles: allCandles,
-    gaps,
+    candles: downsampledCandles,
+    gaps: downsampledGaps,
     source: usedNetwork ? `cache+${sourceLabel}` : "cache",
+    requestedTimeframe: timeframe,
+    effectiveTimeframe,
+    downsampled: effectiveTimeframe !== timeframe,
   };
 }
 

@@ -1,15 +1,32 @@
 import type { InvestMetrics, StrategyProfile } from "@shared/schema";
+import rateLimit from "express-rate-limit";
 import type { RouteDeps } from "./types";
 import { storage } from "../storage";
 import { loadCandles } from "../marketData/loadCandles";
 import { normalizeTimeframe } from "../marketData/utils";
 import { simulateInvestStrategy } from "../strategies/investSimulation";
 import type { StrategyConfig, StrategyProfileSlug } from "../strategies/types";
+import { ResponseCache } from "../lib/responseCache";
 
 const DEFAULT_PERIOD_DAYS = 30;
 const MIN_PERIOD_DAYS = 7;
 const MAX_PERIOD_DAYS = 180;
 const DAY_MS = 86_400_000;
+const INVEST_DOWNSAMPLE_MAX_BARS = 3500;
+const INVEST_CACHE_TTL_MS = 60_000;
+const INVEST_INSIGHTS_CACHE_TTL_MS = 90_000;
+
+const investHeavyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many invest requests, please slow down" },
+  validate: { xForwardedForHeader: false },
+});
+
+const candlesCache = new ResponseCache<object>(INVEST_CACHE_TTL_MS, 250);
+const insightsCache = new ResponseCache<object>(INVEST_INSIGHTS_CACHE_TTL_MS, 200);
 
 const emptyMetrics: InvestMetrics = {
   totalTrades: 0,
@@ -41,8 +58,8 @@ async function resolveProfile(strategyId: string): Promise<{ strategy: { id: str
   return { strategy: { id: strategy.id, name: strategy.name }, profile };
 }
 
-export function registerInvestRoutes({ app }: RouteDeps): void {
-  app.get("/api/invest/strategies/:id/candles", async (req, res) => {
+export function registerInvestRoutes({ app, getUserId }: RouteDeps): void {
+  app.get("/api/invest/strategies/:id/candles", investHeavyLimiter, async (req, res) => {
     try {
       const resolved = await resolveProfile(req.params.id);
       if (!resolved) {
@@ -54,6 +71,12 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
       const timeframe = normalizeTimeframe((req.query.timeframe as string) ?? profile.timeframe);
       const endMs = Date.now();
       const startMs = endMs - periodDays * DAY_MS;
+      const userKey = getUserId(req) || req.ip || "anon";
+      const cacheKey = `${userKey}:${resolved.strategy.id}:${periodDays}:${timeframe}:candles`;
+      const cached = candlesCache.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
 
       const result = await loadCandles({
         symbol: profile.symbol,
@@ -61,21 +84,26 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
         startMs,
         endMs,
         allowLargeRange: true,
+        downsampleToMaxBars: INVEST_DOWNSAMPLE_MAX_BARS,
       });
 
-      res.json({
+      const response = {
         ...result,
         symbol: profile.symbol,
-        timeframe,
+        timeframe: result.effectiveTimeframe,
+        requestedTimeframe: result.requestedTimeframe,
         periodDays,
-      });
+      };
+
+      candlesCache.set(cacheKey, response);
+      res.json(response);
     } catch (error) {
       console.error("Invest candles error:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  app.get("/api/invest/strategies/:id/insights", async (req, res) => {
+  app.get("/api/invest/strategies/:id/insights", investHeavyLimiter, async (req, res) => {
     try {
       const resolved = await resolveProfile(req.params.id);
       if (!resolved) {
@@ -87,6 +115,12 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
       const timeframe = normalizeTimeframe((req.query.timeframe as string) ?? profile.timeframe);
       const endMs = Date.now();
       const startMs = endMs - periodDays * DAY_MS;
+      const userKey = getUserId(req) || req.ip || "anon";
+      const cacheKey = `${userKey}:${resolved.strategy.id}:${periodDays}:${timeframe}:insights`;
+      const cached = insightsCache.get(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
 
       const result = await loadCandles({
         symbol: profile.symbol,
@@ -94,16 +128,20 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
         startMs,
         endMs,
         allowLargeRange: true,
+        downsampleToMaxBars: INVEST_DOWNSAMPLE_MAX_BARS,
       });
 
       if (result.candles.length === 0) {
-        return res.json({
+        const emptyResponse = {
           trades: [],
           metrics: emptyMetrics,
-          timeframe,
+          timeframe: result.effectiveTimeframe,
+          requestedTimeframe: result.requestedTimeframe,
           periodDays,
           symbol: profile.symbol,
-        });
+        };
+        insightsCache.set(cacheKey, emptyResponse);
+        return res.json(emptyResponse);
       }
 
       const config = profile.defaultConfig as StrategyConfig;
@@ -113,17 +151,20 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
         config,
         meta: {
           symbol: profile.symbol,
-          timeframe,
+          timeframe: result.effectiveTimeframe,
         },
       });
 
-      res.json({
+      const response = {
         trades,
         metrics,
-        timeframe,
+        timeframe: result.effectiveTimeframe,
+        requestedTimeframe: result.requestedTimeframe,
         periodDays,
         symbol: profile.symbol,
-      });
+      };
+      insightsCache.set(cacheKey, response);
+      res.json(response);
     } catch (error) {
       console.error("Invest insights error:", error);
       res.status(500).json({ error: "Internal server error" });

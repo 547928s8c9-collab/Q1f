@@ -48,18 +48,27 @@ describe("GET /api/invest/strategies/:id/candles", () => {
       candles: [{ ts: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }],
       gaps: [],
       source: "cache",
+      requestedTimeframe: "15m",
+      effectiveTimeframe: "15m",
+      downsampled: false,
     });
   });
 
   it("returns candles with metadata", async () => {
     const app = express();
-    registerInvestRoutes({ app, isAuthenticated: (_req, _res, next) => next(), devOnly: (_req, _res, next) => next() });
+    registerInvestRoutes({
+      app,
+      isAuthenticated: (_req, _res, next) => next(),
+      devOnly: (_req, _res, next) => next(),
+      getUserId: () => "user-1",
+    });
 
     const res = await request(app).get("/api/invest/strategies/strategy-1/candles?timeframe=15m&period=7");
 
     expect(res.status).toBe(200);
     expect(res.body.symbol).toBe("BTCUSDT");
     expect(res.body.timeframe).toBe("15m");
+    expect(res.body.requestedTimeframe).toBe("15m");
     expect(res.body.periodDays).toBe(7);
     expect(res.body.candles).toHaveLength(1);
   });
