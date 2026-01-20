@@ -20,7 +20,6 @@ import DepositUSDT from "@/pages/deposit/usdt";
 import DepositCard from "@/pages/deposit/card";
 import Withdraw from "@/pages/withdraw";
 import Activity from "@/pages/activity/index";
-import ActivityEvents from "@/pages/activity/events";
 import Receipt from "@/pages/activity/receipt";
 import Settings from "@/pages/settings/index";
 import SecuritySettings from "@/pages/settings/security";
@@ -48,7 +47,6 @@ function ProtectedRouter() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/dashboard" component={Dashboard} />
-          <Route path="/risk" component={Risk} />
           <Route path="/analytics" component={Analytics} />
           <Route path="/invest" component={Invest} />
           <Route path="/invest/:id" component={StrategyDetail} />
@@ -58,8 +56,7 @@ function ProtectedRouter() {
           <Route path="/deposit/usdt" component={DepositUSDT} />
           <Route path="/deposit/card" component={DepositCard} />
           <Route path="/withdraw" component={Withdraw} />
-          <Route path="/activity" component={ActivityEvents} />
-          <Route path="/activity/transactions" component={Activity} />
+          <Route path="/activity" component={Activity} />
           <Route path="/activity/:operationId" component={Receipt} />
           <Route path="/settings" component={Settings} />
           <Route path="/settings/security" component={SecuritySettings} />
