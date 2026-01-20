@@ -77,6 +77,8 @@ interface InvestCandlesResponse {
   source: string;
   symbol: string;
   timeframe: Timeframe;
+  requestedTimeframe?: Timeframe;
+  effectiveTimeframe?: Timeframe;
   periodDays: number;
 }
 
@@ -84,6 +86,8 @@ interface InvestInsightsResponse {
   trades: InvestTrade[];
   metrics: InvestMetrics;
   timeframe: Timeframe;
+  requestedTimeframe?: Timeframe;
+  effectiveTimeframe?: Timeframe;
   periodDays: number;
   symbol: string;
 }
@@ -120,8 +124,11 @@ export default function StrategyDetail() {
     queryKey: ["/api/strategies", params.id],
   });
 
+  const performanceQueryKey = useMemo(() => (
+    ["/api/strategies", params.id, "performance", { days: periodDays.toString() }]
+  ), [params.id, periodDays]);
   const { data: performance, isLoading: perfLoading, error: perfError } = useQuery<StrategyPerformance[]>({
-    queryKey: ["/api/strategies", params.id, "performance", { days: periodDays.toString() }],
+    queryKey: performanceQueryKey,
   });
 
   const { data: payoutInstruction } = useQuery<PayoutInstruction | null>({
@@ -138,32 +145,36 @@ export default function StrategyDetail() {
     enabled: !!params.id,
   });
 
+  const candlesQueryKey = useMemo(() => ([
+    "/api/invest/strategies",
+    params.id,
+    "candles",
+    { timeframe: chartTimeframe, period: periodDays.toString() },
+  ]), [params.id, chartTimeframe, periodDays]);
   const {
     data: candleResponse,
     isLoading: candlesLoading,
     error: candlesError,
   } = useQuery<InvestCandlesResponse>({
-    queryKey: [
-      "/api/invest/strategies",
-      params.id,
-      "candles",
-      { timeframe: chartTimeframe, period: periodDays.toString() },
-    ],
+    queryKey: candlesQueryKey,
     enabled: !!params.id,
+    staleTime: 60_000,
   });
 
+  const insightsQueryKey = useMemo(() => ([
+    "/api/invest/strategies",
+    params.id,
+    "insights",
+    { timeframe: chartTimeframe, period: periodDays.toString() },
+  ]), [params.id, chartTimeframe, periodDays]);
   const {
     data: insightsResponse,
     isLoading: insightsLoading,
     error: insightsError,
   } = useQuery<InvestInsightsResponse>({
-    queryKey: [
-      "/api/invest/strategies",
-      params.id,
-      "insights",
-      { timeframe: chartTimeframe, period: periodDays.toString() },
-    ],
+    queryKey: insightsQueryKey,
     enabled: !!params.id,
+    staleTime: 60_000,
   });
 
   const minInvestmentMajor = useMemo(() => {
@@ -314,6 +325,11 @@ export default function StrategyDetail() {
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
+  const effectiveTimeframe = candleResponse?.effectiveTimeframe ?? candleResponse?.timeframe ?? chartTimeframe;
+  const requestedTimeframe = candleResponse?.requestedTimeframe ?? chartTimeframe;
+  const downsampledLabel = requestedTimeframe !== effectiveTimeframe
+    ? ` · ${effectiveTimeframe} (downsampled)`
+    : ` · ${effectiveTimeframe}`;
   const benchmarkLabel = candleResponse?.symbol ? `${candleResponse.symbol} Benchmark` : "Market Benchmark";
 
   return (
@@ -475,7 +491,7 @@ export default function StrategyDetail() {
                 <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {periodDays}D · {candleData.length} candles · {candleResponse?.source ?? "source"}
+                    {periodDays}D · {candleData.length} candles{downsampledLabel} · {candleResponse?.source ?? "source"}
                   </span>
                   {candleData[candleData.length - 1] && (
                     <span className="tabular-nums">
