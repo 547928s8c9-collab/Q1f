@@ -32,18 +32,6 @@ const investRateLimiter = rateLimit({
   max: 10, // 10 requests per minute
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false },
-  // Use userId if available (after auth), otherwise fallback to IP
-  keyGenerator: (req: Request): string => {
-    // Try to get userId from request (if authenticated)
-    const user = (req as any).user;
-    if (user?.id || user?.claims?.sub) {
-      return `invest:${user.id || user.claims.sub}`;
-    }
-    // Fallback to IP
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    return `invest:ip:${ip}`;
-  },
   handler: (req, res) => {
     res.status(429).json(fail("RATE_LIMITED", "Too many invest/withdraw requests. Please try again in a minute."));
   },
