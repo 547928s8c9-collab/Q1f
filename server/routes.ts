@@ -282,14 +282,17 @@ function getUserId(req: Request): string {
 async function acquireIdempotencyLock(
   req: Request,
   userId: string,
-  endpoint: string
+  endpoint: string,
+  options?: { fallbackToRequestId?: boolean }
 ): Promise<
   | { acquired: true; keyId: string }
   | { acquired: false; cached: true; status: number; body: any }
   | { acquired: false; cached: false }
 > {
-  const idempotencyKey = req.headers["idempotency-key"];
-  if (!idempotencyKey || typeof idempotencyKey !== "string") {
+  const headerKey = req.headers["idempotency-key"];
+  const fallbackKey = options?.fallbackToRequestId ? req.requestId : undefined;
+  const idempotencyKey = typeof headerKey === "string" ? headerKey : fallbackKey;
+  if (!idempotencyKey) {
     return { acquired: false, cached: false };
   }
 
@@ -853,7 +856,7 @@ export async function registerRoutes(
     
     try {
       // Acquire idempotency lock (atomic)
-      lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint, { fallbackToRequestId: true });
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -941,7 +944,7 @@ export async function registerRoutes(
     
     try {
       // Acquire idempotency lock (atomic)
-      lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint, { fallbackToRequestId: true });
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -1029,7 +1032,7 @@ export async function registerRoutes(
     
     try {
       // Acquire idempotency lock (atomic)
-      lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint, { fallbackToRequestId: true });
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -1131,7 +1134,8 @@ export async function registerRoutes(
         }
 
         // Calculate new balance with invariant check
-        const newAvailable = BigInt(currentBalance.available) - BigInt(amount);
+        const balanceBefore = BigInt(currentBalance.available);
+        const newAvailable = balanceBefore - BigInt(amount);
         assertNonNegative(newAvailable, "USDT balance");
 
         // Update balance atomically
@@ -1143,11 +1147,17 @@ export async function registerRoutes(
         const [existingPos] = await tx.select().from(positions)
           .where(and(eq(positions.userId, userId), eq(positions.strategyId, strategyId)));
         
+        const allocatedBefore = BigInt(existingPos?.principalMinor || existingPos?.principal || "0");
+        const investedBefore = BigInt(existingPos?.investedCurrentMinor || existingPos?.currentValue || "0");
+
         if (existingPos) {
           const newLegacyPrincipal = (BigInt(existingPos.principal || "0") + BigInt(amount)).toString();
           const newLegacyCurrent = (BigInt(existingPos.currentValue || "0") + BigInt(amount)).toString();
           const newPrincipalMinor = (BigInt(existingPos.principalMinor || existingPos.principal || "0") + BigInt(amount)).toString();
           const newInvestedCurrentMinor = (BigInt(existingPos.investedCurrentMinor || existingPos.currentValue || "0") + BigInt(amount)).toString();
+
+          assertNonNegative(BigInt(newPrincipalMinor), "allocated principal");
+          assertNonNegative(BigInt(newInvestedCurrentMinor), "invested current");
 
           await tx.update(positions)
             .set({
@@ -1159,6 +1169,7 @@ export async function registerRoutes(
             })
             .where(eq(positions.id, existingPos.id));
         } else {
+          assertNonNegative(BigInt(amount), "allocated principal");
           await tx.insert(positions).values({
             userId,
             strategyId,
@@ -1197,6 +1208,12 @@ export async function registerRoutes(
             amountMinor: amount,
             asset: "USDT",
             strategyId,
+            balanceBeforeMinor: balanceBefore.toString(),
+            balanceAfterMinor: newAvailable.toString(),
+            allocatedBeforeMinor: allocatedBefore.toString(),
+            allocatedAfterMinor: (allocatedBefore + BigInt(amount)).toString(),
+            investedBeforeMinor: investedBefore.toString(),
+            investedAfterMinor: (investedBefore + BigInt(amount)).toString(),
             idempotencyKey: req.headers["idempotency-key"] || null,
             requestId: req.requestId,
           },
@@ -1400,7 +1417,7 @@ export async function registerRoutes(
     
     try {
       // Acquire idempotency lock (atomic)
-      lock = await acquireIdempotencyLock(req, userId, endpoint);
+      lock = await acquireIdempotencyLock(req, userId, endpoint, { fallbackToRequestId: true });
       if (!lock.acquired) {
         if (lock.cached) {
           return res.status(lock.status).json(lock.body);
@@ -1525,7 +1542,8 @@ export async function registerRoutes(
         }
 
         // Calculate new balance with invariant check
-        const newAvailable = BigInt(currentBalance.available) - totalDeduct;
+        const balanceBefore = BigInt(currentBalance.available);
+        const newAvailable = balanceBefore - totalDeduct;
         assertNonNegative(newAvailable, "USDT balance");
 
         // Update balance atomically
@@ -1573,6 +1591,8 @@ export async function registerRoutes(
             feeMinor: fee,
             asset: "USDT",
             operationId: op.id,
+            balanceBeforeMinor: balanceBefore.toString(),
+            balanceAfterMinor: newAvailable.toString(),
             idempotencyKey: req.headers["idempotency-key"] || null,
             requestId: req.requestId,
           },
@@ -2643,142 +2663,200 @@ export async function registerRoutes(
 
   // POST /api/jobs/accrue-daily - Apply daily strategy returns to positions (dev only)
   app.post("/api/jobs/accrue-daily", isAuthenticated, devOnly, async (req, res) => {
+    const endpoint = "/api/jobs/accrue-daily";
+    let lock: Awaited<ReturnType<typeof acquireIdempotencyLock>> | null = null;
+
     try {
+      lock = await acquireIdempotencyLock(req, getUserId(req), endpoint, { fallbackToRequestId: true });
+      if (!lock.acquired) {
+        if (lock.cached) {
+          return res.status(lock.status).json(lock.body);
+        }
+      }
+
       const today = new Date().toISOString().split("T")[0];
-      const positions = await storage.getAllPositions();
+      const allPositions = await storage.getAllPositions();
       const results: Array<{ positionId: string; accrued: string; status: string; ddBreached?: boolean }> = [];
 
-      for (const position of positions) {
-        // Skip paused positions from accrual
+      for (const position of allPositions) {
         if (position.paused) {
           results.push({ positionId: position.id, accrued: "0", status: "paused" });
           continue;
         }
 
-        // Skip if already accrued today
-        if (position.lastAccrualDate === today) {
-          results.push({ positionId: position.id, accrued: "0", status: "already_processed" });
-          continue;
-        }
-
-        const invested = BigInt(position.investedCurrentMinor || position.currentValue || "0");
-        if (invested <= 0n) {
-          results.push({ positionId: position.id, accrued: "0", status: "no_investment" });
-          continue;
-        }
-
-        // Get strategy for return calculation (demo: use expected range)
         const strategy = await storage.getStrategy(position.strategyId);
         if (!strategy) {
           results.push({ positionId: position.id, accrued: "0", status: "strategy_not_found" });
           continue;
         }
 
-        // Demo: calculate daily return based on monthly range (divide by 30)
-        const monthlyBps = (strategy.expectedMonthlyRangeBpsMin || 300) + 
-          Math.floor(Math.random() * ((strategy.expectedMonthlyRangeBpsMax || 500) - (strategy.expectedMonthlyRangeBpsMin || 300)));
-        const dailyBps = Math.round(monthlyBps / 30);
-        
-        // Apply return (can be negative for HIGH risk strategies occasionally)
-        const isNegativeDay = strategy.riskTier === "HIGH" && Math.random() < 0.1;
-        const effectiveBps = isNegativeDay ? -dailyBps : dailyBps;
-        
-        const profitMinor = (invested * BigInt(effectiveBps)) / 10000n;
-        const newInvested = invested + profitMinor;
-        
-        // Accrued profit payable only increases for positive returns
-        const currentAccrued = BigInt(position.accruedProfitPayableMinor || "0");
-        const newAccrued = profitMinor > 0n ? currentAccrued + profitMinor : currentAccrued;
+        const result = await withTransaction(async (tx) => {
+          const [currentPosition] = await tx.select().from(positions)
+            .where(eq(positions.id, position.id));
 
-        // Check for drawdown breach (if auto-pause enabled with DD limit)
-        let ddBreached = false;
-        const principal = BigInt(position.principalMinor || "0");
-        if (position.autoPauseEnabled && position.ddLimitPct > 0 && principal > 0n) {
-          // Calculate drawdown: (principal - current) / principal * 100
-          const drawdownPct = principal > newInvested 
-            ? Number(((principal - newInvested) * 100n) / principal)
-            : 0;
-          
-          if (drawdownPct >= position.ddLimitPct) {
-            ddBreached = true;
-            
-            // Auto-pause the position
-            await storage.updatePosition(position.id, {
+          if (!currentPosition) {
+            return { positionId: position.id, accrued: "0", status: "missing" };
+          }
+
+          if (currentPosition.paused) {
+            return { positionId: position.id, accrued: "0", status: "paused" };
+          }
+
+          if (currentPosition.lastAccrualDate === today) {
+            return { positionId: position.id, accrued: "0", status: "already_processed" };
+          }
+
+          const invested = BigInt(currentPosition.investedCurrentMinor || currentPosition.currentValue || "0");
+          if (invested <= 0n) {
+            return { positionId: position.id, accrued: "0", status: "no_investment" };
+          }
+
+          const monthlyBps = (strategy.expectedMonthlyRangeBpsMin || 300) + 
+            Math.floor(Math.random() * ((strategy.expectedMonthlyRangeBpsMax || 500) - (strategy.expectedMonthlyRangeBpsMin || 300)));
+          const dailyBps = Math.round(monthlyBps / 30);
+          const isNegativeDay = strategy.riskTier === "HIGH" && Math.random() < 0.1;
+          const effectiveBps = isNegativeDay ? -dailyBps : dailyBps;
+
+          const profitMinor = (invested * BigInt(effectiveBps)) / 10000n;
+          const newInvested = invested + profitMinor;
+          assertNonNegative(newInvested, "invested current");
+
+          const currentAccrued = BigInt(currentPosition.accruedProfitPayableMinor || "0");
+          const newAccrued = profitMinor > 0n ? currentAccrued + profitMinor : currentAccrued;
+
+          let ddBreached = false;
+          const principal = BigInt(currentPosition.principalMinor || "0");
+          if (currentPosition.autoPauseEnabled && currentPosition.ddLimitPct > 0 && principal > 0n) {
+            const drawdownPct = principal > newInvested
+              ? Number(((principal - newInvested) * 100n) / principal)
+              : 0;
+
+            if (drawdownPct >= currentPosition.ddLimitPct) {
+              ddBreached = true;
+
+              await tx.update(positions)
+                .set({
+                  investedCurrentMinor: newInvested.toString(),
+                  accruedProfitPayableMinor: newAccrued.toString(),
+                  currentValue: newInvested.toString(),
+                  lastAccrualDate: today,
+                  paused: true,
+                  pausedAt: new Date(),
+                  pausedReason: "dd_breach",
+                  updatedAt: new Date(),
+                })
+                .where(eq(positions.id, currentPosition.id));
+
+              await tx.insert(auditLogs).values({
+                userId: currentPosition.userId,
+                event: "DD_BREACH_AUTO_PAUSE",
+                resourceType: "position",
+                resourceId: currentPosition.id,
+                details: { 
+                  strategyId: currentPosition.strategyId,
+                  strategyName: strategy.name,
+                  ddLimitPct: currentPosition.ddLimitPct,
+                  actualDrawdownPct: drawdownPct,
+                  principal: principal.toString(),
+                  currentValue: newInvested.toString(),
+                  requestId: req.requestId,
+                },
+              });
+
+              await tx.insert(auditLogs).values({
+                userId: currentPosition.userId,
+                event: "ENGINE_TICK",
+                resourceType: "position",
+                resourceId: currentPosition.id,
+                details: {
+                  strategyId: currentPosition.strategyId,
+                  strategyName: strategy.name,
+                  investedBeforeMinor: invested.toString(),
+                  investedAfterMinor: newInvested.toString(),
+                  profitMinor: profitMinor.toString(),
+                  dailyBps: effectiveBps,
+                  ddBreached: true,
+                  idempotencyKey: req.headers["idempotency-key"] || null,
+                  requestId: req.requestId,
+                },
+              });
+
+              return {
+                positionId: currentPosition.id,
+                accrued: profitMinor.toString(),
+                status: "dd_breach_paused",
+                ddBreached: true,
+              };
+            }
+          }
+
+          await tx.update(positions)
+            .set({
               investedCurrentMinor: newInvested.toString(),
               accruedProfitPayableMinor: newAccrued.toString(),
               currentValue: newInvested.toString(),
               lastAccrualDate: today,
-              paused: true,
-              pausedAt: new Date(),
-              pausedReason: "dd_breach",
-            });
+              updatedAt: new Date(),
+            })
+            .where(eq(positions.id, currentPosition.id));
 
-            // Create audit log
-            await storage.createAuditLog({
-              userId: position.userId,
-              event: "DD_BREACH_AUTO_PAUSE",
-              resourceType: "position",
-              resourceId: position.id,
-              details: { 
-                strategyId: position.strategyId,
-                strategyName: strategy.name,
-                ddLimitPct: position.ddLimitPct,
-                actualDrawdownPct: drawdownPct,
-                principal: principal.toString(),
-                currentValue: newInvested.toString(),
-              },
-            });
+          await tx.insert(operations).values({
+            userId: currentPosition.userId,
+            type: "PROFIT_ACCRUAL",
+            status: "completed",
+            asset: "USDT",
+            amount: profitMinor.toString(),
+            strategyId: currentPosition.strategyId,
+            strategyName: strategy.name,
+            metadata: { dailyBps: effectiveBps, date: today },
+          });
 
-            // Create notification
-            await storage.createNotification({
-              userId: position.userId,
-              type: "security",
-              title: "Strategy Auto-Paused",
-              message: `Your ${strategy.name} position was automatically paused due to a ${drawdownPct.toFixed(1)}% drawdown (limit: ${position.ddLimitPct}%).`,
-              resourceType: "position",
-              resourceId: position.id,
-            });
+          await tx.insert(auditLogs).values({
+            userId: currentPosition.userId,
+            event: "ENGINE_TICK",
+            resourceType: "position",
+            resourceId: currentPosition.id,
+            details: {
+              strategyId: currentPosition.strategyId,
+              strategyName: strategy.name,
+              investedBeforeMinor: invested.toString(),
+              investedAfterMinor: newInvested.toString(),
+              profitMinor: profitMinor.toString(),
+              dailyBps: effectiveBps,
+              idempotencyKey: req.headers["idempotency-key"] || null,
+              requestId: req.requestId,
+            },
+          });
 
-            results.push({ 
-              positionId: position.id, 
-              accrued: profitMinor.toString(), 
-              status: "dd_breach_paused",
-              ddBreached: true,
-            });
-            continue;
-          }
+          return { positionId: currentPosition.id, accrued: profitMinor.toString(), status: "processed" };
+        });
+
+        if (result.ddBreached) {
+          await storage.createNotification({
+            userId: position.userId,
+            type: "security",
+            title: "Strategy Auto-Paused",
+            message: `Your ${strategy.name} position was automatically paused due to a ${position.ddLimitPct}% drawdown limit breach.`,
+            resourceType: "position",
+            resourceId: position.id,
+          });
         }
 
-        await storage.updatePosition(position.id, {
-          investedCurrentMinor: newInvested.toString(),
-          accruedProfitPayableMinor: newAccrued.toString(),
-          currentValue: newInvested.toString(), // Keep legacy field in sync
-          lastAccrualDate: today,
-        });
-
-        // Create PROFIT_ACCRUAL operation
-        await storage.createOperation({
-          userId: position.userId,
-          type: "PROFIT_ACCRUAL",
-          status: "completed",
-          asset: "USDT",
-          amount: profitMinor.toString(),
-          strategyId: position.strategyId,
-          strategyName: strategy.name,
-          metadata: { dailyBps: effectiveBps, date: today },
-        });
-
-        results.push({ 
-          positionId: position.id, 
-          accrued: profitMinor.toString(), 
-          status: "processed" 
-        });
+        results.push(result);
       }
 
-      res.json({ success: true, date: today, results });
+      const responseBody = { success: true, date: today, results };
+      if (lock.acquired) {
+        await completeIdempotency(lock.keyId, null, 200, responseBody);
+      }
+      res.json(responseBody);
     } catch (error) {
       console.error("Accrue daily error:", error);
-      res.status(500).json({ error: "Internal server error" });
+      const errorBody = { error: "Internal server error" };
+      if (lock?.acquired) {
+        await completeIdempotency(lock.keyId, null, 500, errorBody);
+      }
+      res.status(500).json(errorBody);
     }
   });
 

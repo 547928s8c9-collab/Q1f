@@ -4,10 +4,14 @@ import { adminAuth } from "./middleware/adminAuth";
 import { loadPermissions, requirePermission } from "./middleware/rbac";
 import { ok, fail, ErrorCodes } from "./http";
 import { db, withTransaction } from "../db";
+import { reconcileUser } from "../lib/ledger";
+import { z } from "zod";
 import {
   users,
   kycApplicants,
   balances,
+  vaults,
+  positions,
   operations,
   securitySettings,
   adminInboxItems,
@@ -19,7 +23,7 @@ import {
   notifications,
   type KycStatusType,
 } from "@shared/schema";
-import { eq, desc, and, lt, or, ilike, sql, count, sum, gte } from "drizzle-orm";
+import { eq, desc, and, lt, or, ilike, sql, count, sum, gte, inArray } from "drizzle-orm";
 import {
   AdminListQuery,
   encodeCursor,
@@ -121,6 +125,85 @@ adminRouter.get("/overview", requirePermission("users.read"), async (req, res) =
   } catch (error) {
     console.error("[GET /admin/overview]", error);
     fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to get overview metrics", 500);
+  }
+});
+
+adminRouter.get("/reconcile", requirePermission("money.read"), async (req, res) => {
+  try {
+    const schema = z.object({ userId: z.string().optional() });
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, "Invalid query", 400, parsed.error.issues);
+    }
+
+    const { userId } = parsed.data;
+    const userIds = userId
+      ? [userId]
+      : (await db.select({ id: users.id }).from(users)).map((row) => row.id);
+
+    if (userIds.length === 0) {
+      return ok(res, { summary: { usersChecked: 0, mismatches: 0 }, results: [] });
+    }
+
+    const statusFilter = ["pending", "processing", "completed"];
+    const [ops, balanceRows, vaultRows, positionRows] = await Promise.all([
+      db.select().from(operations).where(and(
+        inArray(operations.userId, userIds),
+        inArray(operations.status, statusFilter)
+      )),
+      db.select().from(balances).where(inArray(balances.userId, userIds)),
+      db.select().from(vaults).where(inArray(vaults.userId, userIds)),
+      db.select().from(positions).where(inArray(positions.userId, userIds)),
+    ]);
+
+    const opsByUser = new Map<string, typeof ops>();
+    for (const op of ops) {
+      const list = opsByUser.get(op.userId) ?? [];
+      list.push(op);
+      opsByUser.set(op.userId, list);
+    }
+
+    const balancesByUser = new Map<string, typeof balanceRows>();
+    for (const balance of balanceRows) {
+      const list = balancesByUser.get(balance.userId) ?? [];
+      list.push(balance);
+      balancesByUser.set(balance.userId, list);
+    }
+
+    const vaultsByUser = new Map<string, typeof vaultRows>();
+    for (const vault of vaultRows) {
+      const list = vaultsByUser.get(vault.userId) ?? [];
+      list.push(vault);
+      vaultsByUser.set(vault.userId, list);
+    }
+
+    const positionsByUser = new Map<string, typeof positionRows>();
+    for (const position of positionRows) {
+      const list = positionsByUser.get(position.userId) ?? [];
+      list.push(position);
+      positionsByUser.set(position.userId, list);
+    }
+
+    const results = userIds.map((id) => reconcileUser({
+      userId: id,
+      operations: opsByUser.get(id) ?? [],
+      balances: balancesByUser.get(id) ?? [],
+      vaults: vaultsByUser.get(id) ?? [],
+      positions: positionsByUser.get(id) ?? [],
+    }));
+
+    const mismatches = results.filter((result) => !result.ok).length;
+
+    ok(res, {
+      summary: {
+        usersChecked: results.length,
+        mismatches,
+      },
+      results,
+    });
+  } catch (error) {
+    console.error("[GET /admin/reconcile]", error);
+    fail(res, ErrorCodes.INTERNAL_ERROR, "Failed to reconcile balances", 500);
   }
 });
 
