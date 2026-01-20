@@ -14,6 +14,8 @@ export interface MarketDataSource {
 }
 
 const TIMEFRAME_MS: Record<Timeframe, number> = {
+  "1m": 60_000,
+  "5m": 300_000,
   "15m": 900000,
   "1h": 3600000,
   "1d": 86400000,

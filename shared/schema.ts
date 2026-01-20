@@ -644,7 +644,7 @@ export type MarketCandle = typeof marketCandles.$inferSelect;
 
 // ==================== MARKET DATA TYPES ====================
 // Timeframe validation
-export const VALID_TIMEFRAMES = ["15m", "1h", "1d"] as const;
+export const VALID_TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d"] as const;
 export type Timeframe = typeof VALID_TIMEFRAMES[number];
 
 // Candle DTO (numbers for API consumers)
@@ -668,6 +668,8 @@ export interface InvestTrade {
   netPnlPct: number;
   holdBars: number;
   reason: string;
+  status?: "OPEN" | "CLOSED";
+  side?: "LONG" | "SHORT";
 }
 
 export interface InvestMetrics {

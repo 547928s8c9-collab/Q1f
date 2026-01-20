@@ -21,6 +21,7 @@ import {
   notifications,
   idempotencyKeys,
   marketCandles,
+  simTrades,
   outboxEvents,
   telegramAccounts,
   users,
@@ -40,6 +41,7 @@ import {
   type InsertStrategyProfile,
   type StrategyPerformance,
   type InsertStrategyPerformance,
+  type SimTrade,
   type Position,
   type InsertPosition,
   type Operation,
@@ -112,6 +114,7 @@ export interface IStorage {
   getStrategyPerformance(strategyId: string, days?: number): Promise<StrategyPerformance[]>;
   createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance>;
   seedStrategies(): Promise<{ inserted: number; updated: number }>;
+  getSimTrades(strategyId: string, startMs: number, endMs: number): Promise<SimTrade[]>;
 
   getStrategyProfiles(): Promise<StrategyProfile[]>;
   seedStrategyProfiles(): Promise<{ inserted: number; updated: number }>;
@@ -560,6 +563,23 @@ export class DatabaseStorage implements IStorage {
   async createStrategyPerformance(perf: InsertStrategyPerformance): Promise<StrategyPerformance> {
     const [created] = await db.insert(strategyPerformance).values(perf).returning();
     return created;
+  }
+
+  async getSimTrades(strategyId: string, startMs: number, endMs: number): Promise<SimTrade[]> {
+    return db
+      .select()
+      .from(simTrades)
+      .where(
+        and(
+          eq(simTrades.strategyId, strategyId),
+          or(
+            and(gte(simTrades.entryTs, startMs), lte(simTrades.entryTs, endMs)),
+            and(gte(simTrades.exitTs, startMs), lte(simTrades.exitTs, endMs)),
+            and(eq(simTrades.status, "OPEN"), lte(simTrades.entryTs, endMs))
+          )
+        )
+      )
+      .orderBy(desc(simTrades.entryTs));
   }
 
   async seedStrategies(): Promise<{ inserted: number; updated: number }> {

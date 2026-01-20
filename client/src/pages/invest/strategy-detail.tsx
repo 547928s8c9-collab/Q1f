@@ -14,7 +14,7 @@ import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CandlestickChart, type CandlestickMarker } from "@/components/charts/candlestick-chart";
-import { CompareChart } from "@/components/charts/compare-chart";
+import { EquityBenchmarkChart, type EquitySeriesKey } from "@/components/charts/equity-benchmark-chart";
 import {
   TrendingUp,
   AlertTriangle,
@@ -28,6 +28,7 @@ import {
   Pause,
   Play,
   Activity,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -52,15 +53,20 @@ const riskConfig: Record<string, { color: string; icon: React.ElementType; label
 };
 
 const timeframeOptions: { value: Timeframe; label: string }[] = [
+  { value: "1m", label: "1m" },
+  { value: "5m", label: "5m" },
   { value: "15m", label: "15m" },
   { value: "1h", label: "1h" },
   { value: "1d", label: "1d" },
 ];
 
-const periodOptions: Array<{ value: 7 | 30 | 90; label: string }> = [
-  { value: 7, label: "7D" },
-  { value: 30, label: "30D" },
-  { value: 90, label: "90D" },
+const periodOptions: Array<{ value: number; label: string }> = [
+  { value: 1, label: "1D" },
+  { value: 7, label: "1W" },
+  { value: 30, label: "1M" },
+  { value: 90, label: "3M" },
+  { value: 365, label: "1Y" },
+  { value: 730, label: "ALL" },
 ];
 
 function toMajorUnits(minorUnits: string, decimals: number = 6): number {
@@ -88,13 +94,30 @@ interface InvestInsightsResponse {
   symbol: string;
 }
 
+interface InvestBenchmarksResponse {
+  benchmarks: {
+    sp500?: { symbol: string; candles: Candle[] };
+    btc?: { symbol: string; candles: Candle[] };
+    gold?: { symbol: string; candles: Candle[] };
+  };
+  timeframe: Timeframe;
+  periodDays: number;
+}
+
 export default function StrategyDetail() {
   const params = useParams<{ id: string }>();
   const { toast } = useToast();
-  const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
+  const [periodDays, setPeriodDays] = useState<number>(30);
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("15m");
   const [amount, setAmount] = useState("1000");
-  const [performanceView, setPerformanceView] = useState<"strategy" | "benchmark" | "both">("both");
+  const [benchmarkVisibility, setBenchmarkVisibility] = useState<Record<EquitySeriesKey, boolean>>({
+    strategy: true,
+    sp500: true,
+    btc: true,
+    gold: true,
+  });
+  const [tradeResultFilter, setTradeResultFilter] = useState<"all" | "winners" | "losers">("all");
+  const [tradeStatusFilter, setTradeStatusFilter] = useState<"all" | "open" | "closed">("all");
 
   // Payout settings state
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
@@ -162,6 +185,20 @@ export default function StrategyDetail() {
       params.id,
       "insights",
       { timeframe: chartTimeframe, period: periodDays.toString() },
+    ],
+    enabled: !!params.id,
+  });
+
+  const {
+    data: benchmarksResponse,
+    isLoading: benchmarksLoading,
+    error: benchmarksError,
+  } = useQuery<InvestBenchmarksResponse>({
+    queryKey: [
+      "/api/invest/strategies",
+      params.id,
+      "benchmarks",
+      { timeframe: "1d", period: periodDays.toString() },
     ],
     enabled: !!params.id,
   });
@@ -288,33 +325,114 @@ export default function StrategyDetail() {
   const terms = strategy?.termsJson as { profitPayout?: string; principalRedemption?: string } | null;
 
   const candleData = candleResponse?.candles ?? [];
-  const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
+  const benchmarkCandles = benchmarksResponse?.benchmarks;
+  const sp500Series = useMemo(
+    () => buildBenchmarkSeries(filteredPerf, benchmarkCandles?.sp500?.candles ?? []),
+    [filteredPerf, benchmarkCandles?.sp500?.candles]
+  );
+  const btcSeries = useMemo(
+    () => buildBenchmarkSeries(filteredPerf, benchmarkCandles?.btc?.candles ?? []),
+    [filteredPerf, benchmarkCandles?.btc?.candles]
+  );
+  const goldSeries = useMemo(
+    () => buildBenchmarkSeries(filteredPerf, benchmarkCandles?.gold?.candles ?? []),
+    [filteredPerf, benchmarkCandles?.gold?.candles]
+  );
   const trades = insightsResponse?.trades ?? [];
   const metrics = insightsResponse?.metrics;
   const chartMarkers = useMemo<CandlestickMarker[]>(() => {
     if (!trades.length) return [];
 
-    return trades.flatMap((trade) => [
-      {
+    return trades.flatMap((trade) => {
+      const markers: CandlestickMarker[] = [];
+      markers.push({
         time: trade.entryTs,
         position: "belowBar",
         color: "hsl(var(--success))",
         shape: "arrowUp",
         text: "Buy",
-      },
-      {
-        time: trade.exitTs,
-        position: "aboveBar",
-        color: "hsl(var(--danger))",
-        shape: "arrowDown",
-        text: "Sell",
-      },
-    ]);
+      });
+
+      if (trade.status !== "OPEN") {
+        markers.push({
+          time: trade.exitTs,
+          position: "aboveBar",
+          color: "hsl(var(--danger))",
+          shape: "arrowDown",
+          text: "Sell",
+        });
+      }
+
+      return markers;
+    });
   }, [trades]);
+  const candleDataInsufficient = candleData.length > 0 && candleData.length < 10;
+
+  const filteredTrades = useMemo(() => {
+    return trades.filter((trade) => {
+      if (tradeStatusFilter !== "all") {
+        const isOpen = trade.status === "OPEN";
+        if (tradeStatusFilter === "open" && !isOpen) return false;
+        if (tradeStatusFilter === "closed" && isOpen) return false;
+      }
+
+      if (tradeResultFilter !== "all") {
+        if (tradeResultFilter === "winners" && trade.netPnl <= 0) return false;
+        if (tradeResultFilter === "losers" && trade.netPnl >= 0) return false;
+      }
+
+      return true;
+    });
+  }, [trades, tradeResultFilter, tradeStatusFilter]);
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
-  const benchmarkLabel = candleResponse?.symbol ? `${candleResponse.symbol} Benchmark` : "Market Benchmark";
+  const benchmarkLabels: Record<EquitySeriesKey, string> = {
+    strategy: strategy?.name || "Strategy",
+    sp500: "S&P 500",
+    btc: "BTC",
+    gold: "Gold",
+  };
+  const benchmarkColors: Record<EquitySeriesKey, string> = {
+    strategy: "hsl(var(--primary))",
+    sp500: "hsl(var(--muted-foreground))",
+    btc: "hsl(var(--warning))",
+    gold: "hsl(var(--success))",
+  };
+
+  const keyMetrics = [
+    {
+      label: "Return",
+      value: `${strategyReturn >= 0 ? "+" : ""}${strategyReturn.toFixed(2)}%`,
+      tone: strategyReturn >= 0 ? "text-positive" : "text-negative",
+    },
+    {
+      label: "Drawdown",
+      value:
+        typeof riskControls?.currentDrawdownPct === "number" && riskControls.currentDrawdownPct > 0
+          ? `-${riskControls.currentDrawdownPct.toFixed(1)}%`
+          : "—",
+      tone:
+        typeof riskControls?.currentDrawdownPct === "number" && riskControls.currentDrawdownPct > 0
+          ? "text-negative"
+          : "text-muted-foreground",
+    },
+    {
+      label: "Win rate",
+      value: metrics ? `${metrics.winRatePct.toFixed(1)}%` : "—",
+      tone: "text-foreground",
+    },
+    {
+      label: "Trades",
+      value: metrics ? `${metrics.totalTrades}` : "—",
+      tone: "text-foreground",
+    },
+    {
+      label: "Position",
+      value: riskControls?.hasPosition ? (riskControls.paused ? "Paused" : "Open") : "Flat",
+      tone: riskControls?.hasPosition ? "text-primary" : "text-muted-foreground",
+    },
+  ];
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -366,256 +484,264 @@ export default function StrategyDetail() {
             </p>
           </div>
 
-          <Card className="p-5 mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Performance</h3>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { value: "strategy", label: "Strategy" },
-                  { value: "benchmark", label: "Benchmark" },
-                  { value: "both", label: "Both" },
-                ].map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={performanceView === option.value ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setPerformanceView(option.value as "strategy" | "benchmark" | "both")}
-                    data-testid={`button-performance-${option.value}`}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            {perfLoading ? (
-              <ChartSkeleton height={360} />
-            ) : perfError ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Unable to load performance data. Please try again shortly.
-              </div>
-            ) : strategyData.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No performance data available for this range.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <CompareChart
-                  strategyData={strategyData}
-                  benchmarkData={benchmarkData}
-                  strategyName={strategy?.name || "Strategy"}
-                  benchmarkName={benchmarkLabel}
-                  height={360}
-                  mode={performanceView}
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {periodDays}D · {strategyData.length} points
-                  </span>
-                  <span className="tabular-nums">
-                    Latest index: {lastStrategyValue.toFixed(1)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-5 mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Market Activity</h3>
-                {candleResponse?.symbol && (
-                  <Badge variant="outline" className="text-xs">
-                    {candleResponse.symbol}
-                  </Badge>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Select value={chartTimeframe} onValueChange={(value) => setChartTimeframe(value as Timeframe)}>
-                  <SelectTrigger className="w-[96px]" data-testid="select-timeframe">
-                    <SelectValue placeholder="Timeframe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {timeframeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={String(periodDays)} onValueChange={(value) => setPeriodDays(Number(value) as 7 | 30 | 90)}>
-                  <SelectTrigger className="w-[96px]" data-testid="select-period">
-                    <SelectValue placeholder="Period" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {periodOptions.map((option) => (
-                      <SelectItem key={option.value} value={String(option.value)}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {candlesLoading ? (
-              <ChartSkeleton height={360} />
-            ) : candlesError ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Unable to load market data. Please try again shortly.
-              </div>
-            ) : candleData.length === 0 ? (
-              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No candles available for this range. Try a shorter period.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {periodDays}D · {candleData.length} candles · {candleResponse?.source ?? "source"}
-                  </span>
-                  {candleData[candleData.length - 1] && (
-                    <span className="tabular-nums">
-                      Last close: {formatPrice(candleData[candleData.length - 1].close)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <Card className="p-5 lg:col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Strategy Metrics</h3>
-              </div>
-              {insightsLoading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className="h-20 rounded-xl" />
-                  ))}
-                </div>
-              ) : insightsError ? (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Unable to load strategy metrics right now.
-                </div>
-              ) : metrics ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Total Trades</p>
-                    <p className="text-xl font-semibold tabular-nums">{metrics.totalTrades}</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Win Rate</p>
-                    <p className="text-xl font-semibold tabular-nums">{metrics.winRatePct.toFixed(1)}%</p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Net P&amp;L</p>
-                    <p
-                      className={cn(
-                        "text-xl font-semibold tabular-nums",
-                        metrics.netPnl >= 0 ? "text-positive" : "text-negative"
-                      )}
-                    >
-                      {metrics.netPnl >= 0 ? "+" : ""}
-                      {metrics.netPnl.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Net P&amp;L %</p>
-                    <p className="text-xl font-semibold tabular-nums">
-                      {metrics.netPnlPct >= 0 ? "+" : ""}
-                      {metrics.netPnlPct.toFixed(2)}%
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Avg Hold</p>
-                    <p className="text-xl font-semibold tabular-nums">
-                      {metrics.avgHoldBars.toFixed(1)} bars
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Profit Factor</p>
-                    <p className="text-xl font-semibold tabular-nums">
-                      {metrics.profitFactor === Number.POSITIVE_INFINITY
-                        ? "∞"
-                        : metrics.profitFactor.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Metrics will appear once data is available.
-                </div>
-              )}
-            </Card>
-
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Trade Tape</h3>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {trades.length} trades
-                </Badge>
-              </div>
-              {insightsLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <Skeleton key={index} className="h-16 rounded-xl" />
-                  ))}
-                </div>
-              ) : insightsError ? (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Unable to load trade history.
-                </div>
-              ) : trades.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No trades for this window yet.
-                </div>
-              ) : (
-                <ScrollArea className="h-[280px] pr-3">
-                  <div className="hidden md:grid grid-cols-6 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
-                    <span className="col-span-2">Exit</span>
-                    <span>Side</span>
-                    <span>Entry</span>
-                    <span>Exit</span>
-                    <span>P&amp;L</span>
-                  </div>
-                  <div className="space-y-2">
-                    {trades.map((trade) => (
-                      <div
-                        key={trade.id}
-                        className="grid grid-cols-2 md:grid-cols-6 gap-2 items-center rounded-lg border border-border/60 p-3 text-xs"
-                      >
-                        <span className="col-span-2 md:col-span-2 text-muted-foreground">
-                          {formatDateTime(trade.exitTs)}
-                        </span>
-                        <Badge variant="outline" className="w-fit text-[10px] uppercase">
-                          Long
-                        </Badge>
-                        <span className="tabular-nums text-muted-foreground">{formatPrice(trade.entryPrice)}</span>
-                        <span className="tabular-nums text-muted-foreground">{formatPrice(trade.exitPrice)}</span>
-                        <span
-                          className={cn(
-                            "tabular-nums font-medium",
-                            trade.netPnl >= 0 ? "text-positive" : "text-negative"
-                          )}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 mb-6">
+            <div className="space-y-6">
+              <Card className="p-5">
+                <div className="flex flex-col gap-4 mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-primary" />
+                      <h3 className="text-lg font-semibold">Equity &amp; Benchmarks</h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(Object.keys(benchmarkVisibility) as EquitySeriesKey[]).map((key) => (
+                        <Button
+                          key={key}
+                          variant={benchmarkVisibility[key] ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() =>
+                            setBenchmarkVisibility((prev) => ({
+                              ...prev,
+                              [key]: !prev[key],
+                            }))
+                          }
+                          className="gap-2"
+                          data-testid={`toggle-benchmark-${key}`}
                         >
-                          {trade.netPnl >= 0 ? "+" : ""}
-                          {trade.netPnl.toFixed(2)}
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: benchmarkColors[key] }} />
+                          {benchmarkLabels[key]}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {periodDays}D · {strategyData.length} points
+                    </span>
+                    <span className="tabular-nums">
+                      Latest index: {lastStrategyValue.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+                {perfLoading || benchmarksLoading ? (
+                  <ChartSkeleton height={360} />
+                ) : perfError || benchmarksError ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Unable to load equity curve data. Please try again shortly.
+                  </div>
+                ) : strategyData.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No performance data available for this range.
+                  </div>
+                ) : (
+                  <EquityBenchmarkChart
+                    strategyData={strategyData}
+                    benchmarks={{ sp500: sp500Series, btc: btcSeries, gold: goldSeries }}
+                    visibility={benchmarkVisibility}
+                    labels={benchmarkLabels}
+                    height={360}
+                  />
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <div className="flex flex-col gap-4 mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-primary" />
+                      <h3 className="text-lg font-semibold">Market Activity</h3>
+                      {candleResponse?.symbol && (
+                        <Badge variant="outline" className="text-xs">
+                          {candleResponse.symbol}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Timeframe</span>
+                      {timeframeOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          variant={chartTimeframe === option.value ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => setChartTimeframe(option.value)}
+                          className="h-8 px-3 text-xs"
+                          data-testid={`chip-timeframe-${option.value}`}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Period</span>
+                    {periodOptions.map((option) => (
+                      <Button
+                        key={option.value}
+                        variant={periodDays === option.value ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={() => setPeriodDays(option.value)}
+                        className="h-8 px-3 text-xs"
+                        data-testid={`chip-period-${option.label}`}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {candlesLoading ? (
+                  <ChartSkeleton height={360} />
+                ) : candlesError ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Unable to load market data. Please try again shortly.
+                  </div>
+                ) : candleData.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No candles available for this range. Try a shorter period.
+                  </div>
+                ) : candleDataInsufficient ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Not enough candles to render a reliable view yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <CandlestickChart candles={candleData} markers={chartMarkers} height={360} />
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span>
+                        {periodDays}D · {candleData.length} candles · {candleResponse?.source ?? "source"}
+                      </span>
+                      {candleData[candleData.length - 1] && (
+                        <span className="tabular-nums">
+                          Last close: {formatPrice(candleData[candleData.length - 1].close)}
                         </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Key Metrics</h3>
+                </div>
+                {insightsLoading ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <Skeleton key={index} className="h-20 rounded-xl" />
+                    ))}
+                  </div>
+                ) : insightsError ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Unable to load strategy metrics right now.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {keyMetrics.map((metric) => (
+                      <div key={metric.label} className="rounded-xl border border-border/60 p-4">
+                        <p className="text-xs text-muted-foreground uppercase">{metric.label}</p>
+                        <p className={cn("text-lg font-semibold tabular-nums", metric.tone)}>{metric.value}</p>
                       </div>
                     ))}
                   </div>
-                </ScrollArea>
-              )}
-            </Card>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-primary" />
+                    <h3 className="text-lg font-semibold">Trade Tape</h3>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {filteredTrades.length}/{trades.length} trades
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  {["all", "winners", "losers"].map((filter) => (
+                    <Button
+                      key={filter}
+                      variant={tradeResultFilter === filter ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTradeResultFilter(filter as "all" | "winners" | "losers")}
+                      className="h-8 px-3 text-xs"
+                      data-testid={`filter-trade-result-${filter}`}
+                    >
+                      {filter === "all" ? "All" : filter === "winners" ? "Winners" : "Losers"}
+                    </Button>
+                  ))}
+                  {["all", "open", "closed"].map((filter) => (
+                    <Button
+                      key={filter}
+                      variant={tradeStatusFilter === filter ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTradeStatusFilter(filter as "all" | "open" | "closed")}
+                      className="h-8 px-3 text-xs"
+                      data-testid={`filter-trade-status-${filter}`}
+                    >
+                      {filter === "all" ? "All" : filter === "open" ? "Open" : "Closed"}
+                    </Button>
+                  ))}
+                </div>
+                {insightsLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <Skeleton key={index} className="h-16 rounded-xl" />
+                    ))}
+                  </div>
+                ) : insightsError ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    Unable to load trade history.
+                  </div>
+                ) : filteredTrades.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    No trades match the selected filters.
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[320px] pr-3">
+                    <div className="hidden md:grid grid-cols-6 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
+                      <span className="col-span-2">Exit</span>
+                      <span>Side</span>
+                      <span>Entry</span>
+                      <span>Exit</span>
+                      <span>P&amp;L</span>
+                    </div>
+                    <div className="space-y-2">
+                      {filteredTrades.map((trade) => {
+                        const isOpen = trade.status === "OPEN";
+                        return (
+                          <div
+                            key={trade.id}
+                            className="grid grid-cols-2 md:grid-cols-6 gap-2 items-center rounded-lg border border-border/60 p-3 text-xs"
+                          >
+                            <span className="col-span-2 md:col-span-2 text-muted-foreground">
+                              {isOpen ? "Open" : formatDateTime(trade.exitTs)}
+                            </span>
+                            <Badge variant="outline" className="w-fit text-[10px] uppercase">
+                              {trade.side ?? "Long"}
+                            </Badge>
+                            <span className="tabular-nums text-muted-foreground">{formatPrice(trade.entryPrice)}</span>
+                            <span className="tabular-nums text-muted-foreground">
+                              {isOpen ? "—" : formatPrice(trade.exitPrice)}
+                            </span>
+                            <span
+                              className={cn(
+                                "tabular-nums font-medium",
+                                trade.netPnl >= 0 ? "text-positive" : "text-negative"
+                              )}
+                            >
+                              {trade.netPnl >= 0 ? "+" : ""}
+                              {trade.netPnl.toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </Card>
+            </div>
           </div>
 
           <Card className="p-5 mb-6">

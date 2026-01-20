@@ -135,7 +135,16 @@ export function createDbSimTraderStore(): SimTraderStore {
 }
 
 export function computeDriftPerBar(monthlyBps: number, timeframe: Timeframe): number {
-  const minutes = timeframe === "15m" ? 15 : timeframe === "1h" ? 60 : 1440;
+  const minutes =
+    timeframe === "1m"
+      ? 1
+      : timeframe === "5m"
+        ? 5
+        : timeframe === "15m"
+          ? 15
+          : timeframe === "1h"
+            ? 60
+            : 1440;
   const barsPerMonth = Math.max(1, Math.round((30 * 24 * 60) / minutes));
   return (monthlyBps / 10_000) / barsPerMonth;
 }

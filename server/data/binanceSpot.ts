@@ -135,6 +135,8 @@ export class BinanceSpotDataSource {
 
   private timeframeToInterval(tf: Timeframe): string {
     switch (tf) {
+      case "1m": return "1m";
+      case "5m": return "5m";
       case "15m": return "15m";
       case "1h": return "1h";
       case "1d": return "1d";
@@ -143,6 +145,8 @@ export class BinanceSpotDataSource {
 
   private timeframeToMs(tf: Timeframe): number {
     switch (tf) {
+      case "1m": return 60_000;
+      case "5m": return 300_000;
       case "15m": return 900000;
       case "1h": return 3600000;
       case "1d": return 86400000;
