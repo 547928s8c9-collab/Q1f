@@ -24,6 +24,7 @@
     "coverage": "vitest run --coverage",
     "audit:fix": "npm audit fix",
     "smoke": "tsx scripts/smoke-test.ts",
+    "tg:bundle-check": "tsx scripts/check-tg-bundle.ts",
     "market:bootstrap": "tsx -e \"import('./server/market/binanceVisionImporter.js').then(m => import('./server/app/marketUniverse.js').then(u => import('./server/storage.js').then(s => { const storage = s.storage; u.getMarketUniverse(storage).then(universe => m.bootstrapUniverse(universe, {monthsBack:6, daysBackForCurrentMonth:14}, storage).then(r => { console.log('Bootstrap complete:', r); process.exit(0); }))); })))\"",
     "market:calibrate": "tsx -e \"import('./server/app/marketCalibrationService.js').then(m => import('./server/app/marketUniverse.js').then(u => import('./server/storage.js').then(s => { const storage = s.storage; u.getMarketUniverse(storage).then(universe => Promise.all(universe.map(market => m.calibrateFromDb({exchange:market.exchange, symbol:market.symbol, timeframe:market.timeframe, windowDays:180}).catch(e => ({reason: e.message}))))).then(results => { console.log('Calibration complete:', results); process.exit(0); }); })))\"",
     "strategies:calibrate": "tsx scripts/calibrate-strategies.ts"

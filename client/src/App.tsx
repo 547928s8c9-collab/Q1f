@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -10,65 +11,78 @@ import { GateGuard } from "@/components/onboarding/gate-guard";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
-import Analytics from "@/pages/analytics";
-import Invest from "@/pages/invest/index";
-import StrategyDetail from "@/pages/invest/strategy-detail";
-import InvestConfirm from "@/pages/invest/confirm";
-import Wallet from "@/pages/wallet/index";
-import Vaults from "@/pages/wallet/vaults";
-import DepositUSDT from "@/pages/deposit/usdt";
-import DepositCard from "@/pages/deposit/card";
-import Withdraw from "@/pages/withdraw";
-import Activity from "@/pages/activity/index";
-import Receipt from "@/pages/activity/receipt";
-import Settings from "@/pages/settings/index";
-import SecuritySettings from "@/pages/settings/security";
-import Statements from "@/pages/statements";
-import StatusPage from "@/pages/status";
-import OnboardingWelcome from "@/pages/onboarding/index";
-import OnboardingVerify from "@/pages/onboarding/verify";
-import OnboardingConsent from "@/pages/onboarding/consent";
-import OnboardingKyc from "@/pages/onboarding/kyc";
-import OnboardingDone from "@/pages/onboarding/done";
-import SmartStart from "@/pages/onboarding/smart-start";
-import SmartStartResults from "@/pages/onboarding/smart-start-results";
-import Inbox from "@/pages/inbox";
-import Dashboard from "@/pages/dashboard";
-import AdminKyc from "@/pages/admin/kyc";
-import AdminWithdrawals from "@/pages/admin/withdrawals";
-import AdminDashboard from "@/pages/admin/dashboard";
-import TelegramMiniApp from "@/pages/tg";
+const Analytics = React.lazy(() => import("@/pages/analytics"));
+const Invest = React.lazy(() => import("@/pages/invest/index"));
+const StrategyDetail = React.lazy(() => import("@/pages/invest/strategy-detail"));
+const InvestConfirm = React.lazy(() => import("@/pages/invest/confirm"));
+const Wallet = React.lazy(() => import("@/pages/wallet/index"));
+const Vaults = React.lazy(() => import("@/pages/wallet/vaults"));
+const DepositUSDT = React.lazy(() => import("@/pages/deposit/usdt"));
+const DepositCard = React.lazy(() => import("@/pages/deposit/card"));
+const Withdraw = React.lazy(() => import("@/pages/withdraw"));
+const Activity = React.lazy(() => import("@/pages/activity/index"));
+const ActivityEvents = React.lazy(() => import("@/pages/activity/events"));
+const Receipt = React.lazy(() => import("@/pages/activity/receipt"));
+const Settings = React.lazy(() => import("@/pages/settings/index"));
+const SecuritySettings = React.lazy(() => import("@/pages/settings/security"));
+const Statements = React.lazy(() => import("@/pages/statements"));
+const StatusPage = React.lazy(() => import("@/pages/status"));
+const OnboardingWelcome = React.lazy(() => import("@/pages/onboarding/index"));
+const OnboardingVerify = React.lazy(() => import("@/pages/onboarding/verify"));
+const OnboardingConsent = React.lazy(() => import("@/pages/onboarding/consent"));
+const OnboardingKyc = React.lazy(() => import("@/pages/onboarding/kyc"));
+const OnboardingDone = React.lazy(() => import("@/pages/onboarding/done"));
+const SmartStart = React.lazy(() => import("@/pages/onboarding/smart-start"));
+const SmartStartResults = React.lazy(() => import("@/pages/onboarding/smart-start-results"));
+const Inbox = React.lazy(() => import("@/pages/inbox"));
+const Dashboard = React.lazy(() => import("@/pages/dashboard"));
+const AdminKyc = React.lazy(() => import("@/pages/admin/kyc"));
+const AdminWithdrawals = React.lazy(() => import("@/pages/admin/withdrawals"));
+const AdminDashboard = React.lazy(() => import("@/pages/admin/dashboard"));
+const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
+const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
 import { Loader2 } from "lucide-react";
+import Risk from "@/pages/risk";
 
 function ProtectedRouter() {
   return (
     <GateGuard>
       <AppShell>
-        <Switch>
-          <Route path="/" component={Home} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/analytics" component={Analytics} />
-          <Route path="/invest" component={Invest} />
-          <Route path="/invest/:id" component={StrategyDetail} />
-          <Route path="/invest/:id/confirm" component={InvestConfirm} />
-          <Route path="/wallet" component={Wallet} />
-          <Route path="/wallet/vaults" component={Vaults} />
-          <Route path="/deposit/usdt" component={DepositUSDT} />
-          <Route path="/deposit/card" component={DepositCard} />
-          <Route path="/withdraw" component={Withdraw} />
-          <Route path="/activity" component={Activity} />
-          <Route path="/activity/:operationId" component={Receipt} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/settings/security" component={SecuritySettings} />
-          <Route path="/statements" component={Statements} />
-          <Route path="/status" component={StatusPage} />
-          <Route path="/inbox" component={Inbox} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/dashboard" component={AdminDashboard} />
-          <Route path="/admin/kyc" component={AdminKyc} />
-          <Route path="/admin/withdrawals" component={AdminWithdrawals} />
-          <Route component={NotFound} />
-        </Switch>
+        <Suspense
+          fallback={(
+            <div className="min-h-screen flex items-center justify-center bg-background">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        >
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/dashboard" component={Dashboard} />
+            <Route path="/risk" component={Risk} />
+            <Route path="/analytics" component={Analytics} />
+            <Route path="/invest" component={Invest} />
+            <Route path="/invest/:id" component={StrategyDetail} />
+            <Route path="/invest/:id/confirm" component={InvestConfirm} />
+            <Route path="/wallet" component={Wallet} />
+            <Route path="/wallet/vaults" component={Vaults} />
+            <Route path="/deposit/usdt" component={DepositUSDT} />
+            <Route path="/deposit/card" component={DepositCard} />
+            <Route path="/withdraw" component={Withdraw} />
+            <Route path="/activity" component={ActivityEvents} />
+            <Route path="/activity/transactions" component={Activity} />
+            <Route path="/activity/:operationId" component={Receipt} />
+            <Route path="/settings" component={Settings} />
+            <Route path="/settings/security" component={SecuritySettings} />
+            <Route path="/statements" component={Statements} />
+            <Route path="/status" component={StatusPage} />
+            <Route path="/inbox" component={Inbox} />
+            <Route path="/admin" component={AdminDashboard} />
+            <Route path="/admin/dashboard" component={AdminDashboard} />
+            <Route path="/admin/kyc" component={AdminKyc} />
+            <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
       </AppShell>
     </GateGuard>
   );
@@ -119,11 +133,21 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <Toaster />
-          <Switch>
-            <Route path="/tg" component={TelegramMiniApp} />
-            <Route path="/telegram" component={TelegramMiniApp} />
-            <Route component={AuthenticatedApp} />
-          </Switch>
+          <Suspense
+            fallback={(
+              <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          >
+            <Switch>
+              <Route path="/tg" component={TelegramMiniAppV2} />
+              <Route path="/tg/v2" component={TelegramMiniAppV2} />
+              <Route path="/tg/legacy" component={TelegramMiniAppLegacy} />
+              <Route path="/telegram" component={TelegramMiniAppV2} />
+              <Route component={AuthenticatedApp} />
+            </Switch>
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
