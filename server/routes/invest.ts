@@ -38,6 +38,11 @@ function parseLimit(raw: string | undefined, fallback: number): number {
   return Math.min(parsed, fallback);
 }
 
+function selectMostRecent<T>(candles: T[], maxBars: number): T[] {
+  if (candles.length <= maxBars) return candles;
+  return candles.slice(-maxBars);
+}
+
 function downsampleCandles(candles: Array<{ ts: number }>, maxPoints: number) {
   if (candles.length <= maxPoints) return candles;
   const step = Math.ceil(candles.length / maxPoints);
@@ -109,9 +114,11 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
         startMs,
         endMs,
         maxBars: Math.max(candleLimit * 4, candleLimit),
+        allowLargeRange: true,
       });
 
-      const candles = downsampleCandles(result.candles, candleLimit);
+      const recentCandles = selectMostRecent(result.candles, Math.max(candleLimit * 4, candleLimit));
+      const candles = downsampleCandles(recentCandles, candleLimit);
 
       res.json({
         ...result,
@@ -147,9 +154,11 @@ export function registerInvestRoutes({ app }: RouteDeps): void {
         startMs,
         endMs,
         maxBars: Math.max(candleLimit * 4, candleLimit),
+        allowLargeRange: true,
       });
 
-      const candles = downsampleCandles(result.candles, candleLimit);
+      const recentCandles = selectMostRecent(result.candles, Math.max(candleLimit * 4, candleLimit));
+      const candles = downsampleCandles(recentCandles, candleLimit);
 
       if (candles.length === 0) {
         return res.json({

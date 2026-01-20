@@ -67,6 +67,29 @@ describe("GET /api/invest/strategies/:id/candles", () => {
     expect(res.body.candles).toHaveLength(1);
   });
 
+  it("preserves the most recent candles when limiting", async () => {
+    const app = express();
+    registerInvestRoutes({ app, isAuthenticated: (_req, _res, next) => next(), devOnly: (_req, _res, next) => next() });
+
+    mockedLoadCandles.mockResolvedValue({
+      candles: [
+        { ts: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+        { ts: 2, open: 2, high: 2, low: 2, close: 2, volume: 2 },
+        { ts: 3, open: 3, high: 3, low: 3, close: 3, volume: 3 },
+        { ts: 4, open: 4, high: 4, low: 4, close: 4, volume: 4 },
+      ],
+      gaps: [],
+      source: "cache",
+    });
+
+    const res = await request(app).get("/api/invest/strategies/strategy-1/candles?timeframe=15m&period=7&limit=2");
+
+    expect(res.status).toBe(200);
+    expect(res.body.candles).toHaveLength(2);
+    expect(res.body.candles[0].ts).toBe(3);
+    expect(res.body.candles[1].ts).toBe(4);
+  });
+
   it("lists invest strategies", async () => {
     const app = express();
     registerInvestRoutes({ app, isAuthenticated: (_req, _res, next) => next(), devOnly: (_req, _res, next) => next() });
