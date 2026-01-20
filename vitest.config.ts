@@ -4,9 +4,10 @@ import path from "path";
 export default defineConfig({
   test: {
     globals: true,
-    environment: "node",
-    include: ["**/*.test.ts"],
-    exclude: ["node_modules", ".cache"],
+    environment: "jsdom",
+    environmentMatchGlobs: [["server/**", "node"]],
+    include: ["**/__tests__/**/*.test.ts?(x)", "**/*.test.ts?(x)"],
+    exclude: ["node_modules", ".cache", "dist"],
     testTimeout: 30000,
   },
   resolve: {
