@@ -206,6 +206,20 @@ describe("Invest API Endpoints", () => {
         expect(candle.low).toBeLessThanOrEqual(candle.close);
       }
     });
+
+    it("should respect limit parameter", async () => {
+      if (!testStrategyId) {
+        return;
+      }
+
+      const response = await request(app)
+        .get(`/api/invest/strategies/${testStrategyId}/candles?periodDays=30&limit=50`)
+        .expect(200);
+
+      const candles = response.body.data.candles;
+      expect(Array.isArray(candles)).toBe(true);
+      expect(candles.length).toBeLessThanOrEqual(50);
+    });
   });
 
   describe("POST /api/invest/strategies/:id/invest", () => {

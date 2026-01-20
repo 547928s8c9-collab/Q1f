@@ -347,7 +347,7 @@ export function CandlestickChart({
 
   return (
     <div className="relative w-full" style={{ height }}>
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className="w-full h-full" data-testid="candlestick-chart" />
       {tooltip && (
         <div
           className="absolute rounded-md border border-border/60 bg-card/95 px-3 py-2 text-xs shadow-lg text-muted-foreground"

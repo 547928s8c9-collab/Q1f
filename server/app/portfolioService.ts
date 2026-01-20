@@ -1,7 +1,4 @@
 import { storage } from "../storage";
-import { db } from "../db";
-import { simAllocations } from "@shared/schema";
-import { eq, and, sql } from "drizzle-orm";
 
 export interface StrategyAllocationSummary {
   strategyId: string;
@@ -89,28 +86,15 @@ export function reconcilePortfolio(
 }
 
 export async function getPortfolioSummary(userId: string): Promise<PortfolioSummary> {
-  const [balances, positions, activeAllocations] = await Promise.all([
+  const [balances, positions] = await Promise.all([
     storage.getBalances(userId),
     storage.getPositions(userId),
-    // Get sum of all ACTIVE allocations for this user
-    db.select({
-      total: sql<string>`COALESCE(SUM(CAST(${simAllocations.amountMinor} AS BIGINT)), 0)::text`,
-    })
-      .from(simAllocations)
-      .where(and(
-        eq(simAllocations.userId, userId),
-        eq(simAllocations.status, "ACTIVE")
-      )),
   ]);
 
   const usdtBalance = balances.find((b) => b.asset === "USDT");
   const balanceAvailable = BigInt(usdtBalance?.available ?? "0");
-  const totalAllocated = BigInt(activeAllocations[0]?.total ?? "0");
-  
-  // availableCashMinor = max(0, balances.available - sumAllocations)
-  const availableCashMinor = (balanceAvailable > totalAllocated 
-    ? balanceAvailable - totalAllocated 
-    : 0n).toString();
+  // balances.available already reflects invest/withdraw deductions
+  const availableCashMinor = (balanceAvailable < 0n ? 0n : balanceAvailable).toString();
 
   // Batch fetch latest equity snapshots for all strategies (lightweight version)
   const equitySnapshotsArray = await storage.getLatestSimEquitySnapshotsForUserLightweight(userId);

@@ -215,42 +215,18 @@ describe("Portfolio Service", () => {
   });
 
   describe("Available cash calculation with allocations", () => {
-    it("should subtract ACTIVE allocations from available balance", async () => {
-      // This test requires a real database connection
-      // In a real scenario, we'd mock storage and db, but for now we'll test the logic
-      // balance=1000, allocations=400 -> available=600
-      
+    it("should use the current available balance without double-subtracting allocations", async () => {
       const balanceAvailable = BigInt("1000000000"); // 1000 USDT in minor units
-      const totalAllocated = BigInt("400000000"); // 400 USDT in minor units
-      
-      // availableCashMinor = max(0, balances.available - sumAllocations)
-      const availableCashMinor = (balanceAvailable > totalAllocated 
-        ? balanceAvailable - totalAllocated 
-        : 0n).toString();
-      
-      expect(availableCashMinor).toBe("600000000"); // 600 USDT
-    });
+      const availableCashMinor = balanceAvailable.toString();
 
-    it("should return 0 if allocations exceed balance", async () => {
-      const balanceAvailable = BigInt("1000000000"); // 1000 USDT
-      const totalAllocated = BigInt("1500000000"); // 1500 USDT (more than balance)
-      
-      const availableCashMinor = (balanceAvailable > totalAllocated 
-        ? balanceAvailable - totalAllocated 
-        : 0n).toString();
-      
-      expect(availableCashMinor).toBe("0");
-    });
-
-    it("should handle zero allocations", async () => {
-      const balanceAvailable = BigInt("1000000000"); // 1000 USDT
-      const totalAllocated = BigInt("0"); // No allocations
-      
-      const availableCashMinor = (balanceAvailable > totalAllocated 
-        ? balanceAvailable - totalAllocated 
-        : 0n).toString();
-      
       expect(availableCashMinor).toBe("1000000000"); // Full balance available
+    });
+
+    it("should never return negative available cash", async () => {
+      const balanceAvailable = BigInt("-1000000000"); // Defensive guard for bad data
+      const availableCashMinor = (balanceAvailable < 0n ? 0n : balanceAvailable).toString();
+
+      expect(availableCashMinor).toBe("0");
     });
   });
 
