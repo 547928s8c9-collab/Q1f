@@ -5,10 +5,8 @@ import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "luci
 import { useToast } from "@/hooks/use-toast";
 
 // Check if demo endpoints should be shown
-// Show demo buttons only if: NODE_ENV !== "production" AND ALLOW_DEMO_ENDPOINTS === "true"
-const isDevMode = import.meta.env.MODE !== "production";
-const allowDemoEndpoints = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
-const showDemoButtons = isDevMode && allowDemoEndpoints;
+// Show demo buttons if VITE_ALLOW_DEMO_ENDPOINTS is explicitly set to "true"
+const showDemoButtons = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
 export default function Landing() {
   const { toast } = useToast();
