@@ -61,6 +61,9 @@ export default function DepositCard() {
     ? (Number(amountInKopeks) / 100 / usdtRubRate).toFixed(2)
     : "0.00";
 
+  const infoBannerText =
+    "Deposits are simulated for demo purposes. Use any amount to preview the USDT conversion.";
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
       <PageHeader title="Card Deposit" subtitle="Top up with bank card" backHref="/wallet" />
@@ -121,11 +124,12 @@ export default function DepositCard() {
         </div>
       </Card>
 
-      <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-        <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-muted-foreground">
+      {infoBannerText ? (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
+          <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-muted-foreground">{infoBannerText}</div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
