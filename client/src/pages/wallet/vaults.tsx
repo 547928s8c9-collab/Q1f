@@ -8,7 +8,9 @@ import { VaultCard } from "@/components/vault/vault-card";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
+import { createIdempotencyKey } from "@/lib/idempotency";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { updateBootstrapAfterTransfer } from "@/lib/vaults";
 import { type BootstrapResponse, type VaultData, formatMoney, parseMoney } from "@shared/schema";
 import {
   Dialog,
@@ -56,11 +58,25 @@ export default function Vaults() {
 
   const transferMutation = useMutation({
     mutationFn: async (data: { fromVault: string; toVault: string; amount: string }) => {
-      return apiRequest("POST", "/api/vault/transfer", data);
+      return apiRequest(
+        "POST",
+        "/api/vault/transfer",
+        data,
+        { headers: { "Idempotency-Key": createIdempotencyKey("vault_transfer") } },
+      );
     },
-    onSuccess: () => {
+    onSuccess: (_response, variables) => {
+      queryClient.setQueryData<BootstrapResponse>(["/api/bootstrap"], (current) => {
+        if (!current) return current;
+        return updateBootstrapAfterTransfer(current, {
+          fromVault: variables.fromVault as "wallet" | "principal" | "profit" | "taxes",
+          toVault: variables.toVault as "wallet" | "principal" | "profit" | "taxes",
+          amount: variables.amount,
+        });
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       toast({ title: "Transfer successful" });
       setTransferDialog({ ...transferDialog, open: false });
       setAmount("");
