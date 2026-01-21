@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, AlertTriangle, XCircle, Clock, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, Clock, RefreshCw, AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 interface ComponentStatus {
@@ -87,13 +88,14 @@ function StatusSkeleton() {
 }
 
 export default function StatusPage() {
-  const { data: status, isLoading, refetch, isFetching } = useQuery<SystemStatus>({
+  const { data: status, isLoading, isError, error, refetch, isFetching } = useQuery<SystemStatus>({
     queryKey: ["/api/status"],
     refetchInterval: 30000,
   });
 
   const overallConfig = status ? statusConfig[status.overall] : statusConfig.operational;
   const OverallIcon = overallConfig.icon;
+  const errorMessage = error instanceof Error ? error.message : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -105,6 +107,18 @@ export default function StatusPage() {
       <div className="flex-1 overflow-auto px-4 pb-24 space-y-6">
         {isLoading ? (
           <StatusSkeleton />
+        ) : isError ? (
+          <Card className="p-6">
+            <EmptyState
+              icon={AlertCircle}
+              title="Unable to load system status"
+              description={errorMessage || "We couldn't fetch the latest status. Please try again."}
+              action={{
+                label: "Retry",
+                onClick: () => refetch(),
+              }}
+            />
+          </Card>
         ) : status ? (
           <>
             <Card 
