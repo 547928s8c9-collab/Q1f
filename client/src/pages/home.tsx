@@ -409,11 +409,15 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
     );
   }
 
-  const profitPercent = bootstrap!.invested.principal !== "0"
-    ? ((Number(BigInt(bootstrap!.invested.current) - BigInt(bootstrap!.invested.principal)) / 
-        Number(bootstrap!.invested.principal)) * 100).toFixed(2)
+  const invested = bootstrap?.invested;
+  const current = invested?.current || "0";
+  const principal = invested?.principal || "0";
+  
+  const profitPercent = principal !== "0"
+    ? ((Number(BigInt(current) - BigInt(principal)) / 
+        Number(principal)) * 100).toFixed(2)
     : "0.00";
-  const isProfit = BigInt(bootstrap!.invested.current) >= BigInt(bootstrap!.invested.principal);
+  const isProfit = BigInt(current) >= BigInt(principal);
 
   return (
     <Card className="p-4">
@@ -429,7 +433,7 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
         </Link>
       </div>
       <p className="text-2xl font-bold tabular-nums" data-testid="text-invested-value">
-        {formatMoney(bootstrap!.invested.current, "USDT")}
+        {formatMoney(current, "USDT")}
         <span className="text-sm font-normal text-muted-foreground ml-1">USDT</span>
       </p>
       <p className={`text-xs ${isProfit ? "text-positive" : "text-negative"}`}>
