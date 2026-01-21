@@ -20,10 +20,11 @@ import {
 import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
 
 function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
-  const totalPortfolio = bootstrap
-    ? (BigInt(bootstrap.balances.USDT.available) + 
-       BigInt(bootstrap.balances.USDT.locked) +
-       BigInt(bootstrap.invested.current)).toString()
+  const usdtBalance = bootstrap?.balances?.USDT;
+  const totalPortfolio = bootstrap && usdtBalance
+    ? (BigInt(usdtBalance.available || "0") + 
+       BigInt(usdtBalance.locked || "0") +
+       BigInt(bootstrap.invested?.current || "0")).toString()
     : "0";
 
   const todaySeries = bootstrap?.portfolioSeries || [];
@@ -113,12 +114,15 @@ function QuickActions({
 }
 
 function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
-  const hasBalances = bootstrap && 
-    (BigInt(bootstrap.balances.USDT.available) > 0n ||
-      BigInt(bootstrap.balances.USDT.locked) > 0n ||
-      BigInt(bootstrap.balances.RUB.available) > 0n ||
-      BigInt(bootstrap.balances.RUB.locked) > 0n ||
-      BigInt(bootstrap.invested.current) > 0n);
+  const usdtBal = bootstrap?.balances?.USDT;
+  const rubBal = bootstrap?.balances?.RUB;
+  const hasBalances = bootstrap && (
+    BigInt(usdtBal?.available || "0") > 0n ||
+    BigInt(usdtBal?.locked || "0") > 0n ||
+    BigInt(rubBal?.available || "0") > 0n ||
+    BigInt(rubBal?.locked || "0") > 0n ||
+    BigInt(bootstrap.invested?.current || "0") > 0n
+  );
 
   if (isLoading) {
     return (
@@ -180,13 +184,13 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
             <div className="flex items-baseline justify-end gap-2">
               <span className="text-xs text-muted-foreground">Available</span>
               <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-usdt">
-                {formatMoney(bootstrap!.balances.USDT.available, "USDT")}
+                {formatMoney(usdtBal?.available || "0", "USDT")}
               </span>
             </div>
             <div className="flex items-baseline justify-end gap-2">
               <span className="text-xs text-muted-foreground">Invested</span>
               <span className="text-xs font-medium tabular-nums" data-testid="text-balance-usdt-invested">
-                {formatMoney(bootstrap!.invested.current, "USDT")}
+                {formatMoney(bootstrap?.invested?.current || "0", "USDT")}
               </span>
             </div>
           </div>
@@ -199,7 +203,7 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
             <span className="text-sm font-medium">RUB</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-rub">
-            {formatMoney(bootstrap!.balances.RUB.available, "RUB")}
+            {formatMoney(rubBal?.available || "0", "RUB")}
           </span>
         </div>
       </div>
@@ -208,8 +212,11 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
 }
 
 function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
-  const hasVaults = bootstrap && 
-    (BigInt(bootstrap.vaults.principal.balance) > 0n || BigInt(bootstrap.vaults.profit.balance) > 0n);
+  const principalVault = bootstrap?.vaults?.principal;
+  const profitVault = bootstrap?.vaults?.profit;
+  const hasVaults = bootstrap && (
+    BigInt(principalVault?.balance || "0") > 0n || BigInt(profitVault?.balance || "0") > 0n
+  );
 
   if (isLoading) {
     return (
@@ -268,7 +275,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <span className="text-sm font-medium">Principal</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-principal">
-            {formatMoney(bootstrap!.vaults.principal.balance, "USDT")}
+            {formatMoney(principalVault?.balance || "0", "USDT")}
           </span>
         </div>
         <div className="flex items-center justify-between py-2">
@@ -279,7 +286,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <span className="text-sm font-medium">Profit</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-profit">
-            {formatMoney(bootstrap!.vaults.profit.balance, "USDT")}
+            {formatMoney(profitVault?.balance || "0", "USDT")}
           </span>
         </div>
       </div>
@@ -369,7 +376,7 @@ function StrategiesPreview({ strategies, isLoading }: { strategies?: Strategy[];
 }
 
 function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
-  const hasInvested = bootstrap && BigInt(bootstrap.invested.current) > 0n;
+  const hasInvested = bootstrap && BigInt(bootstrap.invested?.current || "0") > 0n;
 
   if (isLoading) {
     return (

@@ -147,7 +147,7 @@ export function registerCoreRoutes({ app, isAuthenticated, getUserId }: RouteDep
         user: {
           id: user.id,
           email: user.email,
-          name: user.name,
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || null,
         },
         balances,
         vaults,

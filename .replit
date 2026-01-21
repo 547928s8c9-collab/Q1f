@@ -49,3 +49,7 @@ ADMIN_SUPER_EMAIL = "Unosekoj30re8@icloud.com"
 SIM_ENABLED = "1"
 SIM_SPEED = "1"
 SIM_LAG_MS = "900000"
+
+[userenv.development]
+ALLOW_DEMO_ENDPOINTS = "true"
+VITE_ALLOW_DEMO_ENDPOINTS = "true"

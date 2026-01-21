@@ -43,6 +43,13 @@ export function registerAuthRoutes(app: Express): void {
         whitelistEnabled: false,
       });
 
+      // Create approved KYC applicant record for demo user
+      await storage.upsertKycApplicant(DEMO_USER_ID, {
+        status: "APPROVED",
+        level: "BASIC",
+        reviewedAt: new Date(),
+      });
+
       // Add some demo balance for the user to explore
       await storage.updateBalance(DEMO_USER_ID, "USDT", "10000000000", "0"); // 10,000 USDT
       await storage.updateBalance(DEMO_USER_ID, "RUB", "50000000", "0"); // 500,000 RUB
@@ -131,6 +138,23 @@ export function registerAuthRoutes(app: Express): void {
           profileImageUrl: null,
         });
       }
+
+      // Initialize user data and set as fully onboarded
+      await storage.ensureUserData(DEMO_ADMIN_USER_ID);
+      await storage.updateSecuritySettings(DEMO_ADMIN_USER_ID, {
+        contactVerified: true,
+        consentAccepted: true,
+        kycStatus: "approved",
+        twoFactorEnabled: false,
+        whitelistEnabled: false,
+      });
+      
+      // Create approved KYC applicant record for demo admin
+      await storage.upsertKycApplicant(DEMO_ADMIN_USER_ID, {
+        status: "APPROVED",
+        level: "BASIC",
+        reviewedAt: new Date(),
+      });
 
       // Find or create admin_users entry
       let [admin] = await db

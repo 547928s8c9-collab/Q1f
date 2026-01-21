@@ -62,23 +62,7 @@ const telegramEngineStatusLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests" } },
-  validate: { xForwardedForHeader: false },
-  keyGenerator: (req) => {
-    const header = req.headers.authorization;
-    const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
-    if (token) {
-      try {
-        const payload = verifyTelegramJwt(token);
-        if (payload.telegramUserId) {
-          return `tg-engine:${payload.telegramUserId}`;
-        }
-      } catch {
-        // fallback to IP
-      }
-    }
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    return `tg-engine:ip:${ip}`;
-  },
+  validate: { xForwardedForHeader: false, default: false },
 });
 
 function ok<T>(data: T) {
