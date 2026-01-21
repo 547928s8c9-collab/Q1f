@@ -53,3 +53,7 @@ SIM_LAG_MS = "900000"
 [userenv.development]
 ALLOW_DEMO_ENDPOINTS = "true"
 VITE_ALLOW_DEMO_ENDPOINTS = "true"
+
+[userenv.production]
+ALLOW_DEMO_ENDPOINTS = "true"
+VITE_ALLOW_DEMO_ENDPOINTS = "true"
