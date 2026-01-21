@@ -148,7 +148,7 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
         </div>
         <div className="text-center py-4">
           <p className="text-sm text-muted-foreground mb-3">No funds yet</p>
-          <Link href="/wallet/deposit">
+          <Link href="/deposit/usdt">
             <Button size="sm" data-testid="button-first-deposit">
               <Plus className="w-4 h-4 mr-1" />
               Make first deposit
