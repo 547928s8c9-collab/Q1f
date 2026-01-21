@@ -25,6 +25,9 @@ const ActivityEvents = React.lazy(() => import("@/pages/activity/events"));
 const Receipt = React.lazy(() => import("@/pages/activity/receipt"));
 const Settings = React.lazy(() => import("@/pages/settings/index"));
 const SecuritySettings = React.lazy(() => import("@/pages/settings/security"));
+const SettingsProfile = React.lazy(() => import("@/pages/settings/profile"));
+const SettingsNotifications = React.lazy(() => import("@/pages/settings/notifications"));
+const SettingsSupport = React.lazy(() => import("@/pages/settings/support"));
 const Statements = React.lazy(() => import("@/pages/statements"));
 const StatusPage = React.lazy(() => import("@/pages/status"));
 const OnboardingWelcome = React.lazy(() => import("@/pages/onboarding/index"));
@@ -73,6 +76,9 @@ function ProtectedRouter() {
             <Route path="/activity/:operationId" component={Receipt} />
             <Route path="/settings" component={Settings} />
             <Route path="/settings/security" component={SecuritySettings} />
+            <Route path="/settings/profile" component={SettingsProfile} />
+            <Route path="/settings/notifications" component={SettingsNotifications} />
+            <Route path="/settings/support" component={SettingsSupport} />
             <Route path="/statements" component={Statements} />
             <Route path="/status" component={StatusPage} />
             <Route path="/inbox" component={Inbox} />
