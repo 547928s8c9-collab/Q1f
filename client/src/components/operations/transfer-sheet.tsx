@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { createIdempotencyKey } from "@/lib/idempotency";
 import { apiRequest } from "@/lib/queryClient";
+import { updateBootstrapAfterTransfer } from "@/lib/vaults";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,7 +142,7 @@ function TransferFlow({
         fromVault,
         toVault,
         amount: minorAmount,
-      });
+      }, { headers: { "Idempotency-Key": createIdempotencyKey("vault_transfer") } });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.message || data.error || "Transfer failed");
@@ -151,8 +153,13 @@ function TransferFlow({
       setStatus("success");
       setOperationId(data.operation?.id || null);
       setStep("result");
+      queryClient.setQueryData<BootstrapResponse>(["/api/bootstrap"], (current) => {
+        if (!current) return current;
+        return updateBootstrapAfterTransfer(current, { fromVault, toVault, amount: minorAmount });
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
         title: "Transfer complete",
         description: `${formatMoney(minorAmount, "USDT")} USDT transferred`,
