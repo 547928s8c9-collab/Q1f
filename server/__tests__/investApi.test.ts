@@ -9,8 +9,13 @@ import request from "supertest";
 import express from "express";
 import { createServer } from "http";
 import { registerRoutes } from "../routes";
+import { authStorage } from "../replit_integrations/auth/storage";
+import { db } from "../db";
+import { simTrades } from "@shared/schema";
+import { and, asc, eq } from "drizzle-orm";
 
 const TEST_USER_ID = "test-user-api";
+const OTHER_USER_ID = "test-user-api-other";
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const describeDb = hasDatabaseUrl ? describe : describe.skip;
 
@@ -22,6 +27,11 @@ describeDb("Invest API Endpoints", () => {
 
   beforeAll(async () => {
     ({ storage } = await import("../storage"));
+
+    await Promise.all([
+      authStorage.upsertUser({ id: TEST_USER_ID, email: `${TEST_USER_ID}@example.com` }),
+      authStorage.upsertUser({ id: OTHER_USER_ID, email: `${OTHER_USER_ID}@example.com` }),
+    ]);
 
     app = express();
     app.use(express.json());
@@ -567,6 +577,80 @@ describeDb("Invest API Endpoints", () => {
           expect(response1.body.data.trades[0].id).not.toBe(response2.body.data.trades[0].id);
         }
       }
+    });
+  });
+
+  describe("GET /api/invest/strategies/:id/trade-events", () => {
+    it("should return events for an older tradeId beyond the latest 1000", async () => {
+      if (!testStrategyId) {
+        return;
+      }
+
+      const now = Date.now();
+      const trades = Array.from({ length: 1001 }, (_unused, index) => ({
+        userId: TEST_USER_ID,
+        strategyId: testStrategyId,
+        symbol: "BTCUSDT",
+        side: "LONG",
+        status: "CLOSED",
+        entryTs: now - (1001 - index) * 1000,
+        exitTs: now - (1001 - index) * 1000,
+        entryPrice: "100",
+        exitPrice: "101",
+        qty: "1",
+        grossPnlMinor: "0",
+        feesMinor: "0",
+        netPnlMinor: "0",
+      }));
+
+      await db.insert(simTrades).values(trades);
+
+      const [oldestTrade] = await db.select()
+        .from(simTrades)
+        .where(and(eq(simTrades.userId, TEST_USER_ID), eq(simTrades.strategyId, testStrategyId)))
+        .orderBy(asc(simTrades.exitTs))
+        .limit(1);
+
+      if (!oldestTrade) {
+        throw new Error("Failed to insert trades for trade-events test");
+      }
+
+      const response = await request(app)
+        .get(`/api/invest/strategies/${testStrategyId}/trade-events?tradeId=${oldestTrade.id}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty("ok", true);
+      expect(response.body.data).toHaveProperty("events");
+      expect(Array.isArray(response.body.data.events)).toBe(true);
+    });
+
+    it("should return 404 for tradeId not owned by user", async () => {
+      if (!testStrategyId) {
+        return;
+      }
+
+      const [otherUserTrade] = await db.insert(simTrades).values({
+        userId: OTHER_USER_ID,
+        strategyId: testStrategyId,
+        symbol: "BTCUSDT",
+        side: "LONG",
+        status: "CLOSED",
+        entryTs: Date.now(),
+        exitTs: Date.now(),
+        entryPrice: "100",
+        exitPrice: "101",
+        qty: "1",
+        grossPnlMinor: "0",
+        feesMinor: "0",
+        netPnlMinor: "0",
+      }).returning();
+
+      const response = await request(app)
+        .get(`/api/invest/strategies/${testStrategyId}/trade-events?tradeId=${otherUserTrade.id}`)
+        .expect(404);
+
+      expect(response.body).toHaveProperty("ok", false);
+      expect(response.body.error).toHaveProperty("code", "NOT_FOUND");
     });
   });
 });

@@ -295,9 +295,7 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
         return res.status(400).json(fail("MISSING_TRADE_ID", "tradeId query parameter is required"));
       }
 
-      // Verify trade belongs to user and strategy
-      const trades = await storage.getSimTrades(userId, req.params.id, 0, Date.now(), 1000);
-      const trade = trades.trades.find((t) => t.id === tradeId);
+      const trade = await storage.getSimTradeById(userId, req.params.id, tradeId);
       if (!trade) {
         return res.status(404).json(fail("NOT_FOUND", "Trade not found"));
       }
