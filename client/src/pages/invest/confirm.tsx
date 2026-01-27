@@ -51,7 +51,7 @@ export default function InvestConfirm() {
   });
 
   const isLoading = strategyLoading || bootstrapLoading;
-  const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const availableBalance = bootstrap?.balances?.USDT?.available || "0";
   const minInvestment = strategy?.minInvestment || "1000000";
 
   const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";

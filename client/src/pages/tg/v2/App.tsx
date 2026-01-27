@@ -35,7 +35,8 @@ type TradeEvent = NonNullable<NonNullable<TgTradeEventsResponse["data"]>["events
 
 const REFRESH_INTERVAL = 12_000;
 
-function getTotalBalanceMinor(balances: Array<{ asset: string; available: string; locked: string }>) {
+function getTotalBalanceMinor(balances: Array<{ asset: string; available: string; locked: string }> | undefined) {
+  if (!balances) return "0";
   return balances
     .filter((balance) => balance.asset === "USDT")
     .reduce((acc, balance) => acc + BigInt(balance.available) + BigInt(balance.locked), BigInt(0))

@@ -21,12 +21,12 @@ export default function Analytics() {
   const calculateCashflow = () => {
     if (!bootstrap) return { netDeposits: "0", invested: "0", realizedPnl: "0", unrealizedPnl: "0" };
 
-    const invested = bootstrap.invested.current;
-    const principal = bootstrap.invested.principal;
+    const invested = bootstrap.invested?.current || "0";
+    const principal = bootstrap.invested?.principal || "0";
     const unrealizedPnl = (BigInt(invested) - BigInt(principal)).toString();
 
     return {
-      netDeposits: bootstrap.balances.USDT.available,
+      netDeposits: bootstrap.balances?.USDT?.available || "0",
       invested: invested,
       realizedPnl: "0",
       unrealizedPnl,

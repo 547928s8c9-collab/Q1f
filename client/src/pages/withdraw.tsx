@@ -57,7 +57,7 @@ export default function Withdraw() {
     },
   });
 
-  const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const availableBalance = bootstrap?.balances?.USDT?.available || "0";
   const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
   const isValidAmount = BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
   const finalAddress = selectedWhitelist || address;

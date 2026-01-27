@@ -102,14 +102,14 @@ export default function Wallet() {
             <>
               <CurrencyCard
                 asset="USDT"
-                available={bootstrap.balances.USDT.available}
+                available={bootstrap.balances?.USDT?.available || "0"}
                 invested={investedCurrent}
                 onDeposit={() => handleDeposit("USDT")}
                 onWithdraw={handleWithdraw}
               />
               <CurrencyCard
                 asset="RUB"
-                available={bootstrap.balances.RUB.available}
+                available={bootstrap.balances?.RUB?.available || "0"}
                 onDeposit={() => handleDeposit("RUB")}
               />
             </>
@@ -188,7 +188,7 @@ export default function Wallet() {
 
         {isLoading ? (
           <BalanceCardSkeleton />
-        ) : bootstrap && (
+        ) : bootstrap && bootstrap.vaults && (
           <VaultSummaryCard
             principal={bootstrap.vaults.principal}
             profit={bootstrap.vaults.profit}
