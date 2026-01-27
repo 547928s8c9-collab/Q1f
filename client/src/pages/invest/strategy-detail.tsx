@@ -38,13 +38,20 @@ import {
   type Timeframe,
   formatMoney,
 } from "@shared/schema";
-import type { InvestCandlesResponse, InvestInsightsResponse } from "@shared/contracts/invest";
+import type {
+  InvestCandlesResponse,
+  InvestInsightsResponse,
+  InvestTradeEventsResponse,
+} from "@shared/contracts/invest";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
 import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
+import { computeSlippageFromEvents, toNumber } from "@/lib/trades";
+
+type TradeEvent = NonNullable<NonNullable<InvestTradeEventsResponse["data"]>["events"]>[number];
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -183,7 +190,7 @@ export default function StrategyDetail() {
     queryFn: async () => {
       const url = `/api/invest/strategies/${params.id}/trades?limit=100${tradesCursor ? `&cursor=${tradesCursor}` : ""}`;
       const response = await apiRequest<{ ok: true; data: { trades: any[]; nextCursor?: string } }>("GET", url);
-      return response;
+      return response.json();
     },
     enabled: !!params.id,
   });
@@ -192,13 +199,13 @@ export default function StrategyDetail() {
   const {
     data: tradeEventsResponse,
     isLoading: tradeEventsLoading,
-  } = useQuery({
+  } = useQuery<InvestTradeEventsResponse | null>({
     queryKey: ["/api/invest/strategies", params.id, "trade-events", selectedTradeId],
     queryFn: async () => {
       if (!selectedTradeId) return null;
       const url = `/api/invest/strategies/${params.id}/trade-events?tradeId=${selectedTradeId}`;
       const response = await apiRequest<{ ok: true; data: { events: any[] } }>("GET", url);
-      return response;
+      return response.json();
     },
     enabled: !!selectedTradeId && tradeDetailsOpen,
   });
@@ -1110,7 +1117,7 @@ function TradeDetailsContent({
 }: { 
   tradeId: string; 
   trades: any[]; 
-  events: any[]; 
+  events: TradeEvent[]; 
   loading: boolean;
 }) {
   const trade = trades.find((t) => t.id === tradeId);
@@ -1124,11 +1131,8 @@ function TradeDetailsContent({
   }
 
   const sortedEvents = [...events].sort((a, b) => a.ts - b.ts);
-  const entryEvent = sortedEvents.find((e) => e.type === "FILLED");
-  const exitEvent = sortedEvents.find((e) => e.type === "CLOSED");
-  
   const fee = parseFloat(trade.feesMinor || "0") / 1_000_000;
-  const slippage = 0; // TODO: calculate from events
+  const slippage = computeSlippageFromEvents(sortedEvents, trade.qty);
   const netPnl = trade.netPnl || 0;
 
   return (
@@ -1163,7 +1167,7 @@ function TradeDetailsContent({
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Slippage</span>
           <span className="text-sm font-medium tabular-nums">
-            ${slippage.toFixed(2)}
+            {slippage === null ? "—" : `$${slippage.toFixed(2)}`}
           </span>
         </div>
         <div className="flex items-center justify-between">
@@ -1194,7 +1198,12 @@ function TradeDetailsContent({
           </div>
         ) : (
           <div className="space-y-3">
-          {sortedEvents.map((event, index) => (
+          {sortedEvents.map((event, index) => {
+            const payloadPrice = toNumber(event.payloadJson?.price);
+            const payloadQty = toNumber(event.payloadJson?.qty);
+            const intendedPrice = toNumber(event.payloadJson?.intendedPrice);
+
+            return (
             <div key={event.id || index} className="flex gap-3">
               <div className="flex flex-col items-center">
                 <div className={cn(
@@ -1224,12 +1233,12 @@ function TradeDetailsContent({
                   <div className="text-xs text-muted-foreground">
                     {event.type === "FILLED" || event.type === "CLOSED" ? (
                       <>
-                        Price: ${event.payloadJson.price?.toFixed(2) || "0.00"} · 
-                        Qty: {event.payloadJson.qty?.toFixed(4) || "0.0000"}
+                        Price: ${payloadPrice !== null ? payloadPrice.toFixed(2) : "—"} · 
+                        Qty: {payloadQty !== null ? payloadQty.toFixed(4) : "—"}
                       </>
                     ) : event.type === "TRADE_INTENT" ? (
                       <>
-                        Intended: ${event.payloadJson.intendedPrice?.toFixed(2) || "0.00"} · 
+                        Intended: ${intendedPrice !== null ? intendedPrice.toFixed(2) : "—"} · 
                         {event.payloadJson.reason || ""}
                       </>
                     ) : null}
@@ -1237,7 +1246,8 @@ function TradeDetailsContent({
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         )}
       </div>
