@@ -912,7 +912,6 @@ export function registerTelegramRoutes({ app, isAuthenticated, getUserId }: Rout
 
         const providedSecret = req.headers["x-telegram-bot-api-secret-token"] as string | undefined;
         if (providedSecret !== webhookSecret) {
-          logger.warn("Invalid webhook secret", "telegram-webhook", { provided: !!providedSecret });
           return res.status(401).json({ ok: false, error: "Unauthorized" });
         }
       }
