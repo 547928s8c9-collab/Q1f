@@ -14,13 +14,21 @@ function toMajorUnits(minorUnits: string, decimals: number = 6): number {
 }
 
 interface VaultSummaryCardProps {
-  principal: VaultData;
-  profit: VaultData;
-  taxes: VaultData;
+  principal?: VaultData;
+  profit?: VaultData;
+  taxes?: VaultData;
   asset?: string;
   onTransfer?: () => void;
   onViewDetails?: () => void;
 }
+
+const defaultVaultData: VaultData = {
+  balance: "0",
+  goalName: null,
+  goalAmount: null,
+  autoSweepPct: 0,
+  autoSweepEnabled: false,
+};
 
 const vaultItems = [
   {
@@ -50,21 +58,25 @@ const vaultItems = [
 ] as const;
 
 export function VaultSummaryCard({
-  principal,
-  profit,
-  taxes,
+  principal = defaultVaultData,
+  profit = defaultVaultData,
+  taxes = defaultVaultData,
   asset = "USDT",
   onTransfer,
   onViewDetails,
 }: VaultSummaryCardProps) {
   const decimals = asset === "USDT" ? 6 : 2;
+  const principalBalance = principal?.balance || "0";
+  const profitBalance = profit?.balance || "0";
+  const taxesBalance = taxes?.balance || "0";
+  
   const vaultBalances = { 
-    principal: principal.balance, 
-    profit: profit.balance, 
-    taxes: taxes.balance 
+    principal: principalBalance, 
+    profit: profitBalance, 
+    taxes: taxesBalance 
   };
   const totalMinor = (
-    BigInt(principal.balance) + BigInt(profit.balance) + BigInt(taxes.balance)
+    BigInt(principalBalance) + BigInt(profitBalance) + BigInt(taxesBalance)
   ).toString();
   const totalMajor = toMajorUnits(totalMinor, decimals);
 
