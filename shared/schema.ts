@@ -1188,7 +1188,7 @@ export function formatMoney(minorUnits: string, asset: string): string {
   const displayDecimals = asset === "USDT" ? 2 : decimals;
   const truncatedFraction = fractionStr.slice(0, displayDecimals);
   
-  return `${whole.toLocaleString()}.${truncatedFraction}`;
+  return `${whole.toLocaleString("en-US")}.${truncatedFraction}`;
 }
 
 export function parseMoney(value: string, asset: string): string {
