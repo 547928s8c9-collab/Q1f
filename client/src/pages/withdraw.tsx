@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { computeReceiveMinor, formatReceiveAmount } from "@/lib/withdrawCalculations";
 import { formatMoney, parseMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import {
@@ -59,6 +60,8 @@ export default function Withdraw() {
 
   const availableBalance = bootstrap?.balances.USDT.available || "0";
   const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
+  const networkFeeMinor = bootstrap?.config?.networkFee || NETWORK_FEE_MINOR;
+  const receiveMinor = computeReceiveMinor(amountInMinor, networkFeeMinor);
   const isValidAmount = BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
   const finalAddress = selectedWhitelist || address;
   const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
@@ -174,12 +177,12 @@ export default function Withdraw() {
           <div className="bg-muted rounded-lg p-4">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Network Fee</span>
-              <span className="font-medium tabular-nums">~{formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT")} USDT</span>
+              <span className="font-medium tabular-nums">~{formatMoney(networkFeeMinor, "USDT")} USDT</span>
             </div>
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">You'll receive</span>
               <span className="font-medium tabular-nums">
-                {amount ? (parseFloat(amount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
+                {formatReceiveAmount(receiveMinor)} USDT
               </span>
             </div>
           </div>
