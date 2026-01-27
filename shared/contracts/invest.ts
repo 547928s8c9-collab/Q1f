@@ -107,6 +107,32 @@ export const InvestTradesResponseSchema = ApiEnvelopeSchema(
   })
 );
 
+export const InvestTradeEventPayloadSchema = z
+  .object({
+    intendedPrice: z.union([z.number(), z.string()]).optional(),
+    price: z.union([z.number(), z.string()]).optional(),
+    qty: z.union([z.number(), z.string()]).optional(),
+    fee: z.union([z.number(), z.string()]).optional(),
+    slippage: z.union([z.number(), z.string()]).optional(),
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
+export const InvestTradeEventsResponseSchema = ApiEnvelopeSchema(
+  z.object({
+    events: z.array(
+      z.object({
+        id: z.string(),
+        tradeId: z.string(),
+        strategyId: z.string(),
+        type: z.string(),
+        ts: z.number(),
+        payloadJson: InvestTradeEventPayloadSchema.nullable(),
+      })
+    ),
+  })
+);
+
 export const InvestInsightsResponseSchema = ApiEnvelopeSchema(
   z.object({
     trades: z.array(
@@ -171,6 +197,8 @@ export type InvestCandlesQuery = z.infer<typeof InvestCandlesQuerySchema>;
 export type InvestCandlesResponse = z.infer<typeof InvestCandlesResponseSchema>;
 export type InvestTradesQuery = z.infer<typeof InvestTradesQuerySchema>;
 export type InvestTradesResponse = z.infer<typeof InvestTradesResponseSchema>;
+export type InvestTradeEventPayload = z.infer<typeof InvestTradeEventPayloadSchema>;
+export type InvestTradeEventsResponse = z.infer<typeof InvestTradeEventsResponseSchema>;
 export type InvestInsightsResponse = z.infer<typeof InvestInsightsResponseSchema>;
 export type InvestMutation = z.infer<typeof InvestMutationSchema>;
 export type InvestMutationResponse = z.infer<typeof InvestMutationResponseSchema>;
