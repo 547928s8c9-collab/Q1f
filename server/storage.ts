@@ -173,6 +173,7 @@ export interface IStorage {
   upsertSimPosition(position: InsertSimPosition): Promise<SimPosition>;
 
   createSimTrade(trade: InsertSimTrade): Promise<SimTrade>;
+  getSimTradeById(userId: string, strategyId: string, tradeId: string): Promise<SimTrade | undefined>;
   getSimTrades(
     userId: string,
     strategyId: string,
@@ -1049,6 +1050,18 @@ export class DatabaseStorage implements IStorage {
   async createSimTrade(trade: InsertSimTrade): Promise<SimTrade> {
     const [created] = await db.insert(simTrades).values(trade).returning();
     return created;
+  }
+
+  async getSimTradeById(userId: string, strategyId: string, tradeId: string): Promise<SimTrade | undefined> {
+    const [trade] = await db.select()
+      .from(simTrades)
+      .where(and(
+        eq(simTrades.id, tradeId),
+        eq(simTrades.userId, userId),
+        eq(simTrades.strategyId, strategyId)
+      ))
+      .limit(1);
+    return trade;
   }
 
   async getSimTrades(
