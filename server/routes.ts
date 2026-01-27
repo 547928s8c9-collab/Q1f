@@ -1266,9 +1266,9 @@ export async function registerRoutes(
       const positions = await storage.getPositions(userId);
       
       for (const position of positions) {
-        // Simulate ~0.1-0.3% daily return
-        const dailyReturn = 0.001 + Math.random() * 0.002;
-        const payoutAmount = Math.round(parseFloat(position.currentValue) * dailyReturn).toString();
+        // Simulate ~10-30 bps daily return
+        const bps = BigInt(Math.floor(Math.random() * 21) + 10);
+        const payoutAmount = ((BigInt(position.currentValue) * bps) / 10_000n).toString();
 
         // Update position value
         const newCurrentValue = (BigInt(position.currentValue) + BigInt(payoutAmount)).toString();
