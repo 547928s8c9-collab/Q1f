@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Candle, InvestTrade } from "@shared/schema";
+import { formatMoney, type Candle, type InvestTrade } from "@shared/schema";
+import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
 
 // Helper function to compute candle time range (extracted logic from component)
 function computeCandleTimeRange(candleData: Candle[]): { minTs: number; maxTs: number } | null {
@@ -210,5 +211,17 @@ describe("strategy-detail chart markers filtering", () => {
         expect(Number.isFinite(trade.exitTs)).toBe(true);
       });
     });
+  });
+});
+
+describe("strategy-detail payout min amount flow", () => {
+  it("normalizes formatted payouts and returns minor units", () => {
+    const formatted = formatMoney("1000000000", "USDT");
+    const normalized = normalizeMoneyInput(formatted);
+    const state = getMoneyInputState(normalized, "USDT");
+    expect(formatted).toContain(",");
+    expect(normalized).toBe("1000.00");
+    expect(state.minor).toBe("1000000000");
+    expect(state.error).toBe("");
   });
 });

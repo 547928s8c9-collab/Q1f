@@ -45,6 +45,7 @@ import { buildBenchmarkSeries, buildStrategySeries } from "@/lib/performance";
 import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
+import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -212,7 +213,7 @@ export default function StrategyDetail() {
     if (payoutInstruction) {
       setPayoutFrequency(payoutInstruction.frequency as "DAILY" | "MONTHLY");
       setPayoutAddressId(payoutInstruction.addressId || "");
-      setPayoutMinAmount(formatMoney(payoutInstruction.minPayoutMinor, "USDT"));
+      setPayoutMinAmount(normalizeMoneyInput(formatMoney(payoutInstruction.minPayoutMinor, "USDT")));
       setPayoutActive(payoutInstruction.active || false);
     }
   }, [payoutInstruction]);
@@ -249,13 +250,18 @@ export default function StrategyDetail() {
     },
   });
 
+  const payoutMinState = useMemo(() => getMoneyInputState(payoutMinAmount, "USDT"), [payoutMinAmount]);
+
   const handleSavePayout = () => {
-    const minPayoutMinor = (parseFloat(payoutMinAmount) * 1000000).toString();
+    if (!payoutMinState.minor) {
+      toast({ title: "Enter a valid minimum payout amount", description: payoutMinState.error, variant: "destructive" });
+      return;
+    }
     savePayoutMutation.mutate({
       strategyId: params.id!,
       frequency: payoutFrequency,
       addressId: payoutAddressId || undefined,
-      minPayoutMinor,
+      minPayoutMinor: payoutMinState.minor,
       active: payoutActive,
     });
   };
@@ -827,14 +833,21 @@ export default function StrategyDetail() {
                 </Label>
                 <Input
                   id="min-payout"
-                  type="number"
-                  min="1"
-                  step="1"
+                  type="text"
+                  inputMode="decimal"
                   value={payoutMinAmount}
-                  onChange={(e) => setPayoutMinAmount(e.target.value)}
+                  onChange={(e) => {
+                    const nextValue = getMoneyInputState(e.target.value, "USDT");
+                    setPayoutMinAmount(nextValue.normalized);
+                  }}
                   className="max-w-[200px]"
                   data-testid="input-min-payout"
                 />
+                {payoutMinState.error ? (
+                  <p className="mt-2 text-xs text-negative" data-testid="input-min-payout-error">
+                    {payoutMinState.error}
+                  </p>
+                ) : null}
               </div>
 
               {/* Active Switch */}
@@ -866,7 +879,7 @@ export default function StrategyDetail() {
               {/* Save Button */}
               <Button
                 onClick={handleSavePayout}
-                disabled={savePayoutMutation.isPending}
+                disabled={savePayoutMutation.isPending || !payoutMinState.minor || !!payoutMinState.error}
                 className="w-full"
                 data-testid="button-save-payout"
               >
