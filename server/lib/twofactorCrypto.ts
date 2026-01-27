@@ -87,7 +87,9 @@ export function decryptSecret(encryptedData: string, userId: string): string {
       throw new Error("Invalid auth tag length");
     }
 
-    const decipher = createDecipheriv(ALGORITHM, encryptionKey, iv);
+    const decipher = createDecipheriv(ALGORITHM, encryptionKey, iv, {
+      authTagLength: AUTH_TAG_LENGTH,
+    });
     decipher.setAAD(Buffer.from(userId, "utf8"));
     decipher.setAuthTag(authTag);
 
