@@ -382,3 +382,51 @@
     inset: -1px;
   }
 }
+
+@keyframes priceFlashUp {
+  0% { background-color: transparent; }
+  20% { background-color: hsl(142 71% 45% / 0.12); }
+  100% { background-color: transparent; }
+}
+
+@keyframes priceFlashDown {
+  0% { background-color: transparent; }
+  20% { background-color: hsl(0 84% 60% / 0.12); }
+  100% { background-color: transparent; }
+}
+
+@keyframes tradeSlideIn {
+  0% { opacity: 0; transform: translateY(-8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.price-flash-up {
+  animation: priceFlashUp 600ms ease-out;
+}
+
+.price-flash-down {
+  animation: priceFlashDown 600ms ease-out;
+}
+
+.trade-slide-in {
+  animation: tradeSlideIn 400ms ease-out;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted)) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 2px;
+}

@@ -18,6 +18,8 @@ import {
   Plus
 } from "lucide-react";
 import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
+import { LiveQuotesBar } from "@/components/live-quotes-bar";
+import { useMarketStream } from "@/hooks/use-market-stream";
 
 function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isLoading: boolean }) {
   const usdtBalance = bootstrap?.balances?.USDT;
@@ -446,6 +448,7 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
 export default function Home() {
   useSetPageTitle("Главная");
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
+  const { quotes, sparklines } = useMarketStream();
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -460,6 +463,8 @@ export default function Home() {
       <HeroCard bootstrap={bootstrap} isLoading={bootstrapLoading} />
       
       <QuickActions onOpenSheet={setActiveSheet} />
+
+      <LiveQuotesBar quotes={quotes} sparklines={sparklines} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BalancesPreview bootstrap={bootstrap} isLoading={bootstrapLoading} />

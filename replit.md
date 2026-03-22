@@ -80,6 +80,15 @@ Preferred communication style: Simple, everyday language.
 - **Persistence**: Events and session state persisted to the database for restart resilience.
 - **Strategy Profiles**: Configurable parameters for 8 predefined strategy profiles.
 
+### Live Market Ticker Engine
+- **Purpose**: Generates real-time price ticks for 8 crypto pairs (BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, DOGE/USDT, ADA/USDT, TRX/USDT) and simulated trades.
+- **Architecture**: Singleton `LiveTickerEngine` (`server/services/liveTickerEngine.ts`) uses Brownian motion with per-pair volatility/drift parameters, generates ticks every 2.5s.
+- **Streaming**: SSE endpoint `/api/market/stream` with init snapshot + live tick events. Connection cap of 50 concurrent SSE connections with unified cleanup.
+- **REST API**: `GET /api/market/quotes` (all current prices), `GET /api/market/quotes/:symbol/sparkline` (24h sparkline), `GET /api/market/trades` (recent simulated trades).
+- **Frontend**: Singleton `MarketStreamStore` using `useSyncExternalStore` prevents unnecessary re-renders. `LiveQuotesBar` (horizontally scrollable 8-pair cards with mini-sparklines and price flash animations) appears on Home and Dashboard. `LiveTradeFeed` (animated trade log with ПОКУПКА/ПРОДАЖА badges) appears on Dashboard.
+- **CSS Animations**: `price-flash-up`/`price-flash-down` (green/red background flash), `trade-slide-in` (slide-in for new trades).
+- **Key Files**: `server/services/liveTickerEngine.ts`, `server/routes/market.ts`, `client/src/hooks/use-market-stream.ts`, `client/src/components/live-quotes-bar.tsx`, `client/src/components/live-trade-feed.tsx`.
+
 ### Admin Console (Backend API)
 - **Architecture**: Separate overlay at `/api/admin/*` with RBAC system (5 roles, 26 permissions).
 - **Security**: OIDC claims in production, dev fallback via `x-replit-user-id` header, RBAC cache.

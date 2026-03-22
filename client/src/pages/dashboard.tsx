@@ -20,6 +20,9 @@ import { useEngineStream } from "@/hooks/use-engine-stream";
 import { useLiveMetrics } from "@/hooks/use-live-metrics";
 import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
 import { ProofOfSafety } from "@/components/proof-of-safety";
+import { LiveQuotesBar } from "@/components/live-quotes-bar";
+import { LiveTradeFeed } from "@/components/live-trade-feed";
+import { useMarketStream } from "@/hooks/use-market-stream";
 
 interface AnalyticsOverview {
   updatedAt: string;
@@ -48,6 +51,7 @@ interface AnalyticsOverview {
 export default function Dashboard() {
   const [range, setRange] = useState<RangeOption>("30D");
   const days = rangeToDays(range);
+  const { quotes, sparklines, trades: marketTrades, connected: marketConnected } = useMarketStream();
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<AnalyticsOverview>({
     queryKey: ["/api/analytics/overview", { days }],
@@ -135,6 +139,10 @@ export default function Dashboard() {
           </div>
         )}
       </Card>
+
+      <div className="mb-6">
+        <LiveQuotesBar quotes={quotes} sparklines={sparklines} />
+      </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {isLoading ? (
@@ -392,7 +400,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <ProofOfSafety />
         
         <div>
@@ -406,6 +414,8 @@ export default function Dashboard() {
           </div>
           <LatestActivityWidget />
         </div>
+
+        <LiveTradeFeed trades={marketTrades} />
       </div>
     </div>
   );

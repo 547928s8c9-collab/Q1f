@@ -251,14 +251,15 @@ app.get("/api/metrics/alerts", (req, res) => {
     log("Telegram outbox worker started", "outbox");
   }
 
-  // Initialize engine scheduler (loads active investments and starts tick loops)
-  // Only if ENGINE_ENABLED is not explicitly set to "false"
   if (process.env.ENGINE_ENABLED !== "false") {
     await initializeEngineScheduler();
     logger.info("Engine scheduler initialized", "server");
   } else {
     logger.info("Engine scheduler disabled (ENGINE_ENABLED=false)", "server");
   }
+
+  const { liveTickerEngine } = await import("./services/liveTickerEngine");
+  liveTickerEngine.start();
 
   app.use(errorHandler);
 
