@@ -11,7 +11,6 @@ import {
 } from "lightweight-charts";
 import { format } from "date-fns";
 import type { Candle } from "@shared/schema";
-import { useTheme } from "@/hooks/use-theme";
 
 export interface CandlestickMarker {
   time: number;
@@ -19,8 +18,8 @@ export interface CandlestickMarker {
   color: string;
   shape: "arrowUp" | "arrowDown" | "circle";
   text?: string;
-  tradeId?: string; // For click handling
-  type?: "entry" | "exit"; // For identifying marker type
+  tradeId?: string;
+  type?: "entry" | "exit";
 }
 
 interface CandlestickChartProps {
@@ -39,42 +38,47 @@ interface TooltipState {
   high: number;
   low: number;
   close: number;
+  volume: number;
+  isUp: boolean;
 }
 
 const toChartTime = (timestamp: number): UTCTimestamp =>
   Math.floor(timestamp / 1000) as UTCTimestamp;
 
-const getChartColors = (element: HTMLElement) => {
-  const styles = getComputedStyle(element);
-  const read = (name: string) => styles.getPropertyValue(name).trim();
-
-  const card = read("--card") || read("--background");
-  const text = read("--text") || read("--foreground");
-  const muted = read("--text-muted") || read("--muted-foreground");
-  const border = read("--border");
-  const success = read("--success");
-  const danger = read("--danger");
-
-  return {
-    background: `hsl(${card})`,
-    text: `hsl(${text})`,
-    muted: `hsl(${muted})`,
-    border: border ? `hsl(${border} / 0.4)` : "rgba(148, 163, 184, 0.2)",
-    up: success ? `hsl(${success})` : "#22c55e",
-    down: danger ? `hsl(${danger})` : "#ef4444",
-    volumeUp: success ? `hsl(${success} / 0.4)` : "rgba(34, 197, 94, 0.4)",
-    volumeDown: danger ? `hsl(${danger} / 0.4)` : "rgba(239, 68, 68, 0.4)",
-  };
+const BINANCE_COLORS = {
+  bg: "#161a1e",
+  text: "#848e9c",
+  textBright: "#eaecef",
+  grid: "#1f2630",
+  border: "#2b3139",
+  up: "#0ecb81",
+  down: "#f6465d",
+  upWick: "#0ecb81",
+  downWick: "#f6465d",
+  volumeUp: "rgba(14, 203, 129, 0.25)",
+  volumeDown: "rgba(246, 70, 93, 0.25)",
+  crosshair: "#5a637a",
 };
+
+function formatPriceAuto(price: number): string {
+  if (price >= 1000) return price.toFixed(2);
+  if (price >= 1) return price.toFixed(4);
+  return price.toFixed(6);
+}
+
+function formatVol(vol: number): string {
+  if (vol >= 1_000_000) return (vol / 1_000_000).toFixed(2) + "M";
+  if (vol >= 1_000) return (vol / 1_000).toFixed(1) + "K";
+  return vol.toFixed(0);
+}
 
 export function CandlestickChart({
   candles,
   markers = [],
   showVolume = true,
-  height = 320,
+  height = 360,
   onMarkerClick,
 }: CandlestickChartProps) {
-  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -82,10 +86,8 @@ export function CandlestickChart({
   const hasFitRef = useRef(false);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
-  // Filter invalid candles once and reuse for both candle and volume data
   const validCandles = useMemo(() => {
     return candles.filter((candle) => {
-      // Filter out invalid candles
       return (
         Number.isFinite(candle.ts) &&
         Number.isFinite(candle.open) &&
@@ -137,38 +139,55 @@ export function CandlestickChart({
     const container = containerRef.current;
     if (!container) return;
 
-    const colors = getChartColors(container);
     const chart = createChart(container, {
       width: container.clientWidth,
       height,
       layout: {
-        background: { type: ColorType.Solid, color: colors.background },
-        textColor: colors.text,
-        fontFamily: "var(--font-sans)",
+        background: { type: ColorType.Solid, color: BINANCE_COLORS.bg },
+        textColor: BINANCE_COLORS.text,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        fontSize: 11,
       },
       grid: {
-        vertLines: { color: colors.border },
-        horzLines: { color: colors.border },
+        vertLines: { color: BINANCE_COLORS.grid, style: 1 },
+        horzLines: { color: BINANCE_COLORS.grid, style: 1 },
       },
       rightPriceScale: {
-        borderColor: colors.border,
+        borderColor: BINANCE_COLORS.border,
+        scaleMargins: { top: 0.05, bottom: showVolume ? 0.25 : 0.05 },
       },
       timeScale: {
-        borderColor: colors.border,
+        borderColor: BINANCE_COLORS.border,
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 5,
+        barSpacing: 8,
+        fixLeftEdge: true,
+        fixRightEdge: true,
       },
       crosshair: {
         mode: CrosshairMode.Normal,
+        vertLine: {
+          color: BINANCE_COLORS.crosshair,
+          width: 1,
+          style: 2,
+          labelBackgroundColor: "#2b3139",
+        },
+        horzLine: {
+          color: BINANCE_COLORS.crosshair,
+          width: 1,
+          style: 2,
+          labelBackgroundColor: "#2b3139",
+        },
       },
     });
 
     const candleSeries = chart.addCandlestickSeries({
-      upColor: colors.up,
-      downColor: colors.down,
+      upColor: BINANCE_COLORS.up,
+      downColor: BINANCE_COLORS.down,
       borderVisible: false,
-      wickUpColor: colors.up,
-      wickDownColor: colors.down,
+      wickUpColor: BINANCE_COLORS.upWick,
+      wickDownColor: BINANCE_COLORS.downWick,
     });
 
     let volumeSeries: ISeriesApi<"Histogram"> | null = null;
@@ -218,52 +237,50 @@ export function CandlestickChart({
         return;
       }
 
+      const volSeries = volumeSeriesRef.current;
+      const volData = volSeries ? param.seriesData.get(volSeries) as { value?: number } | undefined : undefined;
+      const vol = volData?.value ?? 0;
+      const isUp = ohlc.close >= ohlc.open;
+
       const rect = container.getBoundingClientRect();
-      const tooltipWidth = 160;
-      const tooltipHeight = 86;
-      const left = Math.min(Math.max(param.point.x + 12, 8), rect.width - tooltipWidth - 8);
-      const top = Math.min(Math.max(param.point.y - tooltipHeight - 12, 8), rect.height - tooltipHeight - 8);
+      const tooltipWidth = 180;
+      const tooltipHeight = 120;
+      const left = Math.min(Math.max(param.point.x + 16, 8), rect.width - tooltipWidth - 8);
+      const top = Math.min(Math.max(param.point.y - tooltipHeight - 16, 8), rect.height - tooltipHeight - 8);
 
       setTooltip({
         left,
         top,
-        timeLabel: format(new Date(param.time * 1000), "MMM d, HH:mm"),
+        timeLabel: format(new Date(param.time * 1000), "dd MMM yyyy, HH:mm"),
         open: ohlc.open,
         high: ohlc.high,
         low: ohlc.low,
         close: ohlc.close,
+        volume: vol,
+        isUp,
       });
     };
 
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
-    // Handle marker clicks via crosshair click
-    const handleClick = (param: { time?: UTCTimestamp; point?: { x: number; y: number } }) => {
-      if (!onMarkerClick || !param.time) return;
-      
-      // Find the closest marker to the clicked time
-      const clickedTime = param.time * 1000; // Convert to ms
-      const closestMarker = markers.reduce<{ marker: CandlestickMarker; distance: number } | null>((closest, marker) => {
-        const distance = Math.abs(marker.time - clickedTime);
-        if (!closest || distance < closest.distance) {
-          return { marker, distance };
-        }
-        return closest;
-      }, null);
-
-      // If marker is within 5 minutes of click, trigger callback
-      if (closestMarker && closestMarker.distance < 5 * 60 * 1000) {
-        onMarkerClick(closestMarker.marker);
-      }
-    };
-
     const handleContainerClick = (e: MouseEvent) => {
+      if (!onMarkerClick) return;
       const rect = container.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
       const coordinate = chart.timeScale().coordinateToTime(x);
       if (coordinate) {
-        handleClick({ time: coordinate, point: { x, y } });
+        const clickedTime = (coordinate as number) * 1000;
+        const closestMarker = markers.reduce<{ marker: CandlestickMarker; distance: number } | null>((closest, marker) => {
+          const distance = Math.abs(marker.time - clickedTime);
+          if (!closest || distance < closest.distance) {
+            return { marker, distance };
+          }
+          return closest;
+        }, null);
+
+        if (closestMarker && closestMarker.distance < 5 * 60 * 1000) {
+          onMarkerClick(closestMarker.marker);
+        }
       }
     };
 
@@ -281,38 +298,6 @@ export function CandlestickChart({
   }, [height, showVolume, markers, onMarkerClick]);
 
   useEffect(() => {
-    const container = containerRef.current;
-    const chart = chartRef.current;
-    const candleSeries = candleSeriesRef.current;
-    if (!container || !chart || !candleSeries) return;
-
-    const colors = getChartColors(container);
-    chart.applyOptions({
-      layout: {
-        background: { type: ColorType.Solid, color: colors.background },
-        textColor: colors.text,
-      },
-      grid: {
-        vertLines: { color: colors.border },
-        horzLines: { color: colors.border },
-      },
-      rightPriceScale: {
-        borderColor: colors.border,
-      },
-      timeScale: {
-        borderColor: colors.border,
-      },
-    });
-
-    candleSeries.applyOptions({
-      upColor: colors.up,
-      downColor: colors.down,
-      wickUpColor: colors.up,
-      wickDownColor: colors.down,
-    });
-  }, [theme]);
-
-  useEffect(() => {
     const candleSeries = candleSeriesRef.current;
     if (!candleSeries) return;
 
@@ -328,15 +313,13 @@ export function CandlestickChart({
 
   useEffect(() => {
     const volumeSeries = volumeSeriesRef.current;
-    const container = containerRef.current;
-    if (!volumeSeries || !container) return;
+    if (!volumeSeries) return;
 
-    const colors = getChartColors(container);
     volumeSeries.setData(
       volumeData.map((bar) => ({
         time: bar.time,
         value: bar.value,
-        color: bar.up ? colors.volumeUp : colors.volumeDown,
+        color: bar.up ? BINANCE_COLORS.volumeUp : BINANCE_COLORS.volumeDown,
       }))
     );
   }, [volumeData]);
@@ -346,33 +329,55 @@ export function CandlestickChart({
   }, [markerData]);
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div className="relative w-full rounded-lg overflow-hidden" style={{ height }}>
       <div ref={containerRef} className="w-full h-full" data-testid="candlestick-chart" />
       {tooltip && (
         <div
-          className="absolute rounded-md border border-border/60 bg-card/95 px-3 py-2 text-xs shadow-lg text-muted-foreground"
-          style={{ left: tooltip.left, top: tooltip.top }}
+          className="absolute z-10 pointer-events-none rounded border px-3 py-2 text-[11px] shadow-xl"
+          style={{
+            left: tooltip.left,
+            top: tooltip.top,
+            backgroundColor: "#1e2329",
+            borderColor: "#2b3139",
+            color: BINANCE_COLORS.text,
+            minWidth: 170,
+          }}
         >
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "#5e6673" }}>
             {tooltip.timeLabel}
           </div>
-          <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
-            <span>O</span>
-            <span className="text-foreground tabular-nums">
-              {tooltip.open.toFixed(2)}
+          <div className="grid grid-cols-[28px_1fr] gap-x-2 gap-y-0.5">
+            <span>Open</span>
+            <span className="tabular-nums text-right" style={{ color: BINANCE_COLORS.textBright }}>
+              {formatPriceAuto(tooltip.open)}
             </span>
-            <span>H</span>
-            <span className="text-foreground tabular-nums">
-              {tooltip.high.toFixed(2)}
+            <span>High</span>
+            <span className="tabular-nums text-right" style={{ color: BINANCE_COLORS.up }}>
+              {formatPriceAuto(tooltip.high)}
             </span>
-            <span>L</span>
-            <span className="text-foreground tabular-nums">
-              {tooltip.low.toFixed(2)}
+            <span>Low</span>
+            <span className="tabular-nums text-right" style={{ color: BINANCE_COLORS.down }}>
+              {formatPriceAuto(tooltip.low)}
             </span>
-            <span>C</span>
-            <span className="text-foreground tabular-nums">
-              {tooltip.close.toFixed(2)}
+            <span>Close</span>
+            <span className="tabular-nums text-right" style={{ color: tooltip.isUp ? BINANCE_COLORS.up : BINANCE_COLORS.down }}>
+              {formatPriceAuto(tooltip.close)}
             </span>
+            {tooltip.volume > 0 && (
+              <>
+                <span>Vol</span>
+                <span className="tabular-nums text-right" style={{ color: BINANCE_COLORS.textBright }}>
+                  {formatVol(tooltip.volume)}
+                </span>
+              </>
+            )}
+          </div>
+          <div
+            className="mt-1.5 text-[10px] font-medium tabular-nums"
+            style={{ color: tooltip.isUp ? BINANCE_COLORS.up : BINANCE_COLORS.down }}
+          >
+            {tooltip.isUp ? "▲" : "▼"}{" "}
+            {((tooltip.close - tooltip.open) / tooltip.open * 100).toFixed(2)}%
           </div>
         </div>
       )}

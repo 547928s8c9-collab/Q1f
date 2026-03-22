@@ -7,6 +7,12 @@ import { createXrpKeltnerRevert } from "./profiles/xrpKeltnerRevert";
 import { createDogeFastMomo } from "./profiles/dogeFastMomo";
 import { createAdaDeepRevert } from "./profiles/adaDeepRevert";
 import { createTrxLowVolBand } from "./profiles/trxLowVolBand";
+import { createXrpStableArb } from "./profiles/xrpStableArb";
+import { createBnbRangeHarvest } from "./profiles/bnbRangeHarvest";
+import { createEthGridScalp } from "./profiles/ethGridScalp";
+import { createAdaMacdCross } from "./profiles/adaMacdCross";
+import { createBtcLevMomentum } from "./profiles/btcLevMomentum";
+import { createSolSpikeCatcher } from "./profiles/solSpikeCatcher";
 
 const strategyFactories: Record<
   StrategyProfileSlug,
@@ -20,6 +26,12 @@ const strategyFactories: Record<
   doge_fast_momo: createDogeFastMomo,
   ada_deep_revert: createAdaDeepRevert,
   trx_lowvol_band: createTrxLowVolBand,
+  xrp_stable_arb: createXrpStableArb,
+  bnb_range_harvest: createBnbRangeHarvest,
+  eth_grid_scalp: createEthGridScalp,
+  ada_macd_cross: createAdaMacdCross,
+  btc_lev_momentum: createBtcLevMomentum,
+  sol_spike_catcher: createSolSpikeCatcher,
 };
 
 export function createStrategy(

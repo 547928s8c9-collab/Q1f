@@ -12,6 +12,12 @@ export const STRATEGY_PROFILE_SLUGS = [
   "doge_fast_momo",
   "ada_deep_revert",
   "trx_lowvol_band",
+  "xrp_stable_arb",
+  "bnb_range_harvest",
+  "eth_grid_scalp",
+  "ada_macd_cross",
+  "btc_lev_momentum",
+  "sol_spike_catcher",
 ] as const;
 
 export type StrategyProfileSlug = typeof STRATEGY_PROFILE_SLUGS[number];
