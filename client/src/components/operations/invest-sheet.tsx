@@ -85,7 +85,7 @@ function InvestFlow({
   });
 
   const selectedStrategy = strategies.find((s) => s.id === strategyId);
-  const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const availableBalance = bootstrap?.balances?.USDT?.available || "0";
 
   const toMinorUnits = (displayValue: string): string => {
     if (!displayValue || displayValue === ".") return "0";

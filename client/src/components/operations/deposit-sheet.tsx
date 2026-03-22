@@ -41,7 +41,7 @@ function DepositFlow({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const availableBalance = bootstrap?.balances?.USDT?.available || "0";
 
   const toMinorUnits = (displayValue: string): string => {
     if (!displayValue || displayValue === ".") return "0";
@@ -110,7 +110,7 @@ function DepositFlow({
         asset="USDT"
         availableBalance="999999999999999"
         onNext={() => setStep("confirm")}
-        minAmount="1000000"
+        minAmount="10000000"
         label="Сумма пополнения"
         placeholder="100.00"
       />

@@ -67,7 +67,7 @@ function TransferFlow({
 
   const getBalance = (vault: VaultType): string => {
     if (!bootstrap) return "0";
-    if (vault === "wallet") return bootstrap.balances.USDT.available;
+    if (vault === "wallet") return bootstrap?.balances?.USDT?.available || "0";
     return bootstrap.vaults[vault]?.balance || "0";
   };
 

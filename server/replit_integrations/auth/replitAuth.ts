@@ -19,16 +19,16 @@ const getOidcConfig = memoize(
 );
 
 export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+  const sessionTtlMs = 7 * 24 * 60 * 60 * 1000; // 1 week in ms
+  const sessionTtlSec = 7 * 24 * 60 * 60; // 1 week in seconds
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: sessionTtlSec,
     tableName: "sessions",
   });
   
-  // In Replit environment, we need proper cookie settings for HTTPS proxy
   const isProduction = process.env.NODE_ENV === "production";
   
   return session({
@@ -38,9 +38,9 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: "auto", // automatically set based on connection
+      secure: isProduction,
       sameSite: "lax",
-      maxAge: sessionTtl,
+      maxAge: sessionTtlMs,
     },
   });
 }

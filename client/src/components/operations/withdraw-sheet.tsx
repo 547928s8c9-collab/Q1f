@@ -48,7 +48,7 @@ function WithdrawFlow({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const availableBalance = bootstrap?.balances.USDT.available || "0";
+  const availableBalance = bootstrap?.balances?.USDT?.available || "0";
 
   const toMinorUnits = (displayValue: string): string => {
     if (!displayValue || displayValue === ".") return "0";

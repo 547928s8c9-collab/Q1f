@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "lucide-react";
 
-const showDemoButtons = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
+const showDemoButtons = import.meta.env.DEV || import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
 export default function Landing() {
   const [isDemoAdminLoading, setIsDemoAdminLoading] = useState(false);

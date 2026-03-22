@@ -26,17 +26,20 @@ export function updateBootstrapAfterTransfer(
   const delta = BigInt(amount || "0");
   if (delta === 0n) return bootstrap;
 
+  const defaultBalance = { available: "0", locked: "0" };
+  const defaultVault = { balance: "0", goalAmount: null, progress: 0 };
+
   const nextBalances = {
     ...bootstrap.balances,
     USDT: {
-      ...bootstrap.balances.USDT,
+      ...(bootstrap.balances?.USDT || defaultBalance),
     },
   };
   const nextVaults = {
     ...bootstrap.vaults,
-    principal: { ...bootstrap.vaults.principal },
-    profit: { ...bootstrap.vaults.profit },
-    taxes: { ...bootstrap.vaults.taxes },
+    principal: { ...(bootstrap.vaults?.principal || defaultVault) },
+    profit: { ...(bootstrap.vaults?.profit || defaultVault) },
+    taxes: { ...(bootstrap.vaults?.taxes || defaultVault) },
   };
 
   const adjustWallet = (change: bigint) => {
