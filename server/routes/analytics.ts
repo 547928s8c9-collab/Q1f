@@ -71,10 +71,15 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
         const pnlMinor = current - principal;
         const roiPct = principal > 0n ? (Number(pnlMinor) / Number(principal)) * 100 : 0;
 
+        const pairsArr = Array.isArray(strategy?.pairsJson) ? strategy.pairsJson : [];
+        const primaryPair = pairsArr.length > 0 ? String(pairsArr[0]) : null;
+        const symbol = primaryPair ? primaryPair.replace("/", "") : (strategy?.symbol || null);
+
         return {
           strategyId: pos.strategyId,
           name: strategy?.name || "Unknown Strategy",
           riskTier: strategy?.riskTier || "CORE",
+          symbol,
           allocatedMinor: pos.principalMinor || "0",
           currentMinor: pos.investedCurrentMinor || "0",
           pnlMinor: pnlMinor.toString(),

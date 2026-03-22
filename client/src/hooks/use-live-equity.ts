@@ -18,23 +18,9 @@ interface LiveEquityResult {
   connected: boolean;
 }
 
-const SYMBOL_PAIR_MAP: Record<string, string> = {
-  "BTC/USDT": "BTCUSDT",
-  "ETH/USDT": "ETHUSDT",
-  "SOL/USDT": "SOLUSDT",
-  "BNB/USDT": "BNBUSDT",
-  "XRP/USDT": "XRPUSDT",
-  "ADA/USDT": "ADAUSDT",
-  "AVAX/USDT": "AVAXUSDT",
-  "DOGE/USDT": "DOGEUSDT",
-};
-
-function findMarketSymbol(strategySymbol: string | null | undefined): string | null {
-  if (!strategySymbol) return null;
-  const upper = strategySymbol.toUpperCase();
-  if (SYMBOL_PAIR_MAP[upper]) return SYMBOL_PAIR_MAP[upper];
-  const cleaned = upper.replace("/", "");
-  return cleaned || null;
+function normalizeSymbol(sym: string | null | undefined): string | null {
+  if (!sym) return null;
+  return sym.toUpperCase().replace("/", "") || null;
 }
 
 export function useLiveEquity(
@@ -63,15 +49,15 @@ export function useLiveEquity(
     const strategyDeltas = new Map<string, { priceDelta: number; equityDelta: number }>();
 
     for (const s of strategies) {
-      const marketSym = findMarketSymbol(s.symbol);
+      const marketSym = normalizeSymbol(s.symbol);
       if (!marketSym) continue;
 
       const quote = quotesMap.get(marketSym);
       if (!quote) continue;
 
-      const priceDeltaPct = quote.change24hPct / 100;
+      const priceDeltaFraction = quote.change24hPct / 100;
       const allocated = parseInt(s.allocatedMinor || "0", 10);
-      const delta = Math.round(allocated * priceDeltaPct * 0.01);
+      const delta = Math.round(allocated * priceDeltaFraction);
 
       equityDeltaTotal += delta;
       strategyDeltas.set(s.strategyId, {

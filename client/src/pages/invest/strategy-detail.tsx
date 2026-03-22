@@ -346,14 +346,33 @@ export default function StrategyDetail() {
 
   const candleData = useMemo(() => {
     if (!rawCandleData.length || !liveQuote || !marketConnected) return rawCandleData;
+
+    const stepMs = timeframeStepMs[chartTimeframe];
     const updated = [...rawCandleData];
-    const last = { ...updated[updated.length - 1] };
-    last.close = liveQuote.price;
-    last.high = Math.max(last.high, liveQuote.price);
-    last.low = Math.min(last.low, liveQuote.price);
-    updated[updated.length - 1] = last;
+    const lastCandle = updated[updated.length - 1];
+    const now = Date.now();
+    const nextCandleBoundary = lastCandle.ts + stepMs;
+
+    if (now >= nextCandleBoundary) {
+      const newCandleTs = nextCandleBoundary;
+      updated.push({
+        ts: newCandleTs,
+        open: lastCandle.close,
+        high: Math.max(lastCandle.close, liveQuote.price),
+        low: Math.min(lastCandle.close, liveQuote.price),
+        close: liveQuote.price,
+        volume: 0,
+      });
+    } else {
+      const last = { ...lastCandle };
+      last.close = liveQuote.price;
+      last.high = Math.max(last.high, liveQuote.price);
+      last.low = Math.min(last.low, liveQuote.price);
+      updated[updated.length - 1] = last;
+    }
+
     return updated;
-  }, [rawCandleData, liveQuote, marketConnected]);
+  }, [rawCandleData, liveQuote, marketConnected, chartTimeframe]);
 
   const liveTradeMarkers = useMemo<CandlestickMarker[]>(() => {
     if (!pairSymbol || !marketTrades.length || !candleData.length) return [];

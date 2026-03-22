@@ -41,6 +41,7 @@ interface AnalyticsOverview {
     strategyId: string;
     name: string;
     riskTier: string;
+    symbol: string | null;
     allocatedMinor: string;
     currentMinor: string;
     pnlMinor: string;
@@ -72,7 +73,7 @@ export default function Dashboard() {
   const strategyAllocations = useMemo(() =>
     (data?.strategies || []).map((s) => ({
       strategyId: s.strategyId,
-      symbol: null as string | null,
+      symbol: s.symbol,
       allocatedMinor: s.allocatedMinor,
       currentMinor: s.currentMinor,
       pnlMinor: s.pnlMinor,
