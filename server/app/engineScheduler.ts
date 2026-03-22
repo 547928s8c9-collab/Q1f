@@ -69,6 +69,7 @@ class EngineScheduler {
   private loops = new Map<string, { config: EngineLoopConfig; timer: NodeJS.Timeout | null; lastTickTs: number | null; lastError: string | null; running: boolean; tickCount: number }>();
   private tickDurations: number[] = []; // Keep last 1000 durations for percentile calculation
   private lockStats = { totalAttempts: 0, successful: 0, failed: 0 };
+  private lastRunAt: Date | null = null;
   private readonly TICK_OK_THROTTLE = 30; // Log TICK_OK every 30 ticks
 
   registerLoop(config: EngineLoopConfig): void {
@@ -195,6 +196,7 @@ class EngineScheduler {
       
       if (acquired) {
         loop.lastTickTs = Date.now();
+        this.lastRunAt = new Date();
         loop.lastError = null;
         loop.tickCount = (loop.tickCount || 0) + 1;
 
@@ -244,6 +246,10 @@ class EngineScheduler {
     } finally {
       loop.running = false;
     }
+  }
+
+  getLastRunAt(): Date | null {
+    return this.lastRunAt;
   }
 
   getHealth(): EngineHealthReport {

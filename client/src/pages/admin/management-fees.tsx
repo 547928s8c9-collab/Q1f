@@ -37,7 +37,7 @@ type TierKey = keyof ManagementFeeConfig["tiers"];
 const TIER_LABELS: Record<TierKey, string> = {
   stable: "Stable",
   active: "Active",
-  aggressive: "Aggressive",
+  aggressive: "Агрессивный",
 };
 
 const FEE_TYPE_LABELS: Record<FeeType, string> = {

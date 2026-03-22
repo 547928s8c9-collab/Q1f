@@ -1,16 +1,18 @@
+import { PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type TgTabKey = "overview" | "strategies" | "activity";
+export type TgTabKey = "overview" | "strategies" | "activity" | "deposit";
 
 interface BottomNavProps {
   active: TgTabKey;
   onChange: (tab: TgTabKey) => void;
 }
 
-const tabs: Array<{ key: TgTabKey; label: string }> = [
-  { key: "overview", label: "Overview" },
+const tabs: Array<{ key: TgTabKey; label: string; icon?: React.ElementType }> = [
+  { key: "overview",   label: "Overview" },
   { key: "strategies", label: "Strategies" },
-  { key: "activity", label: "Activity" },
+  { key: "activity",  label: "Activity" },
+  { key: "deposit",   label: "Пополнить", icon: PlusCircle },
 ];
 
 export function BottomNav({ active, onChange }: BottomNavProps) {
@@ -29,6 +31,7 @@ export function BottomNav({ active, onChange }: BottomNavProps) {
                 : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
             )}
           >
+            {tab.icon && <tab.icon className="mb-0.5 h-4 w-4" />}
             <span>{tab.label}</span>
           </button>
         ))}

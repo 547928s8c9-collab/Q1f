@@ -36,7 +36,7 @@ export interface TierMeta {
 export const TIER_META: Record<RiskTierKey, TierMeta> = {
   LOW: {
     key: "LOW",
-    name: "Conservative",
+    name: "Стабильный",
     tagline: "Steady returns, minimal volatility",
     description:
       "Defensive strategies that ride low-volatility regimes and target small, consistent gains. Ideal for capital preservation with modest growth.",
@@ -47,7 +47,7 @@ export const TIER_META: Record<RiskTierKey, TierMeta> = {
   },
   CORE: {
     key: "CORE",
-    name: "Balanced",
+    name: "Активный",
     tagline: "Diversified exposure, moderate risk",
     description:
       "A blend of trend-following and mean-reversion strategies across multiple assets. The backbone of a well-rounded portfolio.",
@@ -58,7 +58,7 @@ export const TIER_META: Record<RiskTierKey, TierMeta> = {
   },
   HIGH: {
     key: "HIGH",
-    name: "Aggressive",
+    name: "Агрессивный",
     tagline: "Higher potential, higher volatility",
     description:
       "Momentum and breakout strategies that capture fast market moves. Best suited for investors comfortable with larger drawdowns in exchange for outsized returns.",

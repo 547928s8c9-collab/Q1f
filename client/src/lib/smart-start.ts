@@ -114,9 +114,9 @@ export const questions = {
   riskProfile: {
     question: "How would you describe your risk tolerance?",
     options: [
-      { value: "conservative", label: "Conservative", description: "I prefer stability over high returns" },
-      { value: "balanced", label: "Balanced", description: "I can accept some volatility for better returns" },
-      { value: "aggressive", label: "Aggressive", description: "I'm comfortable with high volatility for maximum growth" },
+      { value: "conservative", label: "Стабильный",  description: "I prefer stability over high returns" },
+      { value: "balanced",     label: "Активный",    description: "I can accept some volatility for better returns" },
+      { value: "aggressive",   label: "Агрессивный", description: "I'm comfortable with high volatility for maximum growth" },
     ],
   },
   timeHorizon: {

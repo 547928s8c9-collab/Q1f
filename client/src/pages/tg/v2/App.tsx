@@ -14,6 +14,7 @@ import type {
   TgTradesResponse,
 } from "@shared/contracts/tg";
 import { BottomNav, type TgTabKey } from "./components/BottomNav";
+import { DepositSheet } from "./components/DepositSheet";
 import { SparklineSVG } from "./components/SparklineSVG";
 import { StatusBadge } from "./components/StatusBadge";
 import { useTelegramSession } from "./hooks/useTelegramSession";
@@ -60,6 +61,7 @@ export default function TelegramMiniAppV2() {
   } = useTelegramSession();
 
   const [activeTab, setActiveTab] = useState<TgTabKey>("overview");
+  const [showDeposit, setShowDeposit] = useState(false);
   const [riskFilter, setRiskFilter] = useState<RiskFilter>("ALL");
   const [linkCode, setLinkCode] = useState("");
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
@@ -129,6 +131,20 @@ export default function TelegramMiniAppV2() {
     const maxDrawdown = strategies.length > 0 ? Math.max(...strategies.map((strategy) => strategy.maxDrawdown30dBps)) : 0;
     return { roiBps, maxDrawdown };
   }, [strategiesQuery.data?.strategies]);
+
+  const dailyPnlMinor = useMemo(() => {
+    const data = activityQuery.data as Record<string, unknown> | null | undefined;
+    if (typeof data?.dailyPnl === "string") return data.dailyPnl as string;
+    return null;
+  }, [activityQuery.data]);
+
+  const handleTabChange = useCallback((tab: TgTabKey) => {
+    if (tab === "deposit") {
+      setShowDeposit(true);
+    } else {
+      setActiveTab(tab);
+    }
+  }, []);
 
   const equitySeriesPoints = useMemo(() => {
     return buildSparklinePoints(strategyDetailQuery.data?.equitySeries ?? []);
@@ -314,6 +330,22 @@ export default function TelegramMiniAppV2() {
               <CardHeader>
                 <CardTitle className="text-sm text-muted-foreground">Total equity</CardTitle>
                 <div className="text-3xl font-semibold tabular-nums">{formatMoney(totalEquityMinor, "USDT")}</div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Доход сегодня</span>
+                  {dailyPnlMinor === null ? (
+                    <span className="text-xs text-muted-foreground tabular-nums">—</span>
+                  ) : (
+                    <span
+                      className={cn(
+                        "text-xs font-medium tabular-nums",
+                        BigInt(dailyPnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                      )}
+                    >
+                      {BigInt(dailyPnlMinor) >= 0n ? "+" : ""}
+                      {formatMinor(dailyPnlMinor)}
+                    </span>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -626,7 +658,9 @@ export default function TelegramMiniAppV2() {
         )}
       </div>
 
-      <BottomNav active={activeTab} onChange={setActiveTab} />
+      <BottomNav active={activeTab} onChange={handleTabChange} />
+
+      <DepositSheet open={showDeposit} onClose={() => setShowDeposit(false)} />
 
       <Drawer open={Boolean(selectedTrade)} onOpenChange={(open) => !open && setSelectedTrade(null)}>
         <DrawerContent>
