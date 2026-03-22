@@ -76,13 +76,24 @@ interface LiveTradeFeedProps {
 }
 
 export function LiveTradeFeed({ trades, maxItems = 15 }: LiveTradeFeedProps) {
-  const prevCountRef = useRef(0);
+  const prevNewestIdRef = useRef<string | null>(null);
   const visibleTrades = trades.slice(0, maxItems);
-  const newCount = Math.max(0, trades.length - prevCountRef.current);
+
+  const newestId = trades.length > 0 ? trades[0].id : null;
+  const newIds = new Set<string>();
+
+  if (newestId && newestId !== prevNewestIdRef.current) {
+    for (const t of visibleTrades) {
+      if (t.id === prevNewestIdRef.current) break;
+      newIds.add(t.id);
+    }
+  }
 
   useEffect(() => {
-    prevCountRef.current = trades.length;
-  }, [trades.length]);
+    if (newestId) {
+      prevNewestIdRef.current = newestId;
+    }
+  }, [newestId]);
 
   return (
     <Card className="p-4">
@@ -102,8 +113,8 @@ export function LiveTradeFeed({ trades, maxItems = 15 }: LiveTradeFeedProps) {
             Ожидание сделок...
           </div>
         ) : (
-          visibleTrades.map((trade, i) => (
-            <TradeRow key={trade.id} trade={trade} isNew={i < newCount} />
+          visibleTrades.map((trade) => (
+            <TradeRow key={trade.id} trade={trade} isNew={newIds.has(trade.id)} />
           ))
         )}
       </div>
