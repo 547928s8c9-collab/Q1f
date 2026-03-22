@@ -3,6 +3,7 @@ import { ensureRequestId } from "./middleware/requestId";
 import { adminAuth } from "./middleware/adminAuth";
 import { loadPermissions, requirePermission } from "./middleware/rbac";
 import { ok, fail, ErrorCodes } from "./http";
+import { getManagementFeeConfig, setManagementFeeConfig, type ManagementFeeConfig } from "../config/managementFees";
 import { db, withTransaction } from "../db";
 import {
   users,
@@ -1995,3 +1996,29 @@ adminRouter.post(
     };
   })
 );
+
+adminRouter.get("/management-fees", requirePermission("config.read"), (_req, res) => {
+  ok(res, getManagementFeeConfig());
+});
+
+adminRouter.put("/management-fees", requirePermission("config.write"), (req, res) => {
+  const { tiers } = req.body as ManagementFeeConfig;
+  if (!tiers?.stable || !tiers?.active || !tiers?.aggressive) {
+    return fail(res, ErrorCodes.VALIDATION_ERROR, "Missing tiers in fee config", 400);
+  }
+  const tierKeys = ["stable", "active", "aggressive"] as const;
+  for (const tier of tierKeys) {
+    const t = tiers[tier];
+    if (typeof t.feePercent !== "number" || t.feePercent < 0 || t.feePercent > 100) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, `Invalid feePercent for tier: ${tier}`, 400);
+    }
+    if (!["profit", "aum"].includes(t.feeType)) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, `Invalid feeType for tier: ${tier}`, 400);
+    }
+    if (!["monthly", "on_withdrawal"].includes(t.billingCycle)) {
+      return fail(res, ErrorCodes.VALIDATION_ERROR, `Invalid billingCycle for tier: ${tier}`, 400);
+    }
+  }
+  const updated = setManagementFeeConfig(tiers);
+  ok(res, updated);
+});

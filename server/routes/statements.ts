@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import type { RouteDeps } from "./types";
+import { getManagementFeeConfig } from "../config/managementFees";
 
 export function registerStatementsRoutes({ app, isAuthenticated, getUserId }: RouteDeps): void {
   // GET /api/statements/summary - Get monthly statement summary (protected)
@@ -45,7 +46,20 @@ export function registerStatementsRoutes({ app, isAuthenticated, getUserId }: Ro
         totalFees += fee;
       }
 
-      const net = totalIn - totalOut - totalFees;
+      // Management fee: % of profit payouts per active tier config
+      const profitTypes = ["DAILY_PAYOUT", "PROFIT_PAYOUT"];
+      let totalProfitPayout = BigInt(0);
+      for (const op of operations) {
+        if (op.status !== "completed") continue;
+        if (profitTypes.includes(op.type)) {
+          totalProfitPayout += BigInt(op.amount || "0");
+        }
+      }
+      const feeConfig = getManagementFeeConfig();
+      const feePercent = BigInt(Math.round(feeConfig.tiers.active.feePercent));
+      const managementFeeMinor = (totalProfitPayout * feePercent / 100n).toString();
+
+      const net = totalIn - totalOut - totalFees - BigInt(managementFeeMinor);
 
       res.json({
         year: yearNum,
@@ -56,6 +70,7 @@ export function registerStatementsRoutes({ app, isAuthenticated, getUserId }: Ro
         totalIn: totalIn.toString(),
         totalOut: totalOut.toString(),
         totalFees: totalFees.toString(),
+        managementFeeMinor,
         net: net.toString(),
       });
     } catch (error) {

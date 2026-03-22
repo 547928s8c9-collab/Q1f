@@ -26,6 +26,7 @@ interface StatementSummary {
   totalIn: string;
   totalOut: string;
   totalFees: string;
+  managementFeeMinor: string;
   net: string;
 }
 
@@ -226,6 +227,18 @@ export default function StatementsPage() {
                   </span>
                 </div>
               </div>
+
+              {summary.managementFeeMinor && BigInt(summary.managementFeeMinor) > 0n && (
+                <div className="flex items-center justify-between py-2">
+                  <p className="text-sm text-muted-foreground">Комиссия управляющего</p>
+                  <span
+                    className="text-sm font-semibold text-destructive tabular-nums"
+                    data-testid="text-management-fee"
+                  >
+                    −{formatMoney(summary.managementFeeMinor)} USDT
+                  </span>
+                </div>
+              )}
 
               <div className="pt-4 border-t">
                 <div className="flex items-center justify-between">
