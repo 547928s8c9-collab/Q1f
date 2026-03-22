@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { adminUsers, adminUserRoles, roles } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { seedAdminDemoData } from "../../admin/demoSeed";
+import { registerEngineLoopsForUser } from "../../app/engineInit";
 
 const DEMO_USER_ID = "demo-user-001";
 const DEMO_ADMIN_USER_ID = "demo-admin-001";
@@ -79,6 +80,9 @@ export function registerAuthRoutes(app: Express): void {
             return res.status(500).json({ error: "Failed to save session" });
           }
           console.log("Demo login successful, session saved for user:", DEMO_USER_ID);
+          registerEngineLoopsForUser(DEMO_USER_ID).catch((err) => {
+            console.error("Failed to start engine loops for demo user:", err);
+          });
           res.redirect("/");
         });
       });

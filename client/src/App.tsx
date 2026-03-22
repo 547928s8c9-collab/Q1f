@@ -48,11 +48,20 @@ const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
 const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
 import { Loader2 } from "lucide-react";
 import Risk from "@/pages/risk";
+import { FloatingProfitToastContainer } from "@/components/floating-profit-toast";
+import { useTradeToasts } from "@/hooks/use-trade-toasts";
+
+function TradeToastWatcher() {
+  useTradeToasts();
+  return null;
+}
 
 function ProtectedRouter() {
   return (
     <GateGuard>
       <AppShell>
+        <TradeToastWatcher />
+        <FloatingProfitToastContainer />
         <Suspense
           fallback={(
             <div className="min-h-screen flex items-center justify-center bg-background">

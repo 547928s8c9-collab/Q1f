@@ -155,6 +155,14 @@ export async function setupAuth(app: Express) {
           console.error("[auth] Login error:", loginErr);
           return res.redirect("/api/login");
         }
+        const userId = user.claims?.sub;
+        if (userId) {
+          import("../../app/engineInit").then(({ registerEngineLoopsForUser }) => {
+            registerEngineLoopsForUser(userId).catch((err: unknown) => {
+              console.error("[auth] Engine loop registration error:", err);
+            });
+          }).catch(() => {});
+        }
         const session = req.session as typeof req.session & { returnTo?: string };
         const returnTo = getSafeReturnTo(session?.returnTo);
         if (session?.returnTo) {

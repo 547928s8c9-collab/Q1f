@@ -150,7 +150,7 @@ export default function StrategyDetail() {
       { timeframe: chartTimeframe, periodDays: periodDays.toString(), limit: candleLimit.toString() },
     ],
     enabled: !!params.id,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 
   const {
@@ -165,7 +165,7 @@ export default function StrategyDetail() {
       { timeframe: chartTimeframe, periodDays: periodDays.toString() },
     ],
     enabled: !!params.id,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 
   // Fetch trades with pagination
@@ -185,6 +185,7 @@ export default function StrategyDetail() {
       return response;
     },
     enabled: !!params.id,
+    refetchInterval: 15_000,
   });
 
   // Fetch trade events for selected trade

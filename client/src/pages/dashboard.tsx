@@ -64,7 +64,7 @@ export default function Dashboard() {
       return res.json();
     },
     refetchOnWindowFocus: false,
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 
   const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();

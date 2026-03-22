@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 
 type ManagementEventType =
   | "daily_pnl" | "deposit" | "withdrawal"
-  | "strategy_change" | "settlement" | "fee_charged";
+  | "strategy_change" | "settlement" | "fee_charged"
+  | "TRADE_OPEN" | "TRADE_CLOSE";
 
 const EVENT_LABELS: Record<ManagementEventType, string> = {
   daily_pnl:       "Начислен дневной доход",
@@ -19,6 +20,8 @@ const EVENT_LABELS: Record<ManagementEventType, string> = {
   strategy_change: "Стратегия изменена",
   settlement:      "Расчёт по портфелю",
   fee_charged:     "Комиссия управляющего",
+  TRADE_OPEN:      "Сделка открыта",
+  TRADE_CLOSE:     "Сделка закрыта",
 };
 
 const MANAGEMENT_TYPES = new Set<string>(Object.keys(EVENT_LABELS));
@@ -50,6 +53,8 @@ const EVENT_ICONS: Partial<Record<string, typeof BarChart2>> = {
   strategy_change: RefreshCw,
   settlement:      Wallet,
   fee_charged:     Receipt,
+  TRADE_OPEN:      TrendingUp,
+  TRADE_CLOSE:     TrendingDown,
 };
 
 // ── row components ─────────────────────────────────────────────────
@@ -80,6 +85,47 @@ function DailyPnlRow({ event }: { event: EventData }) {
         </div>
         <div className="flex items-center justify-between mt-0.5">
           {p.tier && <p className="text-xs text-muted-foreground">{p.tier}</p>}
+          {event.createdAt && (
+            <p className="text-xs text-muted-foreground ml-auto">{formatRuDate(event.createdAt)}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradeEventRow({ event }: { event: EventData }) {
+  const p = (event.payloadJson ?? {}) as { netPnl?: number; symbol?: string; entryPrice?: number; exitPrice?: number };
+  const isClose = event.type === "TRADE_CLOSE";
+  const pnl = p.netPnl ?? 0;
+  const positive = pnl >= 0;
+  const Icon = isClose ? (positive ? TrendingUp : TrendingDown) : BarChart2;
+  const label = EVENT_LABELS[event.type as ManagementEventType] ?? event.type;
+
+  return (
+    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0" data-testid={`trade-event-${event.id}`}>
+      <div className={cn(
+        "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
+        isClose
+          ? positive ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+          : "bg-blue-500/10 text-blue-500",
+      )}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">{label}</p>
+          {isClose && (
+            <span className={cn(
+              "text-sm font-semibold tabular-nums",
+              positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+            )}>
+              {positive ? "+" : ""}{pnl.toFixed(2)} USDT
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          {p.symbol && <p className="text-xs text-muted-foreground">{p.symbol}</p>}
           {event.createdAt && (
             <p className="text-xs text-muted-foreground ml-auto">{formatRuDate(event.createdAt)}</p>
           )}
@@ -121,6 +167,7 @@ export default function ActivityEvents() {
       if (!res.ok) throw new Error("Failed to fetch activity");
       return res.json();
     },
+    refetchInterval: 15_000,
   });
 
   const events = (data?.events ?? []).filter((e) => MANAGEMENT_TYPES.has(e.type));
@@ -171,7 +218,9 @@ export default function ActivityEvents() {
             {events.map((event) =>
               event.type === "daily_pnl"
                 ? <DailyPnlRow key={event.id} event={event} />
-                : <ManagementEventRow key={event.id} event={event} />
+                : event.type === "TRADE_OPEN" || event.type === "TRADE_CLOSE"
+                  ? <TradeEventRow key={event.id} event={event} />
+                  : <ManagementEventRow key={event.id} event={event} />
             )}
           </div>
         </Card>

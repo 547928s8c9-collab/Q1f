@@ -169,6 +169,7 @@ export interface IStorage {
   createSimAllocation(allocation: InsertSimAllocation): Promise<SimAllocation>;
   updateSimAllocation(id: string, updates: Partial<SimAllocation>): Promise<SimAllocation | undefined>;
   getSimAllocationByRequest(userId: string, strategyId: string, requestId: string): Promise<SimAllocation | undefined>;
+  getActiveAllocationsForUser(userId: string): Promise<SimAllocation[]>;
 
   getSimPosition(userId: string, strategyId: string): Promise<SimPosition | undefined>;
   upsertSimPosition(position: InsertSimPosition): Promise<SimPosition>;
@@ -183,6 +184,8 @@ export interface IStorage {
     limit?: number,
     cursor?: string
   ): Promise<{ trades: SimTrade[]; nextCursor?: string }>;
+  getRecentSimTrades(userId: string, limit?: number, sinceTs?: number): Promise<SimTrade[]>;
+  getLatestSimTradeExitTs(userId: string, strategyId: string): Promise<number | null>;
   createSimTradeEvent(event: InsertSimTradeEvent): Promise<SimTradeEvent>;
   getSimTradeEvents(tradeId: string): Promise<SimTradeEvent[]>;
 
@@ -1029,6 +1032,14 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getActiveAllocationsForUser(userId: string): Promise<SimAllocation[]> {
+    return db.select().from(simAllocations)
+      .where(and(
+        eq(simAllocations.userId, userId),
+        eq(simAllocations.status, "ACTIVE")
+      ));
+  }
+
   async getSimPosition(userId: string, strategyId: string): Promise<SimPosition | undefined> {
     const [result] = await db.select().from(simPositions)
       .where(and(eq(simPositions.userId, userId), eq(simPositions.strategyId, strategyId)));
@@ -1106,6 +1117,28 @@ export class DatabaseStorage implements IStorage {
       : undefined;
 
     return { trades, nextCursor };
+  }
+
+  async getRecentSimTrades(userId: string, limit: number = 20, sinceTs?: number): Promise<SimTrade[]> {
+    const conditions: ReturnType<typeof eq>[] = [
+      eq(simTrades.userId, userId),
+      eq(simTrades.status, "CLOSED"),
+    ];
+    if (sinceTs !== undefined) {
+      conditions.push(gte(simTrades.createdAt, new Date(sinceTs)));
+    }
+    return db.select()
+      .from(simTrades)
+      .where(and(...conditions))
+      .orderBy(desc(simTrades.createdAt))
+      .limit(limit);
+  }
+
+  async getLatestSimTradeExitTs(userId: string, strategyId: string): Promise<number | null> {
+    const rows = await db.select({ maxExit: sql<number>`MAX(${simTrades.exitTs})` })
+      .from(simTrades)
+      .where(and(eq(simTrades.userId, userId), eq(simTrades.strategyId, strategyId)));
+    return rows[0]?.maxExit ?? null;
   }
 
   async createSimTradeEvent(event: InsertSimTradeEvent): Promise<SimTradeEvent> {

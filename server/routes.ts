@@ -407,6 +407,29 @@ export async function registerRoutes(
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // RECENT SIM TRADES (for floating profit toasts)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  app.get("/api/trades/recent", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 10;
+      const sinceParsed = req.query.since ? parseInt(String(req.query.since), 10) : undefined;
+      const sinceTs = sinceParsed !== undefined && Number.isFinite(sinceParsed) ? sinceParsed : undefined;
+
+      if (!Number.isFinite(limit) || limit < 1 || limit > 50) {
+        return res.status(400).json({ error: "Invalid limit" });
+      }
+
+      const trades = await storage.getRecentSimTrades(userId, limit, sinceTs);
+      res.json({ trades });
+    } catch (error) {
+      logger.error("Get recent trades error", "routes", {}, error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // ENGINE STATUS STREAM (SSE)
   // ─────────────────────────────────────────────────────────────────────────────
   

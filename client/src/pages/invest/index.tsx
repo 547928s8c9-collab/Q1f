@@ -27,15 +27,18 @@ export default function Invest() {
 
   const { data: strategies, isLoading, isError } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
+    refetchInterval: 15_000,
   });
 
   const { data: bootstrap } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
+    refetchInterval: 15_000,
   });
 
   const { data: allPerformance } = useQuery<Record<string, StrategyPerformance[]>>({
     queryKey: ["/api/strategies/performance-all"],
     enabled: !isLoading && !!strategies?.length,
+    refetchInterval: 15_000,
   });
 
   const strategiesByTier: Record<RiskTierKey, Strategy[]> = {
