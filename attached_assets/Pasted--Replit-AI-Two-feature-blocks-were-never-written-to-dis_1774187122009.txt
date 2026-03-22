@@ -1,0 +1,415 @@
+Вставь в Replit AI:
+
+Two feature blocks were never written to disk.
+Create all files now, one by one. Confirm each file 
+after writing it before moving to the next.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GROUP 2 — Demo seed data
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 1: Create client/src/lib/demo-seed.ts
+Exact content — do not modify:
+
+export const demoSeed = {
+  user: {
+    name: "Алишер Н.",
+    city: "Ташкент, Узбекистан",
+    startDate: "2025-10-15",
+    initialDeposit: 500,
+    tier: "active",
+  },
+  portfolio: {
+    currentBalance: 847,
+    totalProfit: 347,
+    totalWithdrawn: 180,
+  },
+  monthlyHistory: [
+    { month: "Октябрь 2025",  pnl: 44.20,  pnlPct: 8.8  },
+    { month: "Ноябрь 2025",   pnl: -31.50, pnlPct: -6.3 },
+    { month: "Декабрь 2025",  pnl: 98.40,  pnlPct: 19.7 },
+    { month: "Январь 2026",   pnl: 76.10,  pnlPct: 15.2 },
+    { month: "Февраль 2026",  pnl: 112.30, pnlPct: 22.5 },
+    { month: "Март 2026",     pnl: 47.50,  pnlPct: 9.5  },
+  ],
+  withdrawals: [
+    { date: "2025-12-28", amount: 80,  status: "completed" },
+    { date: "2026-01-31", amount: 60,  status: "completed" },
+    { date: "2026-02-28", amount: 40,  status: "completed" },
+  ],
+  activity: [
+    { type: "daily_pnl",  date: "2026-03-22", amount:  7.40,  tier: "Активный" },
+    { type: "daily_pnl",  date: "2026-03-21", amount:  9.10,  tier: "Активный" },
+    { type: "withdrawal", date: "2026-02-28", amount: -40.00 },
+    { type: "daily_pnl",  date: "2026-02-28", amount: 11.20,  tier: "Активный" },
+    { type: "settlement", date: "2026-02-01", amount: 112.30 },
+    { type: "withdrawal", date: "2026-01-31", amount: -60.00 },
+    { type: "settlement", date: "2026-01-01", amount: 76.10  },
+    { type: "withdrawal", date: "2025-12-28", amount: -80.00 },
+    { type: "settlement", date: "2025-12-01", amount: 98.40  },
+    { type: "settlement", date: "2025-11-01", amount: -31.50 },
+    { type: "deposit",    date: "2025-10-15", amount: 500.00 },
+  ],
+} as const;
+
+Confirm file path after writing. Then FILE 2.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 2: Create client/src/hooks/use-demo-data-seeder.ts
+
+Exact content:
+
+import { useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { queryClient } from "@/lib/queryClient";
+import { demoSeed } from "@/lib/demo-seed";
+import type { BootstrapResponse } from "@shared/schema";
+
+function toMinor(usdt: number): string {
+  return Math.round(usdt * 1_000_000).toString();
+}
+
+function buildPortfolioSeries(): Array<{ date: string; value: string }> {
+  const segments = [
+    { startDate: "2025-10-15", endDate: "2025-10-31", startVal: 500.00,  endVal: 544.20 },
+    { startDate: "2025-11-01", endDate: "2025-11-30", startVal: 544.20,  endVal: 512.70 },
+    { startDate: "2025-12-01", endDate: "2025-12-31", startVal: 512.70,  endVal: 611.10 },
+    { startDate: "2026-01-01", endDate: "2026-01-31", startVal: 611.10,  endVal: 687.20 },
+    { startDate: "2026-02-01", endDate: "2026-02-28", startVal: 687.20,  endVal: 799.50 },
+    { startDate: "2026-03-01", endDate: "2026-03-22", startVal: 799.50,  endVal: 847.00 },
+  ];
+  const points: Array<{ date: string; value: string }> = [];
+  for (const seg of segments) {
+    const start = new Date(seg.startDate);
+    const end   = new Date(seg.endDate);
+    const totalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+    for (let i = 0; i <= totalDays; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      const t   = totalDays === 0 ? 1 : i / totalDays;
+      const val = seg.startVal + t * (seg.endVal - seg.startVal);
+      points.push({
+        date:  d.toISOString().split("T")[0],
+        value: Math.round(val * 1_000_000).toString(),
+      });
+    }
+  }
+  return points;
+}
+
+function buildDemoAnalyticsOverview(days: number) {
+  const series  = buildPortfolioSeries();
+  const sliced  = series.slice(-days);
+  const march   = demoSeed.monthlyHistory[5];
+  return {
+    updatedAt:        new Date().toISOString(),
+    totalEquityMinor: toMinor(demoSeed.portfolio.currentBalance),
+    metrics: {
+      pnl30dMinor:       toMinor(march.pnl),
+      roi30dPct:         march.pnlPct,
+      maxDrawdown30dPct: Math.abs(demoSeed.monthlyHistory[1].pnlPct),
+      positionsCount:    1,
+      activePositions:   1,
+    },
+    equitySeries: sliced.map((d) => ({
+      ts:          d.date + "T12:00:00.000Z",
+      equityMinor: d.value,
+    })),
+    strategies: [{
+      strategyId:         "demo-strategy-1",
+      name:               "ZEON Alpha",
+      riskTier:           "MEDIUM",
+      allocatedMinor:     toMinor(demoSeed.portfolio.currentBalance),
+      currentMinor:       toMinor(demoSeed.portfolio.currentBalance),
+      pnlMinor:           toMinor(demoSeed.portfolio.totalProfit),
+      roiPct:             parseFloat(
+        ((demoSeed.portfolio.totalProfit / demoSeed.user.initialDeposit) * 100).toFixed(1)
+      ),
+      accruedProfitMinor: toMinor(march.pnl),
+      status:             "INVESTED_ACTIVE",
+    }],
+  };
+}
+
+function buildDemoOperations() {
+  const typeMap: Record<string, string> = {
+    daily_pnl:  "DAILY_PAYOUT",
+    withdrawal: "WITHDRAW_USDT",
+    settlement: "DAILY_PAYOUT",
+    deposit:    "DEPOSIT_USDT",
+  };
+  const operations = demoSeed.activity.map((item, i) => ({
+    id:           `demo-op-${i}`,
+    userId:       "demo-user",
+    type:         typeMap[item.type] ?? item.type.toUpperCase(),
+    status:       "completed",
+    asset:        "USDT",
+    amount:       toMinor(Math.abs(item.amount)),
+    fee:          "0",
+    txHash:       null,
+    providerRef:  null,
+    strategyId:   ["daily_pnl","settlement"].includes(item.type) ? "demo-strategy-1" : null,
+    strategyName: ["daily_pnl","settlement"].includes(item.type) ? "ZEON Alpha" : null,
+    fromVault:    null,
+    toVault:      null,
+    metadata:     null,
+    reason:       null,
+    createdAt:    item.date + "T12:00:00.000Z",
+    updatedAt:    item.date + "T12:00:00.000Z",
+  }));
+  return { operations, nextCursor: undefined };
+}
+
+const MONTH_KEYS: Record<string, { year: number; month: number }> = {
+  "Октябрь 2025": { year: 2025, month: 10 },
+  "Ноябрь 2025":  { year: 2025, month: 11 },
+  "Декабрь 2025": { year: 2025, month: 12 },
+  "Январь 2026":  { year: 2026, month:  1 },
+  "Февраль 2026": { year: 2026, month:  2 },
+  "Март 2026":    { year: 2026, month:  3 },
+};
+
+function buildDemoStatements() {
+  return demoSeed.monthlyHistory.map((entry, idx) => {
+    const ym = MONTH_KEYS[entry.month]!;
+    const monthWithdrawals = demoSeed.withdrawals.filter((w) => {
+      const d = new Date(w.date);
+      return d.getFullYear() === ym.year && d.getMonth() + 1 === ym.month;
+    });
+    const totalWithdrawn = monthWithdrawals.reduce((s, w) => s + w.amount, 0);
+    const isFirst        = idx === 0;
+    const pnlIn          = entry.pnl > 0 ? entry.pnl : 0;
+    const pnlOut         = entry.pnl < 0 ? -entry.pnl : 0;
+    const opCount        = (isFirst ? 2 : 1) + monthWithdrawals.length;
+    return {
+      year: ym.year, month: ym.month,
+      data: {
+        year: ym.year, month: ym.month,
+        period:             entry.month,
+        operationCount:     opCount,
+        completedCount:     opCount,
+        totalIn:            isFirst ? toMinor(demoSeed.user.initialDeposit + pnlIn) : toMinor(pnlIn),
+        totalOut:           toMinor(pnlOut + totalWithdrawn),
+        totalFees:          "0",
+        managementFeeMinor: "0",
+        net:                isFirst
+          ? toMinor(demoSeed.user.initialDeposit + entry.pnl - totalWithdrawn)
+          : toMinor(entry.pnl - totalWithdrawn),
+      },
+    };
+  });
+}
+
+export function useDemoDataSeeder() {
+  const { user }   = useAuth();
+  const isDemo     = user?.email === "demo@example.com";
+  const seededRef  = useRef(false);
+
+  const { data: bootstrap } = useQuery<BootstrapResponse>({
+    queryKey: ["/api/bootstrap"],
+    enabled:  isDemo,
+  });
+
+  useEffect(() => {
+    if (!isDemo || !bootstrap || seededRef.current) return;
+    seededRef.current = true;
+
+    queryClient.setQueryData<BootstrapResponse>(["/api/bootstrap"], {
+      ...bootstrap,
+      portfolioSeries: buildPortfolioSeries(),
+      balances: {
+        ...bootstrap.balances,
+        USDT: { available: toMinor(demoSeed.portfolio.currentBalance), locked: "0" },
+      },
+      invested: {
+        current:   toMinor(demoSeed.portfolio.currentBalance),
+        principal: toMinor(demoSeed.user.initialDeposit),
+      },
+    });
+
+    for (const days of [7, 30, 90, 365, 9999]) {
+      queryClient.setQueryData(
+        ["/api/analytics/overview", { days }],
+        buildDemoAnalyticsOverview(days),
+      );
+    }
+
+    const ops = buildDemoOperations();
+    queryClient.setQueryData(["/api/operations", { filter: undefined, q: undefined }], ops);
+    queryClient.setQueryData(["/api/operations", {}], ops);
+
+    for (const { year, month, data } of buildDemoStatements()) {
+      queryClient.setQueryData(["/api/statements/summary", { year, month }], data);
+    }
+  }, [isDemo, bootstrap]);
+}
+
+Confirm file path after writing. Then FILE 3.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 3: Edit client/src/components/app-shell.tsx
+Add these two lines:
+
+1. At the top with other imports:
+   import { useDemoDataSeeder } from "@/hooks/use-demo-data-seeder";
+
+2. Inside AppShellContent component, 
+   after the existing hooks at the top of the function:
+   useDemoDataSeeder();
+
+Confirm after writing. Then move to Group 3.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GROUP 3 — MoonPay fiat on-ramp
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 4: Edit client/src/pages/deposit/card.tsx
+
+Make these changes:
+
+CHANGE 1 — Add imports at the top:
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+CHANGE 2 — Add state variables after existing useState:
+const [moonpayAmount, setMoonpayAmount] = useState("");
+const [onramperOpen, setOnramperOpen] = useState(false);
+
+CHANGE 3 — Add calculations after existing calculations:
+const moonpayAmountNum = parseFloat(moonpayAmount) || 0;
+const moonpayFee = moonpayAmountNum * 0.025;
+const moonpayTotal = moonpayAmountNum + moonpayFee;
+
+const handleMoonpayOpen = () => {
+  const apiKey = import.meta.env.VITE_MOONPAY_API_KEY ?? "";
+  // TODO: Replace with real API key in .env
+  window.open(
+    `https://buy.moonpay.com?apiKey=${apiKey}&currencyCode=usdt_trc20&baseCurrencyAmount=${moonpayAmountNum}`,
+    "_blank",
+  );
+};
+
+CHANGE 4 — Update page title:
+"Card Deposit" → "Карта → USDT"
+"Top up with bank card" → "Пополнение банковской картой"
+"Bank Card Top-up" → "Карта → USDT"
+"Instant conversion to USDT" → "Мгновенная конвертация в USDT"
+"Amount (RUB)" → "Сумма (RUB)"
+"You'll receive (approx.)" → "Вы получите (прибл.)"
+"Rate" → "Курс"
+"Processing..." → "Обработка..."
+"Simulate Card Deposit" → "Симуляция пополнения картой"
+
+CHANGE 5 — Add MoonPay card after existing Card:
+<Card className="p-5 mb-6">
+  <h3 className="font-medium mb-4">Оплата картой через MoonPay</h3>
+  <div className="space-y-4">
+    <div>
+      <Label htmlFor="moonpay-amount">Сумма в USDT</Label>
+      <Input
+        id="moonpay-amount"
+        type="number"
+        inputMode="decimal"
+        placeholder="100"
+        min={20}
+        max={1000}
+        value={moonpayAmount}
+        onChange={(e) => setMoonpayAmount(e.target.value)}
+        className="mt-2"
+      />
+    </div>
+    {moonpayAmountNum > 0 && (
+      <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Комиссия MoonPay: ~2.5%</span>
+          <span className="tabular-nums">${moonpayFee.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between font-medium">
+          <span>Итого к оплате:</span>
+          <span className="tabular-nums">${moonpayTotal.toFixed(2)} USD</span>
+        </div>
+      </div>
+    )}
+    <div className="flex items-center gap-2">
+      <span className="inline-flex items-center px-2 py-0.5 rounded border 
+        text-xs font-bold text-blue-700 border-blue-300 bg-blue-50">VISA</span>
+      <span className="inline-flex items-center px-2 py-0.5 rounded border 
+        text-xs font-bold text-orange-600 border-orange-300 bg-orange-50">MC</span>
+    </div>
+    <Button
+      className="w-full min-h-[44px]"
+      onClick={handleMoonpayOpen}
+      disabled={moonpayAmountNum < 20 || moonpayAmountNum > 1000}
+    >
+      Перейти к оплате →
+    </Button>
+  </div>
+</Card>
+
+CHANGE 6 — Add Onramper accordion after MoonPay card:
+<Card className="p-5 mb-6">
+  <button
+    className="flex items-center justify-between w-full text-left text-sm font-medium"
+    onClick={() => setOnramperOpen((v) => !v)}
+  >
+    <span>Карта не проходит? Альтернативные способы →</span>
+    {onramperOpen 
+      ? <ChevronUp className="w-4 h-4 flex-shrink-0" /> 
+      : <ChevronDown className="w-4 h-4 flex-shrink-0" />}
+  </button>
+  {onramperOpen && (
+    <div className="mt-4 space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Если MoonPay не принимает вашу карту, свяжитесь с нами 
+        в Telegram — поможем пополнить через локального партнёра.
+      </p>
+      {/* TODO: Replace with real support Telegram link */}
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={() => window.open("https://t.me/your_support", "_blank")}
+      >
+        Написать в поддержку
+      </Button>
+    </div>
+  )}
+</Card>
+
+CHANGE 7 — Update the bottom disclaimer text:
+"This is a simulated deposit for demo purposes. 
+In production, card payments would be processed 
+through a payment gateway."
+→
+"Это симуляция пополнения. В продакшн карточные 
+платежи обрабатываются через платёжный шлюз."
+
+Confirm after writing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FILE 5: Edit .env.example
+Add this line at the end:
+VITE_MOONPAY_API_KEY=your_moonpay_api_key_here
+
+If .env.example does not exist, create it with:
+VITE_MOONPAY_API_KEY=your_moonpay_api_key_here
+
+Confirm after writing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+After all 5 files are confirmed, run this check:
+
+1. Does client/src/lib/demo-seed.ts exist? 
+   Show first 5 lines.
+2. Does client/src/hooks/use-demo-data-seeder.ts exist? 
+   Show first 5 lines.
+3. Does deposit/card.tsx contain "MoonPay"? 
+   Show the line.
+4. Does .env.example contain VITE_MOONPAY_API_KEY? 
+   Show the line.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Как подтвердит все 5 файлов — скидывай сюда, запустим финальный аудит.​​​​​​​​​​​​​​​​

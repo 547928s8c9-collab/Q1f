@@ -9,6 +9,7 @@ import { GlobalBanner } from "@/components/global-banner";
 import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 import { PageProvider, usePageTitle } from "@/contexts/page-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useDemoDataSeeder } from "@/hooks/use-demo-data-seeder";
 import {
   Sidebar,
   SidebarContent,
@@ -177,6 +178,7 @@ interface AppShellProps {
 function AppShellContent({ children }: AppShellProps) {
   const [location] = useLocation();
   const { user } = useAuth();
+  useDemoDataSeeder();
   const isDemo = user?.email === "demo@example.com";
   const showDemoBanner = isDemo && !location.startsWith("/admin");
 

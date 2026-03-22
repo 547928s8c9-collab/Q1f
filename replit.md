@@ -53,8 +53,18 @@ Preferred communication style: Simple, everyday language.
 - **Security Headers**: Helmet middleware for secure defaults.
 - **Rate Limiting**: Tiered protection for various API endpoints using `express-rate-limit`.
 
+### Demo Mode
+- **Demo Data Seeder**: Client-side hook (`useDemoDataSeeder`) seeds TanStack Query cache with hardcoded "Алишер Н., Ташкент" persona data when `user.email === "demo@example.com"`.
+- **Seed Data**: `client/src/lib/demo-seed.ts` — portfolio history (Oct 2025–Mar 2026), 3 withdrawals, 11 activity events, monthly P&L with one negative month (Nov 2025: -31.50).
+- **Cache Targets**: `/api/bootstrap` (balances, portfolioSeries, invested), `/api/analytics/overview` (5 time windows), `/api/operations`, `/api/statements/summary` (per month).
+
+### Fiat On-Ramp
+- **Card Deposit**: Russian-localized page (`Карта → USDT`) with simulated RUB→USDT conversion.
+- **MoonPay Integration**: Amount input with 2.5% fee estimate, VISA/MC badges, safe URL construction via `URLSearchParams`. Requires `VITE_MOONPAY_API_KEY` env var.
+- **Onramper Fallback**: Collapsible accordion with Telegram support link for alternative payment methods.
+
 ### Investment & Payout System
-- **Strategy Catalog**: 8 investment strategies across 3 risk tiers (Conservative, Balanced, Aggressive) with computed tier metadata.
+- **Strategy Catalog**: 8 investment strategies across 3 risk tiers (Стабильный/Активный/Агрессивный) with computed tier metadata.
 - **Position Tracking**: Manages principal, invested, accrued profit, and last accrual date.
 - **Payout Instructions**: Configurable per-strategy payout frequency and whitelisted address requirements.
 - **Redemption Requests**: Manages principal redemption with defined statuses and weekly execution windows.
