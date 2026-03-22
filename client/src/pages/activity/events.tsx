@@ -1,110 +1,181 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Bell, Clock } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Card } from "@/components/ui/card";
+import {
+  TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpFromLine,
+  RefreshCw, Wallet, Receipt, BarChart2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
-interface ActivityEvent {
+// ── types ──────────────────────────────────────────────────────────
+
+type ManagementEventType =
+  | "daily_pnl" | "deposit" | "withdrawal"
+  | "strategy_change" | "settlement" | "fee_charged";
+
+const EVENT_LABELS: Record<ManagementEventType, string> = {
+  daily_pnl:       "Начислен дневной доход",
+  deposit:         "Пополнение зачислено",
+  withdrawal:      "Вывод выполнен",
+  strategy_change: "Стратегия изменена",
+  settlement:      "Расчёт по портфелю",
+  fee_charged:     "Комиссия управляющего",
+};
+
+const MANAGEMENT_TYPES = new Set<string>(Object.keys(EVENT_LABELS));
+
+interface EventData {
   id: string;
   type: string;
-  title: string;
-  description: string;
-  timestamp: Date;
-  status: "completed" | "pending" | "failed";
+  message: string;
+  strategyId: string | null;
+  createdAt: string | null;
+  payloadJson: unknown;
 }
 
-const mockEvents: ActivityEvent[] = [
-  {
-    id: "1",
-    type: "deposit",
-    title: "Deposit Completed",
-    description: "USDT deposit of $1,000 has been credited to your account.",
-    timestamp: new Date(Date.now() - 3600000),
-    status: "completed",
-  },
-  {
-    id: "2",
-    type: "strategy",
-    title: "Strategy Activated",
-    description: "BTC Growth strategy is now active with your funds.",
-    timestamp: new Date(Date.now() - 7200000),
-    status: "completed",
-  },
-  {
-    id: "3",
-    type: "payout",
-    title: "Profit Payout",
-    description: "Weekly profit payout of $45.32 has been processed.",
-    timestamp: new Date(Date.now() - 86400000),
-    status: "completed",
-  },
+// ── helpers ────────────────────────────────────────────────────────
+
+const MONTHS_RU = [
+  "января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря",
 ];
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case "completed":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "pending":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
-    case "failed":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
+function formatRuDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}, ${d.getFullYear()}`;
 }
 
-function formatTimeAgo(date: Date) {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 60) return "Just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+const EVENT_ICONS: Partial<Record<string, typeof BarChart2>> = {
+  deposit:         ArrowDownToLine,
+  withdrawal:      ArrowUpFromLine,
+  strategy_change: RefreshCw,
+  settlement:      Wallet,
+  fee_charged:     Receipt,
+};
 
-export default function ActivityEvents() {
+// ── row components ─────────────────────────────────────────────────
+
+function DailyPnlRow({ event }: { event: EventData }) {
+  const p = (event.payloadJson ?? {}) as { amount?: number; tier?: string };
+  const amount   = p.amount ?? 0;
+  const positive = amount >= 0;
+  const Icon     = positive ? TrendingUp : TrendingDown;
+
   return (
-    <div className="container mx-auto max-w-4xl space-y-6 p-6" data-testid="activity-events-page">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Activity Events</h1>
-          <p className="text-muted-foreground">
-            Recent events and notifications for your account.
-          </p>
-        </div>
-        <Bell className="h-6 w-6 text-muted-foreground" />
+    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+      <div className={cn(
+        "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
+        positive ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500",
+      )}>
+        <Icon className="h-4 w-4" />
       </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium">{EVENT_LABELS.daily_pnl}</p>
+          <span className={cn(
+            "text-sm font-semibold tabular-nums",
+            positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+          )}>
+            {positive ? "+" : "−"}{Math.abs(amount).toFixed(2)} USDT
+          </span>
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          {p.tier && <p className="text-xs text-muted-foreground">{p.tier}</p>}
+          {event.createdAt && (
+            <p className="text-xs text-muted-foreground ml-auto">{formatRuDate(event.createdAt)}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      <div className="space-y-4">
-        {mockEvents.map((event) => (
-          <Card key={event.id} data-testid={`activity-event-${event.id}`}>
-            <CardContent className="flex items-start justify-between gap-4 p-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">{event.title}</h3>
-                  <Badge className={getStatusColor(event.status)}>
-                    {event.status}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{event.description}</p>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                {formatTimeAgo(event.timestamp)}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+function ManagementEventRow({ event }: { event: EventData }) {
+  const label = EVENT_LABELS[event.type as ManagementEventType] ?? event.type;
+  const Icon  = EVENT_ICONS[event.type] ?? BarChart2;
 
-        {mockEvents.length === 0 && (
-          <Card data-testid="no-events-card">
-            <CardContent className="flex flex-col items-center justify-center p-8 text-center">
-              <Bell className="mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-muted-foreground">No recent activity events</p>
-            </CardContent>
-          </Card>
+  return (
+    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {event.message && (
+          <p className="text-sm text-muted-foreground truncate mt-0.5">{event.message}</p>
+        )}
+        {event.createdAt && (
+          <p className="text-xs text-muted-foreground mt-0.5">{formatRuDate(event.createdAt)}</p>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── page ───────────────────────────────────────────────────────────
+
+export default function ActivityEvents() {
+  const { data, isLoading } = useQuery<{ events: EventData[] }>({
+    queryKey: ["/api/activity"],
+    queryFn: async () => {
+      const res = await fetch("/api/activity", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      return res.json();
+    },
+  });
+
+  const events = (data?.events ?? []).filter((e) => MANAGEMENT_TYPES.has(e.type));
+
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 max-w-2xl mx-auto pb-24">
+        <h1 className="text-2xl font-bold mb-6">Активность</h1>
+        <Card className="p-5">
+          <div className="space-y-4 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-full bg-muted flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 max-w-2xl mx-auto pb-24" data-testid="activity-events-page">
+      <h1 className="text-2xl font-bold mb-6">Активность</h1>
+
+      {events.length === 0 ? (
+        <Card>
+          <div
+            className="flex flex-col items-center justify-center text-center py-12 px-6"
+            data-testid="empty-state"
+          >
+            <div className="text-4xl mb-4">📊</div>
+            <h3 className="text-lg font-medium mb-1" data-testid="text-empty-title">
+              Активность появится после первого расчётного дня
+            </h3>
+            <p className="text-sm text-muted-foreground" data-testid="text-empty-description">
+              Результаты управления публикуются ежедневно
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-5">
+          <div className="divide-y divide-border">
+            {events.map((event) =>
+              event.type === "daily_pnl"
+                ? <DailyPnlRow key={event.id} event={event} />
+                : <ManagementEventRow key={event.id} event={event} />
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
