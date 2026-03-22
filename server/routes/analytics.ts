@@ -73,7 +73,7 @@ export function registerAnalyticsRoutes(deps: RouteDeps): void {
 
         const pairsArr = Array.isArray(strategy?.pairsJson) ? strategy.pairsJson : [];
         const primaryPair = pairsArr.length > 0 ? String(pairsArr[0]) : null;
-        const symbol = primaryPair ? primaryPair.replace("/", "") : (strategy?.symbol || null);
+        const symbol = primaryPair ? primaryPair.replace("/", "") : null;
 
         return {
           strategyId: pos.strategyId,

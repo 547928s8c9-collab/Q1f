@@ -380,12 +380,17 @@ export default function StrategyDetail() {
     return marketTrades
       .filter((t) => t.symbol === pairSymbol && t.ts >= lastCandleTs)
       .slice(0, 5)
-      .map((t) => ({
-        time: t.ts,
-        type: (t.side === "BUY" ? "entry" : "exit") as "entry" | "exit",
-        price: t.price,
-        label: t.side === "BUY" ? "ПОКУПКА" : "ПРОДАЖА",
-      }));
+      .flatMap((t) => {
+        const isBuy = t.side === "BUY";
+        return [{
+          time: t.ts,
+          position: (isBuy ? "belowBar" : "aboveBar") as const,
+          color: isBuy ? "hsl(var(--success))" : "hsl(var(--danger))",
+          shape: (isBuy ? "arrowUp" : "arrowDown") as const,
+          text: isBuy ? "Покупка" : "Продажа",
+          type: (isBuy ? "entry" : "exit") as "entry" | "exit",
+        }];
+      });
   }, [pairSymbol, marketTrades, candleData]);
 
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
