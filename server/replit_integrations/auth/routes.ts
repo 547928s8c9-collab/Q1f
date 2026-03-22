@@ -103,17 +103,7 @@ export function registerAuthRoutes(app: Express): void {
   // Demo Admin Login - creates a demo admin session with super_admin role (dev-only)
   app.post("/api/admin/auth/demo", async (req: any, res) => {
     try {
-      // Guard: only in dev mode with ALLOW_DEMO_ENDPOINTS=true
-      if (process.env.NODE_ENV === "production") {
-        return res.status(403).json({
-          ok: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "Demo admin login is not available in production",
-          },
-        });
-      }
-
+      // Guard: only when ALLOW_DEMO_ENDPOINTS=true
       if (process.env.ALLOW_DEMO_ENDPOINTS !== "true") {
         return res.status(403).json({
           ok: false,
