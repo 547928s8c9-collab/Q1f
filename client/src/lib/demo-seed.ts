@@ -1,0 +1,40 @@
+export const demoSeed = {
+  user: {
+    name: "Алишер Н.",
+    city: "Ташкент, Узбекистан",
+    startDate: "2025-10-15",
+    initialDeposit: 500,
+    tier: "active",
+  },
+  portfolio: {
+    currentBalance: 847,
+    totalProfit: 347,
+    totalWithdrawn: 180,
+  },
+  monthlyHistory: [
+    { month: "Октябрь 2025",  pnl: 44.20,  pnlPct: 8.8  },
+    { month: "Ноябрь 2025",   pnl: -31.50, pnlPct: -6.3 },
+    { month: "Декабрь 2025",  pnl: 98.40,  pnlPct: 19.7 },
+    { month: "Январь 2026",   pnl: 76.10,  pnlPct: 15.2 },
+    { month: "Февраль 2026",  pnl: 112.30, pnlPct: 22.5 },
+    { month: "Март 2026",     pnl: 47.50,  pnlPct: 9.5  },
+  ],
+  withdrawals: [
+    { date: "2025-12-28", amount: 80,  status: "completed" },
+    { date: "2026-01-31", amount: 60,  status: "completed" },
+    { date: "2026-02-28", amount: 40,  status: "completed" },
+  ],
+  activity: [
+    { type: "daily_pnl",  date: "2026-03-22", amount:  7.40,   tier: "Активный" },
+    { type: "daily_pnl",  date: "2026-03-21", amount:  9.10,   tier: "Активный" },
+    { type: "withdrawal", date: "2026-02-28", amount: -40.00 },
+    { type: "daily_pnl",  date: "2026-02-28", amount: 11.20,   tier: "Активный" },
+    { type: "settlement", date: "2026-02-01", amount: 112.30 },
+    { type: "withdrawal", date: "2026-01-31", amount: -60.00 },
+    { type: "settlement", date: "2026-01-01", amount: 76.10  },
+    { type: "withdrawal", date: "2025-12-28", amount: -80.00 },
+    { type: "settlement", date: "2025-12-01", amount: 98.40  },
+    { type: "settlement", date: "2025-11-01", amount: -31.50 },
+    { type: "deposit",    date: "2025-10-15", amount: 500.00 },
+  ],
+} as const;
