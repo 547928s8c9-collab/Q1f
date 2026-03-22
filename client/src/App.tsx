@@ -43,6 +43,7 @@ const Dashboard = React.lazy(() => import("@/pages/dashboard"));
 const AdminKyc = React.lazy(() => import("@/pages/admin/kyc"));
 const AdminWithdrawals = React.lazy(() => import("@/pages/admin/withdrawals"));
 const AdminDashboard = React.lazy(() => import("@/pages/admin/dashboard"));
+const AdminManagementFees = React.lazy(() => import("@/pages/admin/management-fees"));
 const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
 const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
 import { Loader2 } from "lucide-react";
@@ -87,6 +88,7 @@ function ProtectedRouter() {
             <Route path="/admin/dashboard" component={AdminDashboard} />
             <Route path="/admin/kyc" component={AdminKyc} />
             <Route path="/admin/withdrawals" component={AdminWithdrawals} />
+            <Route path="/admin/management-fees" component={AdminManagementFees} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>
