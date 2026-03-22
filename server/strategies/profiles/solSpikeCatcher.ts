@@ -9,7 +9,6 @@ class SolSpikeCatcherSignal implements SignalGenerator {
   private atr: ATR;
   private volumeMA: VolumeMA;
   private rsi: RSI;
-  private prevCandle: { close: number; high: number; low: number } | null = null;
   private barsInPosition = 0;
   private lastIndicators: Record<string, number> = {};
 
@@ -31,40 +30,32 @@ class SolSpikeCatcherSignal implements SignalGenerator {
 
     this.lastIndicators = { ema, atr, relVol, rsi, spikeRatio, candleRange };
 
-    if (!this.ema.isReady() || !this.rsi.isReady()) {
-      this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
-      return null;
-    }
+    if (!this.ema.isReady() || !this.rsi.isReady()) return null;
 
     if (state.position.side === "LONG") {
       this.barsInPosition++;
       if (rsi > 75 || this.barsInPosition > 10) {
         this.barsInPosition = 0;
-        this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
         return { direction: "EXIT", reason: "spike_target_exit", indicators: this.lastIndicators };
       }
       if (candle.close < ema - atr * 2.5) {
         this.barsInPosition = 0;
-        this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
         return { direction: "EXIT", reason: "spike_stop_loss", indicators: this.lastIndicators };
       }
-      this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
       return null;
     }
 
     if (spikeRatio > 2.0 && relVol > 1.8 && candle.close > candle.open && candle.close > ema) {
-      this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
       return { direction: "LONG", reason: "spike_breakout_entry", indicators: this.lastIndicators };
     }
 
-    this.prevCandle = { close: candle.close, high: candle.high, low: candle.low };
     return null;
   }
 
   getIndicators(): Record<string, number> { return this.lastIndicators; }
   reset(): void {
     this.ema.reset(); this.atr.reset(); this.volumeMA.reset(); this.rsi.reset();
-    this.prevCandle = null; this.barsInPosition = 0; this.lastIndicators = {};
+    this.barsInPosition = 0; this.lastIndicators = {};
   }
 }
 
