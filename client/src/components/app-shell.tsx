@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { GlobalBanner } from "@/components/global-banner";
+import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 import { PageProvider, usePageTitle } from "@/contexts/page-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -174,6 +175,11 @@ interface AppShellProps {
 }
 
 function AppShellContent({ children }: AppShellProps) {
+  const [location] = useLocation();
+  const { user } = useAuth();
+  const isDemo = user?.email === "demo@example.com";
+  const showDemoBanner = isDemo && !location.startsWith("/admin");
+
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "4rem",
@@ -186,6 +192,7 @@ function AppShellContent({ children }: AppShellProps) {
           <AppSidebar />
         </div>
         <div className="flex-1 flex flex-col min-h-screen w-full">
+          <DemoModeBanner isDemo={showDemoBanner} />
           <TopBar />
           <GlobalBanner />
           <main className="flex-1 pb-20 md:pb-0 overflow-auto">
