@@ -102,7 +102,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         intendedQty: trade.qty,
         reason: trade.reason,
       },
-    }).catch(() => {});
+    }).catch((err: unknown) => { console.warn("Failed to log SIGNAL event", err); });
 
     // ORDER_PLACED event
     await storage.createSimTradeEvent({
@@ -117,7 +117,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         orderType: "MARKET",
         qty: trade.qty,
       },
-    }).catch(() => {});
+    }).catch((err: unknown) => { console.warn("Failed to log ORDER_PLACED event", err); });
 
     // FILLED event (entry)
     await storage.createSimTradeEvent({
@@ -134,7 +134,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         fee: 0,
         slippage: 0,
       },
-    }).catch(() => {});
+    }).catch((err: unknown) => { console.warn("Failed to log FILLED event", err); });
 
     // CLOSED event (exit)
     await storage.createSimTradeEvent({
@@ -154,7 +154,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         holdBars: trade.holdBars,
         reason: trade.reason,
       },
-    }).catch(() => {});
+    }).catch((err: unknown) => { console.warn("Failed to log CLOSED event", err); });
 
     // Log TRADE_OPEN (when trade is created) - keep for backward compatibility
     await storage.createEngineEvent({
@@ -170,9 +170,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         qty: trade.qty,
         entryTs: trade.entryTs,
       },
-    }).catch(() => {
-      // Ignore logging errors
-    });
+    }).catch((err: unknown) => { console.warn("Failed to log TRADE_OPEN event", err); });
 
     // Log TRADE_CLOSE (when trade is closed) - keep for backward compatibility
     await storage.createEngineEvent({
@@ -190,9 +188,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
         reason: trade.reason,
         exitTs: trade.exitTs,
       },
-    }).catch(() => {
-      // Ignore logging errors
-    });
+    }).catch((err: unknown) => { console.warn("Failed to log TRADE_CLOSE event", err); });
   }
 
   const netPnlMinor = BigInt(toMinorUnits(scaledStats.netPnl));
@@ -240,7 +236,6 @@ export async function runTrader(params: TraderParams): Promise<void> {
       });
     }
   } catch (error) {
-    // Don't fail trader if position update fails (non-critical optimization)
-    // Log silently or use debug level
+    console.warn("Position equity update failed (non-critical)", error);
   }
 }

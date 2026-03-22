@@ -122,7 +122,9 @@ class MarketStreamStore {
             : prev.trades;
           this.update({ quotes: newQuotes, sparklines: newSparklines, trades: newTrades, connected: true });
         }
-      } catch {}
+      } catch (err) {
+        console.warn("[MarketStream] Failed to parse SSE message:", err);
+      }
     };
 
     es.onerror = () => {

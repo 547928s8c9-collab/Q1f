@@ -42,7 +42,8 @@ export function registerMarketRoutes({ app }: RouteDeps): void {
     const unsubscribe = liveTickerEngine.subscribe((data) => {
       try {
         res.write(data);
-      } catch {
+      } catch (err) {
+        logger.warn("SSE write failed, cleaning up", "market-routes", { error: String(err) });
         cleanup();
       }
     });
@@ -50,7 +51,8 @@ export function registerMarketRoutes({ app }: RouteDeps): void {
     const heartbeat = setInterval(() => {
       try {
         res.write(": heartbeat\n\n");
-      } catch {
+      } catch (err) {
+        logger.warn("SSE heartbeat failed, cleaning up", "market-routes", { error: String(err) });
         cleanup();
       }
     }, 15000);

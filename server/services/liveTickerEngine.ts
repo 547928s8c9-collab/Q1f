@@ -197,7 +197,8 @@ class LiveTickerEngine {
     for (const listener of this.listeners) {
       try {
         listener(`data: ${payload}\n\n`);
-      } catch {
+      } catch (err) {
+        logger.warn("SSE listener error, removing", "live-ticker", { error: String(err) });
         this.listeners.delete(listener);
       }
     }

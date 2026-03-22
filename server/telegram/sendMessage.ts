@@ -75,7 +75,8 @@ export async function sendTelegramMessage(
         if (typeof retryAfter === "number") {
           retryAfterSeconds = retryAfter;
         }
-      } catch {
+      } catch (err) {
+        console.warn("Failed to parse Telegram retry_after response", err);
         retryAfterSeconds = 1;
       }
       await sleep(retryAfterSeconds * 1000);

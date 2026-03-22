@@ -47,6 +47,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Separator } from "@/components/ui/separator";
 import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
 import { toMajorUnits } from "@/lib/money";
+import { useMarketStream } from "@/hooks/use-market-stream";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Низкий риск" },
@@ -93,7 +94,8 @@ export default function StrategyDetail() {
     }
   }, []); // State setters are stable, so empty deps array is safe
 
-  // Payout settings state
+  const { quotesMap: marketQuotes } = useMarketStream();
+
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
   const [payoutAddressId, setPayoutAddressId] = useState<string>("");
   const [payoutMinAmount, setPayoutMinAmount] = useState("10");
@@ -147,6 +149,7 @@ export default function StrategyDetail() {
       { timeframe: chartTimeframe, periodDays: periodDays.toString(), limit: candleLimit.toString() },
     ],
     enabled: !!params.id,
+    refetchInterval: 30_000,
   });
 
   const {
@@ -161,6 +164,7 @@ export default function StrategyDetail() {
       { timeframe: chartTimeframe, periodDays: periodDays.toString() },
     ],
     enabled: !!params.id,
+    refetchInterval: 30_000,
   });
 
   // Fetch trades with pagination
@@ -428,26 +432,48 @@ export default function StrategyDetail() {
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-3 mb-6">
-            <div
-              className={cn(
-                "w-12 h-12 rounded-full flex items-center justify-center",
-                tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
-              )}
-            >
-              <Icon
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div
                 className={cn(
-                  "w-5 h-5",
-                  tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
+                  "w-12 h-12 rounded-full flex items-center justify-center",
+                  tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
                 )}
-              />
+              >
+                <Icon
+                  className={cn(
+                    "w-5 h-5",
+                    tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
+                  )}
+                />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">{strategy?.name}</h2>
+                <Badge variant="outline" className={cn("text-xs", config.color)}>
+                  {config.label}
+                </Badge>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold">{strategy?.name}</h2>
-              <Badge variant="outline" className={cn("text-xs", config.color)}>
-                {config.label}
-              </Badge>
-            </div>
+            {(() => {
+              const pairSymbol = pairs.length > 0 ? String(pairs[0]).replace("/", "") : null;
+              const liveQuote = pairSymbol ? marketQuotes.get(pairSymbol) : null;
+              if (!liveQuote) return null;
+              const isUp = liveQuote.change24hPct >= 0;
+              return (
+                <div className="text-right" data-testid="strategy-live-price">
+                  <p className="text-lg font-bold tabular-nums">
+                    {liveQuote.price >= 1 ? liveQuote.price.toFixed(2) : liveQuote.price.toFixed(5)}
+                  </p>
+                  <p className={cn("text-xs font-medium tabular-nums", isUp ? "text-[hsl(var(--success))]" : "text-[hsl(var(--danger))]")}>
+                    {isUp ? "+" : ""}{liveQuote.change24hPct.toFixed(2)}%
+                  </p>
+                  <div className="flex items-center gap-1 justify-end">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse" />
+                    <span className="text-[10px] text-muted-foreground">{liveQuote.pair}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">

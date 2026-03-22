@@ -17,7 +17,8 @@ function getLastCelebratedMilestone(vaultType: string): number {
   try {
     const stored = localStorage.getItem(getMilestoneStorageKey(vaultType));
     return stored ? parseInt(stored, 10) : 0;
-  } catch {
+  } catch (err) {
+    console.warn("Failed to read milestone from localStorage", err);
     return 0;
   }
 }
@@ -26,8 +27,8 @@ function setLastCelebratedMilestone(vaultType: string, milestone: number): void 
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(getMilestoneStorageKey(vaultType), milestone.toString());
-  } catch {
-    // Ignore storage errors (private browsing, etc.)
+  } catch (err) {
+    console.warn("Failed to write milestone to localStorage", err);
   }
 }
 

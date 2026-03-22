@@ -737,7 +737,8 @@ export class DatabaseStorage implements IStorage {
         payload = typeof actionToken.payloadJson === "string" 
           ? JSON.parse(actionToken.payloadJson) 
           : actionToken.payloadJson;
-      } catch {
+      } catch (err) {
+        console.warn("Failed to parse action token payload JSON", err);
         payload = null;
       }
     }
