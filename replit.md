@@ -74,7 +74,7 @@ Preferred communication style: Simple, everyday language.
   - `/api/market`, `/api/strategies`: 60 req/min (anti-scraping)
 
 ### Investment & Payout System
-- **Strategy Catalog**: 8 investment strategies with risk tiers, demo performance data, and comparison charts.
+- **Strategy Catalog**: 8 investment strategies organized into 3 risk tiers (Conservative/LOW, Balanced/CORE, Aggressive/HIGH). The Invest page uses a tier-first layout where risk tiers are the primary selection object, with individual strategies shown in a collapsible "Under the Hood" section within each tier card. Tier metadata (name, description, target return range, max drawdown) is computed from constituent strategies. Components: `TierCard` (`client/src/components/strategy/tier-card.tsx`), `StrategyCard`, `StrategyDetailsSheet`.
 - **Position Tracking**: Manages `principalMinor`, `investedCurrentMinor`, `accruedProfitPayableMinor`, and `lastAccrualDate`.
 - **Payout Instructions**: Configurable per-strategy payout frequency (DAILY/MONTHLY) with minimum payout amounts and whitelisted address requirements.
 - **Redemption Requests**: Manages principal redemption with PENDING, EXECUTED, CANCELLED statuses and weekly execution windows.

@@ -1,24 +1,26 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/page-header";
-import { StrategyCard } from "@/components/strategy/strategy-card";
+import { TierCard, type RiskTierKey } from "@/components/strategy/tier-card";
 import { StrategyDetailsSheet } from "@/components/strategy/strategy-details-sheet";
 import { InvestSheet } from "@/components/operations/invest-sheet";
-import { StrategyCardSkeleton } from "@/components/ui/loading-skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LiveBadge } from "@/components/ui/live-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useEngineStream } from "@/hooks/use-engine-stream";
 import { useLiveMetrics } from "@/hooks/use-live-metrics";
 import { TrendingUp } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
 
+const TIER_ORDER: RiskTierKey[] = ["LOW", "CORE", "HIGH"];
+
 export default function Invest() {
   useSetPageTitle("Invest");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [investOpen, setInvestOpen] = useState(false);
-  
+
   const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
   const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
 
@@ -35,17 +37,22 @@ export default function Invest() {
     enabled: !isLoading && !!strategies?.length,
   });
 
-  const lowRisk = strategies?.filter(s => s.riskTier === "LOW") || [];
-  const coreRisk = strategies?.filter(s => s.riskTier === "CORE") || [];
-  const highRisk = strategies?.filter(s => s.riskTier === "HIGH") || [];
-
-  const getSparklineData = (strategyId: string) => {
-    const perf = allPerformance?.[strategyId];
-    if (!perf || perf.length === 0) return undefined;
-    
-    const last30 = perf.slice(-30);
-    return last30.map(p => ({ value: parseFloat(p.equityMinor) }));
+  const strategiesByTier: Record<RiskTierKey, Strategy[]> = {
+    LOW: [],
+    CORE: [],
+    HIGH: [],
   };
+
+  strategies?.forEach((s) => {
+    const tier = (s.riskTier || "CORE") as RiskTierKey;
+    if (strategiesByTier[tier]) {
+      strategiesByTier[tier].push(s);
+    }
+  });
+
+  const activeTiers = TIER_ORDER.filter(
+    (tier) => strategiesByTier[tier].length > 0
+  );
 
   const handleViewDetails = (strategy: Strategy) => {
     setSelectedStrategy(strategy);
@@ -76,72 +83,48 @@ export default function Invest() {
     }
   };
 
-  const renderStrategyGrid = (strategyList: Strategy[]) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {strategyList.map((strategy) => (
-        <StrategyCard 
-          key={strategy.id} 
-          strategy={strategy}
-          sparklineData={getSparklineData(strategy.id)}
-          liveMetrics={getMetrics(strategy.id)}
-          onViewDetails={() => handleViewDetails(strategy)}
-          onInvest={() => handleInvest(strategy)}
-        />
-      ))}
-    </div>
-  );
-
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
       <PageHeader
         title="Investment Strategies"
-        subtitle="Choose a strategy that matches your risk profile"
+        subtitle="Select a risk tier that matches your investment goals"
         badge={
-          <LiveBadge 
-            status={isRunning ? "running" : engineStatus?.state === "idle" ? "idle" : "error"}
-            lastUpdated={lastUpdated}
+          <LiveBadge
+            pulse={isRunning}
           />
         }
       />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <StrategyCardSkeleton />
-          <StrategyCardSkeleton />
-          <StrategyCardSkeleton />
-          <StrategyCardSkeleton />
+        <div className="space-y-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-border overflow-hidden">
+              <Skeleton className="h-28 w-full" />
+              <div className="p-6 space-y-4">
+                <Skeleton className="h-4 w-3/4" />
+                <div className="grid grid-cols-3 gap-3">
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                  <Skeleton className="h-20 rounded-lg" />
+                </div>
+                <Skeleton className="h-10 w-full rounded-lg" />
+              </div>
+            </div>
+          ))}
         </div>
-      ) : strategies && strategies.length > 0 ? (
-        <div className="space-y-8">
-          {lowRisk.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-positive"></span>
-                Low Risk Strategies
-              </h2>
-              {renderStrategyGrid(lowRisk)}
-            </section>
-          )}
-          
-          {coreRisk.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-warning"></span>
-                Core Strategies
-              </h2>
-              {renderStrategyGrid(coreRisk)}
-            </section>
-          )}
-          
-          {highRisk.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-negative"></span>
-                High Risk Strategies
-              </h2>
-              {renderStrategyGrid(highRisk)}
-            </section>
-          )}
+      ) : activeTiers.length > 0 ? (
+        <div className="space-y-6">
+          {activeTiers.map((tierKey) => (
+            <TierCard
+              key={tierKey}
+              tierKey={tierKey}
+              strategies={strategiesByTier[tierKey]}
+              allPerformance={allPerformance}
+              getMetrics={getMetrics}
+              onInvest={handleInvest}
+              onViewDetails={handleViewDetails}
+            />
+          ))}
         </div>
       ) : (
         <EmptyState

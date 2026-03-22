@@ -1,0 +1,180 @@
+Хорошо. Читаю всё что мы обсуждали — ТЗ, gap-анализ, целевую модель, реальную архитектуру проекта — и составляю полный аудит-запрос без пропусков.​​​​​​​​​​​​​​​​
+
+Теперь у меня полная картина. Вставь в Replit AI один запрос — он покроет всё:
+
+Please do a thorough audit of the entire codebase against 
+the following requirements. For each item respond with:
+IMPLEMENTED / PARTIAL (what's missing) / MISSING
+Include the relevant file name(s) where applicable.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 1 — STRATEGY & PORTFOLIO MODEL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 Risk-tier model as primary UX object
+Three named tiers (Стабильный / Активный / Агрессивный) are 
+the main thing a client selects — not individual strategies. 
+Individual strategies (BTC Squeeze, ETH EMA, etc.) are 
+internal engine details, not shown to the client directly.
+
+1.2 Tier metadata visible to client
+Each tier shows: target monthly return range, max drawdown, 
+short description in plain language, minimum deposit amount.
+
+1.3 All 8 strategy profiles active in engine
+BTC, ETH, BNB, SOL, XRP, DOGE, ADA, TRX — all 8 have 
+signal generators running and contributing to portfolio 
+simulation.
+
+1.4 Strategies mapped to tiers
+Each tier has a defined set of underlying strategies assigned 
+to it (e.g. Стабильный = BTC + ETH only, Агрессивный = all 8).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 2 — ДУ (TRUST MANAGEMENT) COMPLIANCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1 Investment declaration screen in onboarding
+A dedicated step (between Smart Start Results and Done) that 
+shows: target return range, max drawdown, explicit statement 
+"the manager makes all trading decisions on your behalf", 
+and requires checkbox confirmation before proceeding.
+
+2.2 ДУ contract reference in UI
+Somewhere in the flow (onboarding or invest page) there is 
+a reference to "Договор доверительного управления №___" — 
+either a mock PDF link or a contract number display.
+
+2.3 Client does NOT see individual trades
+The activity feed and dashboard show management-level events 
+only: "Strategy closed positions", "Daily P&L credited: 
++$47.20", "Funds available for withdrawal". 
+Individual buy/sell orders are NOT shown to the client.
+
+2.4 Daily settlement model
+Portfolio value updates once per day (end-of-day), not 
+tick-by-tick or trade-by-trade. Client sees a single daily 
+P&L number, not a running total that changes every few seconds.
+
+2.5 Statement formatted as ДУ management report
+Statement fields: period, opening portfolio value, 
+management gain/loss, deposits/withdrawals, manager fee (%), 
+closing portfolio value. Labeled as "Отчёт по договору ДУ". 
+NOT formatted as a broker trade confirmation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 3 — FIAT ON/OFF-RAMP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1 MoonPay on-ramp widget or flow
+On the deposit page there is a "Pay by card" option that 
+opens a MoonPay widget or redirects to MoonPay with 
+pre-filled amount. Even a UI mockup with MoonPay branding 
+counts as PARTIAL.
+
+3.2 Onramper fallback
+If MoonPay is unavailable for the user's card/country, 
+there is a fallback to Onramper (aggregator of 30+ providers) 
+or a visible message explaining alternatives.
+
+3.3 Fiat off-ramp (withdrawal to local card)
+On the withdrawal page there is an option to withdraw to 
+a Uzcard / Humo / local bank card — either via Paysend 
+integration or as a manual P2P flow with operator confirmation.
+
+3.4 P2P/manual deposit option
+A flow where the user initiates a fiat transfer via local 
+payment system and an operator manually confirms and credits 
+USDT. Relevant for Uzbekistan users who cannot use 
+international card processing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 4 — SOCIAL PROOF & PLATFORM STATS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 Aggregated platform statistics visible to clients
+Dashboard or invest page shows anonymized platform-wide 
+metrics: % of users per tier, average platform return 
+this month, total number of active investors (or AUM range).
+
+4.2 "X users chose this strategy" signal
+On strategy/tier cards there is a social proof indicator 
+showing how many users are currently in this tier 
+(real or seeded mock number).
+
+4.3 Platform return benchmark
+A visible comparison: "Platform average return this month: 
++X%" shown somewhere on dashboard or invest page.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 5 — ADMIN & REVENUE CONTROLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1 Management fee configuration in admin
+Admin can set management fee per tier: type (% of profit 
+or % of AUM), percentage value, billing frequency 
+(monthly / on withdrawal). Changes apply to new investments.
+
+5.2 Fee accrual visible to client
+Client can see accrued management fee in their dashboard 
+or statement — either as a line item or as a deduction 
+from gross P&L.
+
+5.3 Tier-level performance reporting in admin
+Admin can see aggregated performance per tier: total AUM 
+per tier, average return, number of investors, total fees 
+collected.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 6 — DEMO MODE & SEED DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+6.1 Named demo persona
+Demo mode uses a specific fictional user with a name, 
+country, start date, initial deposit amount — not 
+randomly generated data. The story is stable across 
+page refreshes.
+
+6.2 Demo history includes a losing month
+The demo portfolio history contains at least one month 
+with negative P&L (e.g. -3% to -8%) to appear credible. 
+A perfectly smooth upward curve undermines trust.
+
+6.3 Demo includes partial withdrawal history
+The demo user has made at least 2-3 withdrawals in the 
+past, visible in activity and statement, to demonstrate 
+that the withdrawal flow works and funds are accessible.
+
+6.4 Demo mode toggle accessible without login
+A visitor (not yet registered) can activate demo mode 
+from the landing page or login screen to explore the 
+full platform experience.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BLOCK 7 — UX & UZBEKISTAN-SPECIFIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+7.1 Russian language throughout
+All client-facing UI text is in Russian. No English 
+labels visible to end users in production mode.
+
+7.2 Uzbekistan disclaimer on crypto purchase
+Somewhere in the deposit or invest flow there is a 
+disclaimer that crypto purchases for Uzbekistan residents 
+occur "through recommended partners" — not direct sale.
+
+7.3 USDT as primary display currency
+All balances, P&L, and returns are displayed in USDT 
+(not USD, not local currency) as the primary unit.
+
+7.4 Mobile-first layout
+All client-facing pages are usable on a 390px wide 
+mobile screen without horizontal scrolling or broken layouts.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Please be exhaustive. If something is PARTIAL, describe 
+exactly what exists and what is missing in 1-2 sentences.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+Скинь результат сюда целиком — разберём каждый пункт и расставим приоритеты по порядку реализации.​​​​​​​​​​​​​​​​
