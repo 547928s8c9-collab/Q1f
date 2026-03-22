@@ -2,12 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 const showDemoButtons = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
 export default function Landing() {
-  const { toast } = useToast();
   const [isDemoAdminLoading, setIsDemoAdminLoading] = useState(false);
 
   const handleLogin = () => {
@@ -18,36 +16,9 @@ export default function Landing() {
     window.location.href = "/api/demo-login";
   };
   
-  const handleDemoAdmin = async () => {
+  const handleDemoAdmin = () => {
     setIsDemoAdminLoading(true);
-    try {
-      const res = await fetch("/api/admin/auth/demo", {
-        method: "POST",
-        credentials: "include",
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok && data.ok) {
-        window.location.href = "/admin";
-      } else {
-        const errorMessage = data?.error?.message || "Не удалось войти как демо-администратор";
-        toast({
-          title: "Ошибка входа",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        setIsDemoAdminLoading(false);
-      }
-    } catch (error) {
-      console.error("Demo admin login error", error);
-      toast({
-        title: "Ошибка входа",
-        description: "Не удалось подключиться к серверу. Попробуйте ещё раз.",
-        variant: "destructive",
-      });
-      setIsDemoAdminLoading(false);
-    }
+    window.location.href = "/api/admin/auth/demo";
   };
 
   return (

@@ -101,17 +101,13 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   // Demo Admin Login - creates a demo admin session with super_admin role (dev-only)
-  app.post("/api/admin/auth/demo", async (req: any, res) => {
+  // Uses GET + redirect pattern (like demo user login) so the browser navigates
+  // directly and the session cookie is set naturally before the page loads.
+  app.get("/api/admin/auth/demo", async (req: any, res) => {
     try {
       // Guard: only when ALLOW_DEMO_ENDPOINTS=true
       if (process.env.ALLOW_DEMO_ENDPOINTS !== "true") {
-        return res.status(403).json({
-          ok: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "Demo endpoints are disabled. Set ALLOW_DEMO_ENDPOINTS=true to enable.",
-          },
-        });
+        return res.status(403).send("Demo endpoints are disabled");
       }
 
       // Ensure RBAC is seeded
@@ -178,13 +174,8 @@ export function registerAuthRoutes(app: Express): void {
         .limit(1);
 
       if (!superAdminRole) {
-        return res.status(500).json({
-          ok: false,
-          error: {
-            code: "INTERNAL_ERROR",
-            message: "Super admin role not found. RBAC seed may have failed.",
-          },
-        });
+        console.error("Super admin role not found. RBAC seed may have failed.");
+        return res.status(500).send("Internal error: super admin role not found");
       }
 
       // Assign super_admin role if not already assigned
@@ -221,25 +212,13 @@ export function registerAuthRoutes(app: Express): void {
       req.login(demoAdminUser, (err: any) => {
         if (err) {
           console.error("Demo admin login error:", err);
-          return res.status(500).json({
-            ok: false,
-            error: {
-              code: "INTERNAL_ERROR",
-              message: "Failed to create demo admin session",
-            },
-          });
+          return res.status(500).send("Failed to create demo admin session");
         }
-        // Ensure session is saved before responding
+        // Ensure session is saved before redirect
         req.session.save((saveErr: any) => {
           if (saveErr) {
             console.error("Session save error:", saveErr);
-            return res.status(500).json({
-              ok: false,
-              error: {
-                code: "INTERNAL_ERROR",
-                message: "Failed to save session",
-              },
-            });
+            return res.status(500).send("Failed to save session");
           }
           console.log("Demo admin login successful, session saved for user:", DEMO_ADMIN_USER_ID);
           
@@ -248,23 +227,12 @@ export function registerAuthRoutes(app: Express): void {
             console.error("Failed to seed demo data:", err);
           });
           
-          res.json({
-            ok: true,
-            data: {
-              redirectTo: "/admin",
-            },
-          });
+          res.redirect("/admin");
         });
       });
     } catch (error) {
       console.error("Demo admin login error:", error);
-      res.status(500).json({
-        ok: false,
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "Failed to create demo admin session",
-        },
-      });
+      res.status(500).send("Failed to create demo admin session");
     }
   });
 }
