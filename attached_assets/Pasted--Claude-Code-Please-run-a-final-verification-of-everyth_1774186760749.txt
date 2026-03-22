@@ -1,0 +1,127 @@
+Вставь в Claude Code:
+
+Please run a final verification of everything we implemented.
+Check actual file contents. Be honest.
+Use: ✅ DONE / ⚠️ PARTIAL (1 sentence) / ❌ MISSING
+
+── GROUP 1 ──────────────────────────────
+
+B03 live-badge.tsx — status prop exists with 3 states:
+    connected=green, delayed=yellow, disconnected=grey
+
+DM05 landing.tsx — demo buttons show "Попробовать демо →" 
+     (not "Demo")
+
+DM06 app-shell.tsx — DemoModeBanner renders at top of layout,
+     hidden on /admin routes
+
+── GROUP 2 ──────────────────────────────
+
+DM01 client/src/lib/demo-seed.ts exists with 
+     hardcoded "Алишер Н., Ташкент" persona
+
+DM02 monthlyHistory includes Ноябрь 2025 with pnl: -31.50
+
+DM03 withdrawals array has exactly 3 entries
+
+DM04 demo-seed.ts is a plain const export — 
+     no functions, no Math.random(), no Date.now()
+
+DM05 use-demo-data-seeder.ts exists and seeds 4 data sources:
+     bootstrap, analytics, operations, statements
+
+DM06 useDemoDataSeeder() is called in app-shell.tsx
+
+── GROUP 3 ──────────────────────────────
+
+M01 deposit/card.tsx title is "Карта → USDT" in Russian
+
+M02 MoonPay section exists with: amount input, 
+    fee estimate (2.5%), total charge, Visa+MC badges, 
+    "Перейти к оплате →" button
+
+M03 handleMoonpayOpen builds URL without angle brackets:
+    https://buy.moonpay.com?apiKey=...&currencyCode=usdt_trc20&baseCurrencyAmount=...
+
+M04 Onramper accordion exists below MoonPay section,
+    expands to show Telegram support button
+
+M05 VITE_MOONPAY_API_KEY added to .env.example
+
+── PREVIOUSLY EXISTING ──────────────────
+
+E01 Invest page tier names are now in Russian:
+    Стабильный / Активный / Агрессивный
+
+E02 Each tier card shows target return AND max drawdown
+
+E03 Individual strategies hidden in collapsible section
+
+E04 All 8 strategy profile files exist in 
+    server/strategies/profiles/
+
+E05 KYC state machine has all 6 states with auto-redirect
+
+E06 Admin KYC queue has approve/reject/needs-action/on-hold
+
+E07 Withdrawal 4-eyes: maker and checker must be different users
+
+E08 Monthly PDF statement generates real PDF via pdfkit
+
+E09 Telegram mini-app shows: balance, daily P&L, 
+    deposit button, strategy status
+
+E10 Status page checks: deposits, withdrawals, 
+    strategies, database, engine
+
+── DU COMPLIANCE ────────────────────────
+
+D01 client/src/pages/onboarding/du-declaration.tsx exists
+
+D02 du-declaration inserted between smart-start-results 
+    and done in router — cannot be skipped
+
+D03 Page shows tier name, target return, max drawdown, 
+    manager text, risk warning
+
+D04 Checkbox required before button activates
+
+D05 "Договор ДУ №" text visible on page
+
+── ACTIVITY FEED ────────────────────────
+
+A01 Individual trade/order events hidden from client feed
+
+A02 Only management event types shown to client
+
+A03 Empty state shows Russian message
+
+A04 daily_pnl events formatted with green/red, 
+    +/− USDT, Russian date, tier name
+
+── SOCIAL PROOF ─────────────────────────
+
+S01 client/src/lib/platform-stats.ts exists
+
+S02 Dashboard shows investor count, monthly return, AUM
+
+S03 TierCards show user count per tier
+
+── CALCULATOR ───────────────────────────
+
+C01 client/src/components/investment-calculator.tsx exists
+
+C02 Amount input + tier selector present
+
+C03 Projections for 1/3/6 months update live
+
+C04 Disclaimer text present
+
+C05 "Начать инвестировать" CTA button present
+
+C06 Calculator visible on invest page or dashboard
+
+For every ⚠️ and ❌ — quote exact file and line number.
+
+
+Результат скидывай сюда — закроем всё что останется.​​​​​​​​​​​​​​​​
