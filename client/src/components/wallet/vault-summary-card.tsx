@@ -4,14 +4,7 @@ import { Money } from "@/components/ui/money";
 import { Lock, TrendingUp, Receipt, ArrowRightLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { VaultData } from "@shared/schema";
-
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
-}
+import { toMajorUnits } from "@/lib/money";
 
 interface VaultSummaryCardProps {
   principal?: VaultData;

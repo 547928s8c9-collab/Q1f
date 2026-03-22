@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/chip";
 import { Sparkline } from "@/components/charts/sparkline";
 import { TrendingUp, Shield, Zap, AlertTriangle, ChevronRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toMajorUnits } from "@/lib/money";
 import { type Strategy, type StrategyPerformance } from "@shared/schema";
 import { Link } from "wouter";
 
@@ -49,13 +50,7 @@ const riskConfig: Record<
   },
 };
 
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
-}
+
 
 export function StrategyDetailsSheet({ 
   strategy, 

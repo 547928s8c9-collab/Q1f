@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatMoney, parseMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
+import { formatMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
+import { getMoneyInputState } from "@/lib/moneyInput";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import {
   Select,
@@ -58,16 +59,17 @@ export default function Withdraw() {
   });
 
   const availableBalance = bootstrap?.balances?.USDT?.available || "0";
-  const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
-  const isValidAmount = BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
+  const { normalized: normalizedAmount, minor: amountInMinor, error: amountError } =
+    getMoneyInputState(amount, "USDT");
+  const isValidAmount = !!amountInMinor && BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
   const finalAddress = selectedWhitelist || address;
-  const canWithdraw = bootstrap?.gate.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
+  const canWithdraw = bootstrap?.gate?.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
 
   const activeWhitelist = whitelist?.filter((w) => w.status === AddressStatus.ACTIVE) || [];
-  const whitelistEnabled = bootstrap?.security.whitelistEnabled;
+  const whitelistEnabled = bootstrap?.security?.whitelistEnabled;
 
   const handleWithdraw = () => {
-    if (!canWithdraw) return;
+    if (!canWithdraw || !amountInMinor) return;
     withdrawMutation.mutate({ amount: amountInMinor, address: finalAddress });
   };
 
@@ -79,14 +81,14 @@ export default function Withdraw() {
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
       <PageHeader title="Withdraw USDT" subtitle="TRC20 Network" backHref="/wallet" />
 
-      {!bootstrap?.gate.canWithdraw && (
+      {!bootstrap?.gate?.canWithdraw && (
         <Card className="p-4 mb-6 border-warning/50 bg-warning/5">
           <div className="flex gap-3">
             <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-warning">Withdrawal Blocked</p>
               <ul className="text-xs text-muted-foreground mt-1 space-y-1">
-                {bootstrap?.gate.reasons.map((reason, i) => (
+                {bootstrap?.gate?.reasons?.map((reason, i) => (
                   <li key={i}>{reason}</li>
                 ))}
               </ul>
@@ -123,6 +125,7 @@ export default function Withdraw() {
                 USDT
               </span>
             </div>
+            {amountError && <p className="text-xs text-destructive mt-2">{amountError}</p>}
           </div>
 
           {whitelistEnabled && activeWhitelist.length > 0 ? (
@@ -179,7 +182,7 @@ export default function Withdraw() {
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">You'll receive</span>
               <span className="font-medium tabular-nums">
-                {amount ? (parseFloat(amount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
+                {normalizedAmount && !amountError ? (parseFloat(normalizedAmount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
               </span>
             </div>
           </div>

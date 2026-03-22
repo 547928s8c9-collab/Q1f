@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { toMajorUnits } from "@/lib/money";
 
 interface StatementSummary {
   year: number;
@@ -26,14 +27,6 @@ interface StatementSummary {
   totalOut: string;
   totalFees: string;
   net: string;
-}
-
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
 }
 
 function formatMoney(minorUnits: string): string {

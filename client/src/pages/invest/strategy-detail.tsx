@@ -46,6 +46,7 @@ import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/ra
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
+import { toMajorUnits } from "@/lib/money";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
@@ -64,14 +65,6 @@ const timeframeStepMs: Record<Timeframe, number> = {
   "1h": 60 * 60 * 1000,
   "1d": 24 * 60 * 60 * 1000,
 };
-
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
-}
 
 
 export default function StrategyDetail() {

@@ -286,18 +286,18 @@ export function TierCard({
                         {strategy.maxDrawdown || "N/A"}
                       </span>
                     </div>
-                    {live && live.pnl !== 0 && (
+                    {live && live.pnlMinor !== "0" && (
                       <div>
                         <span className="text-muted-foreground">PnL </span>
                         <span
                           className={cn(
                             "font-medium tabular-nums",
-                            live.pnl >= 0
+                            BigInt(live.pnlMinor) >= 0n
                               ? "text-positive"
                               : "text-negative"
                           )}
                         >
-                          {live.pnl >= 0 ? "+" : ""}{live.pnl.toFixed(2)}%
+                          {live.roi30dBps >= 0 ? "+" : ""}{(live.roi30dBps / 100).toFixed(2)}%
                         </span>
                       </div>
                     )}

@@ -6,8 +6,9 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { Money } from "@/components/ui/money";
 import { TrendingUp, Shield, Zap, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toMajorUnits } from "@/lib/money";
 import { type Strategy } from "@shared/schema";
-import { useLiveMetrics, type LiveStrategyMetrics } from "@/hooks/use-live-metrics";
+import { type LiveStrategyMetrics } from "@/hooks/use-live-metrics";
 import { formatMoney } from "@shared/schema";
 
 interface StrategyCardProps {
@@ -23,14 +24,6 @@ const riskConfig: Record<string, { color: string; chipVariant: "success" | "warn
   CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Core Risk" },
   HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "High Risk" },
 };
-
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
-}
 
 export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails, liveMetrics }: StrategyCardProps) {
   const tier = strategy.riskTier || "CORE";

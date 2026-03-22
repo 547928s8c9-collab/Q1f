@@ -17,14 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { BootstrapResponse } from "@shared/schema";
-
-function toMajorUnits(minorUnits: string, decimals: number = 6): number {
-  const value = BigInt(minorUnits || "0");
-  const divisor = BigInt(Math.pow(10, decimals));
-  const majorPart = value / divisor;
-  const remainder = value % divisor;
-  return Number(majorPart) + Number(remainder) / Math.pow(10, decimals);
-}
+import { toMajorUnits } from "@/lib/money";
 
 export default function Wallet() {
   useSetPageTitle("Wallet");

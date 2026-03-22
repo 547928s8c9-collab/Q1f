@@ -97,8 +97,7 @@ export default function Dashboard() {
         subtitle="Your investment overview"
         badge={
           <LiveBadge 
-            status={isRunning ? "running" : engineStatus?.state === "idle" ? "idle" : "error"}
-            lastUpdated={lastUpdated}
+            pulse={isRunning}
           />
         }
         action={

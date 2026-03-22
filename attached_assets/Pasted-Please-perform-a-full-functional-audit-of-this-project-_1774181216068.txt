@@ -1,0 +1,108 @@
+Please perform a full functional audit of this project.
+PART 1 — WHAT EXISTS AND WORKS
+Scan the entire codebase and list every implemented feature
+with its status:
+	∙	WORKS: feature is implemented and functional end-to-end
+	∙	PARTIAL: feature exists but has gaps (describe what’s missing)
+	∙	BROKEN: feature exists but has known issues or is incomplete
+	∙	STUB: route/component exists but has no real implementation
+Cover these areas:
+	∙	All client pages and their functionality
+	∙	All API routes and what they actually do
+	∙	Simulation engine: how it runs, what it calculates, how often
+	∙	Database schema: what tables/models exist
+	∙	Auth and roles: what roles exist, what each can do
+	∙	Onboarding flow: every step end-to-end
+	∙	Admin console: every action available
+	∙	Telegram mini-app: what screens and actions work
+	∙	Deposit/withdrawal flows: every method available
+	∙	Statement and reporting: what gets generated
+PART 2 — AUDIT AGAINST THESE REQUIREMENTS
+For each item below: IMPLEMENTED / PARTIAL / MISSING + file name
+── STRATEGY MODEL ──────────────────────────────────────
+R01 Three risk tiers as primary client-facing object
+(Стабильный / Активный / Агрессивный) — not individual
+strategy names shown to client
+R02 Each tier shows: target return range, max drawdown,
+min deposit, plain-language description
+R03 All 8 pairs active in engine: BTC ETH BNB SOL XRP DOGE ADA TRX
+R04 Strategies mapped to tiers (e.g. Стабильный = BTC+ETH only)
+── ДУ COMPLIANCE ────────────────────────────────────────
+R05 Investment declaration step in onboarding
+(between Smart Start Results and Done):
+shows target return, max drawdown, “manager decides on
+your behalf” text, requires checkbox before proceeding
+R06 Reference to “Договор ДУ №___” visible in UI
+(onboarding or invest page)
+R07 Client activity feed shows management events only —
+NOT individual buy/sell trade orders
+R08 Portfolio value updates once per day (end-of-day settlement),
+not tick-by-tick
+R09 Statement formatted as ДУ management report:
+period / opening value / management gain-loss /
+deposits-withdrawals / manager fee % / closing value
+Labeled “Отчёт по договору ДУ”
+── FIAT ON/OFF-RAMP ─────────────────────────────────────
+R10 MoonPay widget or redirect on deposit page
+(card → USDT flow)
+R11 Onramper fallback if MoonPay unavailable
+R12 Withdrawal to local card (Uzcard/Humo) via Paysend
+or manual P2P operator flow
+R13 Manual P2P deposit option with operator confirmation
+── SOCIAL PROOF ─────────────────────────────────────────
+R14 Platform-wide aggregated stats visible to clients:
+% users per tier, average platform return this month,
+total active investors or AUM range
+R15 “X users in this strategy” indicator on tier cards
+R16 Platform average return benchmark on dashboard
+── ADMIN & REVENUE ──────────────────────────────────────
+R17 Management fee config in admin:
+fee type (% profit or % AUM), percentage,
+billing cycle (monthly / on withdrawal) — per tier
+R18 Fee accrual visible to client in dashboard or statement
+R19 Tier-level performance reporting in admin:
+AUM per tier, avg return, investor count, fees collected
+── ANALYTICS & BENCHMARKS ───────────────────────────────
+R20 Portfolio chart with BTC buy-and-hold overlay
+R21 S&P500-style benchmark overlay on same chart
+R22 Investment calculator: user inputs amount → sees
+projected value and estimated monthly payout
+── AUTO-INVEST & AUTO-WITHDRAW ──────────────────────────
+R23 Auto-reinvest toggle (reinvest daily profit automatically)
+R24 Auto-withdraw config: destination wallet, frequency
+(daily/weekly/monthly), amount type (fixed or % of profit)
+R25 These preferences saved per user, survive refresh
+── COMPLIANCE PAGE ───────────────────────────────────────
+R26 Separate /compliance route with compliance role access
+R27 KYC queue with approve/reject/request-docs actions
+R28 Freeze funds action with reason field
+R29 Document request history log with timestamps
+── SYSTEM STATUS ─────────────────────────────────────────
+R30 /status page: server health, engine status,
+database, payment providers
+R31 Engine scheduler status: running/stopped,
+last run time, next scheduled run
+── DEMO MODE ────────────────────────────────────────────
+R32 Named stable demo persona: hardcoded name, country,
+start date, initial deposit — stable across refreshes
+R33 Demo history includes at least one negative month
+R34 Demo includes 2-3 historical withdrawal events
+R35 Demo accessible from landing page without login
+── MOBILE & UX ──────────────────────────────────────────
+R36 All client pages work at 390px width without
+horizontal scroll or broken layouts
+R37 Empty states designed for: no transactions,
+no active strategy, pending KYC
+R38 Telegram mini-app covers: balance, daily P&L,
+deposit initiation, strategy status
+── LOCALIZATION ──────────────────────────────────────────
+R39 All client-facing UI text in Russian
+R40 USDT as primary display currency throughout
+R41 Uzbekistan disclaimer on crypto purchase flow
+PART 3 — MISSING FEATURES IMPLEMENTATION PLAN
+For every item marked MISSING or PARTIAL in Part 2:
+	∙	Estimate effort: SMALL (< 2h) / MEDIUM (2-8h) / LARGE (1-3 days)
+	∙	List exact files to create or modify
+	∙	Note any dependencies (e.g. “requires R01 to be done first”)
+Format Part 3 as a prioritized table:
+Priority | ID | Feature | Effort | Files | Dependencies

@@ -9,7 +9,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/loading-skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatMoney, parseMoney, type Strategy, type BootstrapResponse } from "@shared/schema";
+import { formatMoney, type Strategy, type BootstrapResponse } from "@shared/schema";
+import { getMoneyInputState } from "@/lib/moneyInput";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function InvestConfirm() {
@@ -54,12 +55,13 @@ export default function InvestConfirm() {
   const availableBalance = bootstrap?.balances?.USDT?.available || "0";
   const minInvestment = strategy?.minInvestment || "1000000";
 
-  const amountInMinor = amount ? parseMoney(amount, "USDT") : "0";
-  const isValidAmount = BigInt(amountInMinor) >= BigInt(minInvestment) && BigInt(amountInMinor) <= BigInt(availableBalance);
-  const canInvest = bootstrap?.gate.canInvest && isValidAmount && !investMutation.isPending;
+  const { normalized: normalizedAmount, minor: amountInMinor, error: amountError } =
+    getMoneyInputState(amount, "USDT");
+  const isValidAmount = !!amountInMinor && BigInt(amountInMinor) >= BigInt(minInvestment) && BigInt(amountInMinor) <= BigInt(availableBalance);
+  const canInvest = bootstrap?.gate?.canInvest && isValidAmount && !investMutation.isPending;
 
   const handleInvest = () => {
-    if (!canInvest || !strategy) return;
+    if (!canInvest || !strategy || !amountInMinor) return;
     investMutation.mutate({
       strategyId: strategy.id,
       amount: amountInMinor,
@@ -96,14 +98,14 @@ export default function InvestConfirm() {
             </div>
           </Card>
 
-          {!bootstrap?.gate.canInvest && (
+          {!bootstrap?.gate?.canInvest && (
             <Card className="p-4 mb-6 border-warning/50 bg-warning/5">
               <div className="flex gap-3">
                 <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-warning">Investment Blocked</p>
                   <ul className="text-xs text-muted-foreground mt-1 space-y-1">
-                    {bootstrap?.gate.reasons.map((reason, i) => (
+                    {bootstrap?.gate?.reasons?.map((reason, i) => (
                       <li key={i}>{reason}</li>
                     ))}
                   </ul>
@@ -140,6 +142,7 @@ export default function InvestConfirm() {
                     USDT
                   </span>
                 </div>
+                {amountError && <p className="text-xs text-destructive mt-2">{amountError}</p>}
                 <p className="text-xs text-muted-foreground mt-2">
                   Minimum: {formatMoney(minInvestment, "USDT")} USDT
                 </p>
