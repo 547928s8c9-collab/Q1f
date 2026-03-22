@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useSyncExternalStore, useCallback } from "react";
+import { useMemo, useSyncExternalStore, useCallback } from "react";
 
 export interface MarketQuote {
   symbol: string;
@@ -170,10 +170,9 @@ function getStore(): MarketStreamStore {
 
 export function useMarketStream() {
   const store = useMemo(() => getStore(), []);
-  const snapshot = useSyncExternalStore(
-    (cb) => store.subscribe(cb),
-    () => store.getSnapshot()
-  );
+  const subscribe = useCallback((cb: () => void) => store.subscribe(cb), [store]);
+  const getSnapshot = useCallback(() => store.getSnapshot(), [store]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
 
   const quotesArray = useMemo(() => Array.from(snapshot.quotes.values()), [snapshot.quotes]);
 
