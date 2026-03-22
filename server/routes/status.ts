@@ -14,8 +14,7 @@ async function checkDatabase(): Promise<{ status: "operational" | "degraded"; me
       ),
     ]);
     return { status: "operational" };
-  } catch (err) {
-    console.warn("Database health check failed", err);
+  } catch {
     return { status: "degraded", message: "Database response slow or unavailable" };
   }
 }

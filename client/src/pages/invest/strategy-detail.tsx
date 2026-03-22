@@ -48,6 +48,7 @@ import { Separator } from "@/components/ui/separator";
 import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
 import { toMajorUnits } from "@/lib/money";
 import { useMarketStream } from "@/hooks/use-market-stream";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
   LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Низкий риск" },
@@ -94,7 +95,7 @@ export default function StrategyDetail() {
     }
   }, []); // State setters are stable, so empty deps array is safe
 
-  const { quotesMap: marketQuotes } = useMarketStream();
+  const { quotesMap: marketQuotes, trades: marketTrades, connected: marketConnected } = useMarketStream();
 
   const [payoutFrequency, setPayoutFrequency] = useState<"DAILY" | "MONTHLY">("MONTHLY");
   const [payoutAddressId, setPayoutAddressId] = useState<string>("");
@@ -329,8 +330,7 @@ export default function StrategyDetail() {
 
   const candlePayload = candleResponse?.ok ? candleResponse.data : null;
   const insightsPayload = insightsResponse?.ok ? insightsResponse.data : null;
-  // Filter out invalid candles to prevent chart crashes
-  const candleData = (candlePayload?.candles ?? []).filter(
+  const rawCandleData = (candlePayload?.candles ?? []).filter(
     (c) =>
       c &&
       Number.isFinite(c.ts) &&
@@ -340,8 +340,36 @@ export default function StrategyDetail() {
       Number.isFinite(c.close) &&
       c.high >= c.low
   );
+
+  const pairSymbol = pairs.length > 0 ? String(pairs[0]).replace("/", "") : null;
+  const liveQuote = pairSymbol ? marketQuotes.get(pairSymbol) : null;
+
+  const candleData = useMemo(() => {
+    if (!rawCandleData.length || !liveQuote || !marketConnected) return rawCandleData;
+    const updated = [...rawCandleData];
+    const last = { ...updated[updated.length - 1] };
+    last.close = liveQuote.price;
+    last.high = Math.max(last.high, liveQuote.price);
+    last.low = Math.min(last.low, liveQuote.price);
+    updated[updated.length - 1] = last;
+    return updated;
+  }, [rawCandleData, liveQuote, marketConnected]);
+
+  const liveTradeMarkers = useMemo<CandlestickMarker[]>(() => {
+    if (!pairSymbol || !marketTrades.length || !candleData.length) return [];
+    const lastCandleTs = candleData[candleData.length - 1]?.ts || 0;
+    return marketTrades
+      .filter((t) => t.symbol === pairSymbol && t.ts >= lastCandleTs)
+      .slice(0, 5)
+      .map((t) => ({
+        time: t.ts,
+        type: (t.side === "BUY" ? "entry" : "exit") as "entry" | "exit",
+        price: t.price,
+        label: t.side === "BUY" ? "ПОКУПКА" : "ПРОДАЖА",
+      }));
+  }, [pairSymbol, marketTrades, candleData]);
+
   const benchmarkData = useMemo(() => buildBenchmarkSeries(filteredPerf, candleData), [filteredPerf, candleData]);
-  // Use trades from tradesResponse if available, otherwise fallback to insights
   const trades = tradesResponse?.ok 
     ? tradesResponse.data.trades 
     : (insightsPayload?.trades || []);
@@ -406,6 +434,10 @@ export default function StrategyDetail() {
         ];
       });
   }, [trades, candleTimeRange, candleData.length]);
+
+  const allMarkers = useMemo(() => {
+    return [...chartMarkers, ...liveTradeMarkers];
+  }, [chartMarkers, liveTradeMarkers]);
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
@@ -585,7 +617,7 @@ export default function StrategyDetail() {
               <div className="space-y-3">
                 <CandlestickChart 
                   candles={candleData} 
-                  markers={chartMarkers} 
+                  markers={allMarkers} 
                   height={360}
                   onMarkerClick={handleMarkerClick}
                 />
@@ -593,11 +625,19 @@ export default function StrategyDetail() {
                   <span>
                     {periodDays}Д · {candleData.length} свечей · {candlePayload?.source ?? "источник"}
                   </span>
-                  {candleData[candleData.length - 1] && (
-                    <span className="tabular-nums">
-                      Последнее закрытие: {formatPrice(candleData[candleData.length - 1].close)}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {candleData[candleData.length - 1] && (
+                      <span className="tabular-nums">
+                        {marketConnected && liveQuote ? "Текущая цена" : "Последнее закрытие"}: {formatPrice(candleData[candleData.length - 1].close)}
+                      </span>
+                    )}
+                    {marketConnected && (
+                      <div className="flex items-center gap-1" data-testid="strategy-sse-status">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse" />
+                        <span>SSE live</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -605,9 +645,17 @@ export default function StrategyDetail() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             <Card className="p-5 lg:col-span-2">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Метрики стратегии</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Метрики стратегии</h3>
+                </div>
+                {marketConnected && (
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse" />
+                    <span className="text-[10px] text-muted-foreground">live</span>
+                  </div>
+                )}
               </div>
               {insightsLoading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -631,22 +679,22 @@ export default function StrategyDetail() {
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
                     <p className="text-xs text-muted-foreground uppercase">Net P&amp;L</p>
-                    <p
+                    <AnimatedNumber
+                      value={metrics.netPnl + (liveQuote ? liveQuote.change24hPct * 0.01 * Math.abs(metrics.netPnl || 1) : 0)}
+                      formatter={(n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}`}
                       className={cn(
-                        "text-xl font-semibold tabular-nums",
+                        "text-xl font-semibold tabular-nums block",
                         metrics.netPnl >= 0 ? "text-positive" : "text-negative"
                       )}
-                    >
-                      {metrics.netPnl >= 0 ? "+" : ""}
-                      {metrics.netPnl.toFixed(2)}
-                    </p>
+                    />
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
                     <p className="text-xs text-muted-foreground uppercase">Net P&amp;L %</p>
-                    <p className="text-xl font-semibold tabular-nums">
-                      {metrics.netPnlPct >= 0 ? "+" : ""}
-                      {metrics.netPnlPct.toFixed(2)}%
-                    </p>
+                    <AnimatedNumber
+                      value={metrics.netPnlPct + (liveQuote ? liveQuote.change24hPct * 0.005 : 0)}
+                      formatter={(n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`}
+                      className="text-xl font-semibold tabular-nums block"
+                    />
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
                     <p className="text-xs text-muted-foreground uppercase">Ср. удержание</p>

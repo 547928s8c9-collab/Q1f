@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ChartSkeleton, Skeleton } from "@/components/ui/loading-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/ui/live-badge";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { formatMoney } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { useEngineStream } from "@/hooks/use-engine-stream";
 import { useLiveMetrics } from "@/hooks/use-live-metrics";
+import { useLiveEquity } from "@/hooks/use-live-equity";
 import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
 import { ProofOfSafety } from "@/components/proof-of-safety";
 import { LiveQuotesBar } from "@/components/live-quotes-bar";
@@ -66,6 +68,25 @@ export default function Dashboard() {
 
   const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
   const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
+
+  const strategyAllocations = useMemo(() =>
+    (data?.strategies || []).map((s) => ({
+      strategyId: s.strategyId,
+      symbol: null as string | null,
+      allocatedMinor: s.allocatedMinor,
+      currentMinor: s.currentMinor,
+      pnlMinor: s.pnlMinor,
+      roiPct: s.roiPct,
+    })),
+    [data?.strategies]
+  );
+
+  const liveEquity = useLiveEquity(
+    data?.totalEquityMinor || "0",
+    data?.metrics.pnl30dMinor || "0",
+    data?.metrics.roi30dPct || 0,
+    strategyAllocations
+  );
 
   const chartData = data?.equitySeries.map((d) => ({
     date: d.ts,
@@ -122,7 +143,15 @@ export default function Dashboard() {
 
       <Card className="p-6 mb-6" data-testid="card-total-equity">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-muted-foreground">Общий капитал</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-muted-foreground">Общий капитал</p>
+            {liveEquity.connected && (
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))] animate-pulse" />
+                <span className="text-[10px] text-muted-foreground">live</span>
+              </div>
+            )}
+          </div>
           {data && (
             <span className="text-xs text-muted-foreground">
               Обновлено {new Date(data.updatedAt).toLocaleTimeString("ru-RU")}
@@ -133,9 +162,12 @@ export default function Dashboard() {
           <Skeleton className="h-10 w-48" />
         ) : (
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold tabular-nums" data-testid="text-total-equity">
-              {formatMoney(data?.totalEquityMinor || "0", "USDT")}
-            </span>
+            <AnimatedNumber
+              value={liveEquity.totalEquityMinor / 1000000}
+              formatter={(n) => formatMoney(Math.round(n * 1000000).toString(), "USDT")}
+              className="text-4xl font-bold tabular-nums"
+              data-testid="text-total-equity"
+            />
             <span className="text-lg text-muted-foreground">USDT</span>
           </div>
         )}
@@ -155,18 +187,47 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            <MetricCard
-              label="PnL за 30д"
-              value={formatMoney(data?.metrics.pnl30dMinor || "0", "USDT")}
-              suffix="USDT"
-              trend={pnlTrend}
-              change={`${pnl30d >= 0n ? "+" : ""}${(data?.metrics.roi30dPct || 0).toFixed(2)}%`}
-            />
-            <MetricCard
-              label="ROI за 30д"
-              value={`${(data?.metrics.roi30dPct || 0).toFixed(2)}%`}
-              trend={data?.metrics.roi30dPct && data.metrics.roi30dPct >= 0 ? "positive" : "negative"}
-            />
+            <Card className="p-4" data-testid="metric-pnl-30d">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                PnL за 30д
+              </p>
+              <div className="flex items-baseline gap-1">
+                <AnimatedNumber
+                  value={liveEquity.totalPnlMinor / 1000000}
+                  formatter={(n) => formatMoney(Math.round(n * 1000000).toString(), "USDT")}
+                  className="text-xl font-semibold tabular-nums"
+                />
+                <span className="text-sm text-muted-foreground">USDT</span>
+              </div>
+              <span className={cn(
+                "text-xs font-medium tabular-nums mt-1 inline-block",
+                liveEquity.totalPnlMinor >= 0 ? "text-positive" : "text-negative"
+              )}>
+                <AnimatedNumber
+                  value={liveEquity.avgRoiPct}
+                  formatter={(n) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`}
+                  className="tabular-nums"
+                />
+              </span>
+            </Card>
+            <Card className="p-4" data-testid="metric-roi-30d">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                ROI за 30д
+              </p>
+              <div className="flex items-baseline gap-1">
+                <AnimatedNumber
+                  value={liveEquity.avgRoiPct}
+                  formatter={(n) => `${n.toFixed(2)}%`}
+                  className="text-xl font-semibold tabular-nums"
+                />
+              </div>
+              <span className={cn(
+                "text-xs font-medium tabular-nums mt-1 inline-block",
+                liveEquity.avgRoiPct >= 0 ? "text-positive" : "text-negative"
+              )}>
+                {liveEquity.connected && "● live"}
+              </span>
+            </Card>
             <MetricCard
               label="Макс. просадка"
               value={`${(data?.metrics.maxDrawdown30dPct || 0).toFixed(2)}%`}

@@ -36,8 +36,7 @@ export function getSmartStartAnswers(): SmartStartAnswers | null {
   if (!stored) return null;
   try {
     return JSON.parse(stored);
-  } catch (err) {
-    console.warn("Failed to parse smart-start stored data", err);
+  } catch {
     return null;
   }
 }

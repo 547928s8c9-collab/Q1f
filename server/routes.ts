@@ -551,8 +551,8 @@ export async function registerRoutes(
       if (res.writable && !res.destroyed) {
         try {
           res.end();
-        } catch (err) {
-          console.warn("Error closing SSE response", err);
+        } catch {
+          // Ignore errors when closing
         }
       }
     };
@@ -627,8 +627,8 @@ export async function registerRoutes(
             res.write(`event: error\n`);
             res.write(`data: ${JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
           }
-        } catch (err) {
-          console.warn("SSE error write failed", err);
+        } catch {
+          // Ignore write errors
         }
         cleanup();
       }
@@ -643,8 +643,8 @@ export async function registerRoutes(
 
       try {
         res.write(`: keep-alive ${Date.now()}\n\n`);
-      } catch (err) {
-        console.warn("SSE keep-alive write failed", err);
+      } catch {
+        // Ignore write errors, connection likely closed
         cleanup();
       }
     }, 15000);
@@ -2565,8 +2565,7 @@ export async function registerRoutes(
           maxCandles: 1,
         });
         dataSourceOk = result.candles.length > 0;
-      } catch (err) {
-        console.warn("Data source health check failed", err);
+      } catch {
         dataSourceOk = false;
       }
 

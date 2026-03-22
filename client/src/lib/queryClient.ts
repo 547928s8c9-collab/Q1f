@@ -7,8 +7,8 @@ async function throwIfResNotOk(res: Response) {
     try {
       const json = JSON.parse(text);
       message = json.message || json.error || text;
-    } catch (err) {
-      console.warn("Response is not JSON, using raw text", err);
+    } catch {
+      // Not JSON, use text as is
     }
     throw new Error(message);
   }
