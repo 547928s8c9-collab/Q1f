@@ -19,9 +19,9 @@ const tierColors = {
 };
 
 const tierLabels = {
-  LOW: "Low Risk",
-  CORE: "Core",
-  HIGH: "High Risk",
+  LOW: "Низкий риск",
+  CORE: "Базовый",
+  HIGH: "Высокий риск",
 };
 
 export default function SmartStartResults() {
@@ -40,7 +40,7 @@ export default function SmartStartResults() {
   if (!result) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Загрузка...</div>
       </div>
     );
   }
@@ -58,9 +58,9 @@ export default function SmartStartResults() {
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <Sparkles className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Your Investment Plan</h1>
+          <h1 className="text-2xl font-bold mb-2">Ваш инвестиционный план</h1>
           <p className="text-muted-foreground">
-            Based on your answers, you're a <span className="font-medium text-foreground">{result.profile}</span>
+            На основе ваших ответов, ваш профиль: <span className="font-medium text-foreground">{result.profile}</span>
           </p>
         </div>
 
@@ -70,19 +70,19 @@ export default function SmartStartResults() {
               <Wallet className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Suggested Starting Deposit</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Рекомендуемый начальный депозит</p>
               <p className="text-2xl font-bold">${result.suggestedDeposit} USDT</p>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            This amount is based on your risk profile and investment goals. You can always adjust later.
+            Эта сумма основана на вашем риск-профиле и инвестиционных целях. Вы всегда можете изменить её позже.
           </p>
         </Card>
 
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Recommended Strategies</h2>
+            <h2 className="font-semibold">Рекомендуемые стратегии</h2>
           </div>
 
           <div className="space-y-3">

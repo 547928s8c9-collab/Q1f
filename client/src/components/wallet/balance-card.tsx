@@ -25,7 +25,7 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
           <div>
             <h3 className="font-medium text-foreground">{asset}</h3>
             <p className="text-xs text-muted-foreground">
-              {asset === "USDT" ? "Tether (TRC20)" : "Russian Ruble"}
+              {asset === "USDT" ? "Tether (TRC20)" : "Российский рубль"}
             </p>
           </div>
         </div>
@@ -33,14 +33,14 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
 
       <div className="space-y-2 mb-4">
         <div className="flex justify-between items-baseline">
-          <span className="text-sm text-muted-foreground">Available</span>
+          <span className="text-sm text-muted-foreground">Доступно</span>
           <span className="text-lg font-semibold tabular-nums">
             {formatMoney(available, asset)}
           </span>
         </div>
         {BigInt(locked) > BigInt(0) && (
           <div className="flex justify-between items-baseline">
-            <span className="text-sm text-muted-foreground">Locked</span>
+            <span className="text-sm text-muted-foreground">Заблокировано</span>
             <span className="text-sm text-muted-foreground tabular-nums">
               {formatMoney(locked, asset)}
             </span>
@@ -48,7 +48,7 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
         )}
         <div className="pt-2 border-t border-border">
           <div className="flex justify-between items-baseline">
-            <span className="text-sm font-medium">Total</span>
+            <span className="text-sm font-medium">Итого</span>
             <span className="text-xl font-semibold tabular-nums">
               {formatMoney(totalBalance, asset)}
             </span>
@@ -62,13 +62,13 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
             <Link href="/deposit/usdt" className="flex-1">
               <Button variant="outline" size="sm" className="w-full" data-testid={`deposit-${asset.toLowerCase()}`}>
                 <Plus className="w-4 h-4 mr-1" />
-                Deposit
+                Пополнить
               </Button>
             </Link>
             <Link href="/withdraw" className="flex-1">
               <Button variant="outline" size="sm" className="w-full" data-testid={`withdraw-${asset.toLowerCase()}`}>
                 <ArrowUpRight className="w-4 h-4 mr-1" />
-                Withdraw
+                Вывести
               </Button>
             </Link>
           </>
@@ -76,7 +76,7 @@ export function BalanceCard({ asset, available, locked, onDeposit, onWithdraw }:
           <Link href="/deposit/card" className="flex-1">
             <Button variant="outline" size="sm" className="w-full" data-testid={`deposit-${asset.toLowerCase()}`}>
               <Plus className="w-4 h-4 mr-1" />
-              Top Up
+              Пополнить
             </Button>
           </Link>
         )}

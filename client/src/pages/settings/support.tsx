@@ -11,7 +11,7 @@ import { LifeBuoy } from "lucide-react";
 import type { BootstrapResponse } from "@shared/schema";
 
 export default function SettingsSupport() {
-  useSetPageTitle("Support");
+  useSetPageTitle("Поддержка");
   const [, navigate] = useLocation();
   const { isLoading, error } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -22,8 +22,8 @@ export default function SettingsSupport() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <PageHeader
-        title="Support"
-        subtitle="Get help with your account"
+        title="Поддержка"
+        subtitle="Получить помощь по аккаунту"
         backHref="/settings"
       />
 
@@ -35,19 +35,19 @@ export default function SettingsSupport() {
         </Card>
       ) : error ? (
         <Alert variant="destructive">
-          <AlertTitle>Unable to load support</AlertTitle>
+          <AlertTitle>Не удалось загрузить поддержку</AlertTitle>
           <AlertDescription>
-            {error instanceof Error ? error.message : "Please try again in a moment."}
+            {error instanceof Error ? error.message : "Пожалуйста, попробуйте позже."}
           </AlertDescription>
         </Alert>
       ) : openRequests.length === 0 ? (
         <Card>
           <EmptyState
             icon={LifeBuoy}
-            title="No open requests"
-            description="When you contact us, your support requests will appear here."
+            title="Нет открытых обращений"
+            description="Когда вы свяжетесь с нами, ваши обращения в поддержку появятся здесь."
             action={{
-              label: "Check service status",
+              label: "Проверить статус сервиса",
               onClick: () => navigate("/status"),
             }}
           />
@@ -55,9 +55,9 @@ export default function SettingsSupport() {
       ) : (
         <Card className="p-6 space-y-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">Open requests</p>
+            <p className="text-sm font-medium text-foreground">Открытые обращения</p>
             <p className="text-xs text-muted-foreground">
-              You currently have {openRequests.length} active request(s).
+              У вас {openRequests.length} активных обращений.
             </p>
           </div>
           <div className="space-y-3">
@@ -68,14 +68,14 @@ export default function SettingsSupport() {
               >
                 <div>
                   <p className="text-sm font-medium text-foreground">{request.subject}</p>
-                  <p className="text-xs text-muted-foreground">Request ID: {request.id}</p>
+                  <p className="text-xs text-muted-foreground">ID обращения: {request.id}</p>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate("/inbox")}
                 >
-                  View updates
+                  Посмотреть обновления
                 </Button>
               </div>
             ))}

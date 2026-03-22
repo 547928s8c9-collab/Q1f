@@ -27,24 +27,24 @@ const defaultVaultData: VaultData = {
 const vaultItems = [
   {
     key: "principal",
-    label: "Principal",
-    description: "Investment capital",
+    label: "Основной",
+    description: "Инвестиционный капитал",
     icon: Lock,
     color: "text-primary",
     bgColor: "bg-primary/10",
   },
   {
     key: "profit",
-    label: "Profit",
-    description: "Earnings",
+    label: "Прибыль",
+    description: "Доходы",
     icon: TrendingUp,
     color: "text-positive",
     bgColor: "bg-positive/10",
   },
   {
     key: "taxes",
-    label: "Tax Reserve",
-    description: "Set aside",
+    label: "Налоговый резерв",
+    description: "Отложено",
     icon: Receipt,
     color: "text-warning",
     bgColor: "bg-warning/10",
@@ -78,11 +78,11 @@ export function VaultSummaryCard({
     <Card className="p-5" data-testid="vault-summary-card">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-foreground">Vaults</h3>
-          <p className="text-xs text-muted-foreground">Separate funds by purpose</p>
+          <h3 className="font-semibold text-foreground">Сейфы</h3>
+          <p className="text-xs text-muted-foreground">Разделение средств по назначению</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-muted-foreground mb-0.5">Total in Vaults</p>
+          <p className="text-xs text-muted-foreground mb-0.5">Итого в сейфах</p>
           <span data-testid="text-vault-total">
             <Money value={totalMajor} currency={asset} size="lg" />
           </span>
@@ -133,7 +133,7 @@ export function VaultSummaryCard({
           data-testid="button-vault-transfer"
         >
           <ArrowRightLeft className="w-4 h-4 mr-1.5" />
-          Transfer
+          Перевод
         </Button>
         <Button
           variant="ghost"
@@ -142,7 +142,7 @@ export function VaultSummaryCard({
           onClick={onViewDetails}
           data-testid="button-vault-details"
         >
-          View Details
+          Подробнее
           <ChevronRight className="w-4 h-4 ml-1" />
         </Button>
       </div>

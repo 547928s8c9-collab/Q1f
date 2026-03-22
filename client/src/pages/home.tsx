@@ -45,12 +45,12 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
   }
 
   const lastUpdated = latestDate 
-    ? new Date(latestDate).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    ? new Date(latestDate).toLocaleDateString("ru-RU", { month: 'short', day: 'numeric' })
     : "—";
 
   return (
     <Card className="p-5 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Portfolio</p>
+      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Общий портфель</p>
       {isLoading ? (
         <Skeleton className="h-10 w-48 mb-2" />
       ) : (
@@ -70,7 +70,7 @@ function HeroCard({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse; isL
             {isPositive ? "+" : "-"}{formatMoney(dailyChange.replace("-", ""), "USDT")} ({dailyChangePercent}%)
           </span>
         )}
-        <span className="text-xs text-muted-foreground">Updated {lastUpdated}</span>
+        <span className="text-xs text-muted-foreground">Обновлено {lastUpdated}</span>
       </div>
     </Card>
   );
@@ -84,10 +84,10 @@ function QuickActions({
   onOpenSheet: (type: SheetType) => void;
 }) {
   const actions: Array<{ icon: typeof ArrowDownLeft; label: string; sheet: SheetType; color: string }> = [
-    { icon: ArrowDownLeft, label: "Top up", sheet: "deposit", color: "text-positive" },
-    { icon: Send, label: "Transfer", sheet: "transfer", color: "text-primary" },
-    { icon: ArrowUpRight, label: "Withdraw", sheet: "withdraw", color: "text-warning" },
-    { icon: TrendingUp, label: "Invest", sheet: "invest", color: "text-accent-foreground" },
+    { icon: ArrowDownLeft, label: "Пополнить", sheet: "deposit", color: "text-positive" },
+    { icon: Send, label: "Перевод", sheet: "transfer", color: "text-primary" },
+    { icon: ArrowUpRight, label: "Вывести", sheet: "withdraw", color: "text-warning" },
+    { icon: TrendingUp, label: "Инвестировать", sheet: "invest", color: "text-accent-foreground" },
   ];
 
   return (
@@ -100,7 +100,7 @@ function QuickActions({
             variant="outline"
             className="flex flex-col items-center justify-center w-full h-20 gap-1.5"
             onClick={() => onOpenSheet(action.sheet)}
-            data-testid={`button-quick-${action.label.toLowerCase().replace(" ", "-")}`}
+            data-testid={`button-quick-${action.sheet}`}
           >
             <div className={`p-2 rounded-full bg-muted ${action.color}`}>
               <Icon className="w-5 h-5" />
@@ -144,14 +144,14 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <Wallet className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Balances</span>
+          <span className="text-sm font-medium">Балансы</span>
         </div>
         <div className="text-center py-4">
-          <p className="text-sm text-muted-foreground mb-3">No funds yet</p>
+          <p className="text-sm text-muted-foreground mb-3">Нет средств</p>
           <Link href="/deposit/usdt">
             <Button size="sm" data-testid="button-first-deposit">
               <Plus className="w-4 h-4 mr-1" />
-              Make first deposit
+              Первый депозит
             </Button>
           </Link>
         </div>
@@ -164,11 +164,11 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Wallet className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Balances</span>
+          <span className="text-sm font-medium">Балансы</span>
         </div>
         <Link href="/wallet">
           <Button variant="ghost" size="sm" className="text-xs" data-testid="button-see-all-balances">
-            See all <ChevronRight className="w-3 h-3 ml-1" />
+            Показать все <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </Link>
       </div>
@@ -182,13 +182,13 @@ function BalancesPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
           </div>
           <div className="text-right">
             <div className="flex items-baseline justify-end gap-2">
-              <span className="text-xs text-muted-foreground">Available</span>
+              <span className="text-xs text-muted-foreground">Доступно</span>
               <span className="text-sm font-semibold tabular-nums" data-testid="text-balance-usdt">
                 {formatMoney(usdtBal?.available || "0", "USDT")}
               </span>
             </div>
             <div className="flex items-baseline justify-end gap-2">
-              <span className="text-xs text-muted-foreground">Invested</span>
+              <span className="text-xs text-muted-foreground">Инвестировано</span>
               <span className="text-xs font-medium tabular-nums" data-testid="text-balance-usdt-invested">
                 {formatMoney(bootstrap?.invested?.current || "0", "USDT")}
               </span>
@@ -238,14 +238,14 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <Vault className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Vaults</span>
+          <span className="text-sm font-medium">Сейфы</span>
         </div>
         <div className="text-center py-4">
-          <p className="text-sm text-muted-foreground mb-3">No vault funds yet</p>
+          <p className="text-sm text-muted-foreground mb-3">Нет средств в сейфах</p>
           <Link href="/wallet/vaults">
             <Button size="sm" variant="outline" data-testid="button-manage-vaults">
               <PiggyBank className="w-4 h-4 mr-1" />
-              Manage vaults
+              Управление сейфами
             </Button>
           </Link>
         </div>
@@ -258,11 +258,11 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Vault className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Vaults</span>
+          <span className="text-sm font-medium">Сейфы</span>
         </div>
         <Link href="/wallet/vaults">
           <Button variant="ghost" size="sm" className="text-xs" data-testid="button-see-all-vaults">
-            See all <ChevronRight className="w-3 h-3 ml-1" />
+            Показать все <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </Link>
       </div>
@@ -272,7 +272,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
               <PiggyBank className="w-4 h-4 text-primary" />
             </div>
-            <span className="text-sm font-medium">Principal</span>
+            <span className="text-sm font-medium">Основной</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-principal">
             {formatMoney(principalVault?.balance || "0", "USDT")}
@@ -283,7 +283,7 @@ function VaultsPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapResponse
             <div className="w-8 h-8 rounded-full bg-positive/10 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-positive" />
             </div>
-            <span className="text-sm font-medium">Profit</span>
+            <span className="text-sm font-medium">Прибыль</span>
           </div>
           <span className="text-sm font-semibold tabular-nums" data-testid="text-vault-profit">
             {formatMoney(profitVault?.balance || "0", "USDT")}
@@ -317,10 +317,10 @@ function StrategiesPreview({ strategies, isLoading }: { strategies?: Strategy[];
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Strategies</span>
+          <span className="text-sm font-medium">Стратегии</span>
         </div>
         <div className="text-center py-4">
-          <p className="text-sm text-muted-foreground mb-3">No strategies available</p>
+          <p className="text-sm text-muted-foreground mb-3">Нет доступных стратегий</p>
         </div>
       </Card>
     );
@@ -340,11 +340,11 @@ function StrategiesPreview({ strategies, isLoading }: { strategies?: Strategy[];
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Strategies</span>
+          <span className="text-sm font-medium">Стратегии</span>
         </div>
         <Link href="/invest">
           <Button variant="ghost" size="sm" className="text-xs" data-testid="button-see-all-strategies">
-            See all <ChevronRight className="w-3 h-3 ml-1" />
+            Показать все <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </Link>
       </div>
@@ -363,7 +363,7 @@ function StrategiesPreview({ strategies, isLoading }: { strategies?: Strategy[];
               </div>
               <span className="text-xs text-muted-foreground">
                 {strategy.expectedMonthlyRangeBpsMin && strategy.expectedMonthlyRangeBpsMax 
-                  ? `${(strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1)}-${(strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1)}%/mo`
+                  ? `${(strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1)}-${(strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1)}%/мес`
                   : "—"
                 }
               </span>
@@ -394,14 +394,14 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Invested Capital</span>
+          <span className="text-sm font-medium">Инвестиционный капитал</span>
         </div>
         <div className="text-center py-4">
-          <p className="text-sm text-muted-foreground mb-3">Start earning with strategies</p>
+          <p className="text-sm text-muted-foreground mb-3">Начните зарабатывать со стратегиями</p>
           <Link href="/invest">
             <Button size="sm" data-testid="button-start-investing">
               <TrendingUp className="w-4 h-4 mr-1" />
-              Invest now
+              Инвестировать
             </Button>
           </Link>
         </div>
@@ -424,11 +424,11 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Invested</span>
+          <span className="text-sm font-medium">Инвестировано</span>
         </div>
         <Link href="/wallet">
           <Button variant="ghost" size="sm" className="text-xs" data-testid="button-view-positions">
-            Details <ChevronRight className="w-3 h-3 ml-1" />
+            Подробнее <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </Link>
       </div>
@@ -437,14 +437,14 @@ function InvestedPreview({ bootstrap, isLoading }: { bootstrap?: BootstrapRespon
         <span className="text-sm font-normal text-muted-foreground ml-1">USDT</span>
       </p>
       <p className={`text-xs ${isProfit ? "text-positive" : "text-negative"}`}>
-        {isProfit ? "+" : ""}{profitPercent}% from principal
+        {isProfit ? "+" : ""}{profitPercent}% от начального капитала
       </p>
     </Card>
   );
 }
 
 export default function Home() {
-  useSetPageTitle("Home");
+  useSetPageTitle("Главная");
   const [activeSheet, setActiveSheet] = useState<SheetType>(null);
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({

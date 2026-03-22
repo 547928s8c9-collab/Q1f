@@ -10,7 +10,7 @@ export default function OnboardingWelcome() {
     queryKey: ["/api/bootstrap"],
   });
 
-  const firstName = bootstrap?.user?.firstName || "there";
+  const firstName = bootstrap?.user?.firstName || "";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -22,9 +22,9 @@ export default function OnboardingWelcome() {
 
       <main className="flex-1 flex flex-col items-center justify-center max-w-lg mx-auto w-full px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">Welcome, {firstName}!</h1>
+          <h1 className="text-2xl font-bold mb-2">Добро пожаловать{firstName ? `, ${firstName}` : ""}!</h1>
           <p className="text-muted-foreground">
-            Let's get your account set up so you can start investing.
+            Давайте настроим ваш аккаунт, чтобы вы могли начать инвестировать.
           </p>
         </div>
 
@@ -34,9 +34,9 @@ export default function OnboardingWelcome() {
               <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Secure Verification</h3>
+              <h3 className="font-medium">Безопасная верификация</h3>
               <p className="text-sm text-muted-foreground">
-                Verify your identity to protect your account
+                Подтвердите личность для защиты вашего аккаунта
               </p>
             </div>
           </Card>
@@ -46,9 +46,9 @@ export default function OnboardingWelcome() {
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Quick Setup</h3>
+              <h3 className="font-medium">Быстрая настройка</h3>
               <p className="text-sm text-muted-foreground">
-                Takes just a few minutes to complete
+                Занимает всего несколько минут
               </p>
             </div>
           </Card>
@@ -58,9 +58,9 @@ export default function OnboardingWelcome() {
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Start Investing</h3>
+              <h3 className="font-medium">Начните инвестировать</h3>
               <p className="text-sm text-muted-foreground">
-                Access all features once verified
+                Доступ ко всем функциям после верификации
               </p>
             </div>
           </Card>
@@ -68,7 +68,7 @@ export default function OnboardingWelcome() {
 
         <Link href="/onboarding/verify" className="w-full">
           <Button className="w-full" size="lg" data-testid="button-start-onboarding">
-            Get Started
+            Начать
           </Button>
         </Link>
       </main>

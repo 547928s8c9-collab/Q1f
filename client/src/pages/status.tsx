@@ -23,28 +23,28 @@ interface SystemStatus {
 
 const statusConfig = {
   operational: {
-    label: "All Systems Operational",
+    label: "Все системы работают",
     icon: CheckCircle2,
     color: "text-positive",
     bgColor: "bg-positive/10",
     borderColor: "border-positive/20",
   },
   degraded: {
-    label: "Degraded Performance",
+    label: "Сниженная производительность",
     icon: AlertTriangle,
     color: "text-warning",
     bgColor: "bg-warning/10",
     borderColor: "border-warning/20",
   },
   maintenance: {
-    label: "Scheduled Maintenance",
+    label: "Плановое обслуживание",
     icon: Clock,
     color: "text-primary",
     bgColor: "bg-primary/10",
     borderColor: "border-primary/20",
   },
   outage: {
-    label: "Outage",
+    label: "Сбой",
     icon: XCircle,
     color: "text-destructive",
     bgColor: "bg-destructive/10",
@@ -100,8 +100,8 @@ export default function StatusPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="System Status"
-        subtitle="Current platform health and service availability"
+        title="Статус системы"
+        subtitle="Текущее состояние платформы и доступность сервисов"
       />
 
       <div className="flex-1 overflow-auto px-4 pb-24 space-y-6">
@@ -111,10 +111,10 @@ export default function StatusPage() {
           <Card className="p-6">
             <EmptyState
               icon={AlertCircle}
-              title="Unable to load system status"
-              description={errorMessage || "We couldn't fetch the latest status. Please try again."}
+              title="Не удалось загрузить статус системы"
+              description={errorMessage || "Не удалось получить актуальный статус. Попробуйте снова."}
               action={{
-                label: "Retry",
+                label: "Повторить",
                 onClick: () => refetch(),
               }}
             />
@@ -144,7 +144,7 @@ export default function StatusPage() {
                     <p className="text-sm text-muted-foreground mt-1">{status.message}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    Last updated: {new Date(status.updatedAt).toLocaleString()}
+                    Обновлено: {new Date(status.updatedAt).toLocaleString("ru-RU")}
                   </p>
                 </div>
                 <Button
@@ -161,7 +161,7 @@ export default function StatusPage() {
 
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wide">
-                Components
+                Компоненты
               </h3>
               <div className="space-y-3">
                 {status.components.map((component) => (
@@ -171,10 +171,10 @@ export default function StatusPage() {
             </div>
 
             <Card className="p-5">
-              <h3 className="font-medium mb-2">Need Help?</h3>
+              <h3 className="font-medium mb-2">Нужна помощь?</h3>
               <p className="text-sm text-muted-foreground">
-                If you're experiencing issues not reflected here, please contact our support team
-                for assistance.
+                Если у вас возникли проблемы, не отражённые здесь, обратитесь в нашу службу поддержки
+                для получения помощи.
               </p>
             </Card>
           </>

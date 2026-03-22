@@ -42,8 +42,8 @@ export default function Withdraw() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
-        title: "Withdrawal initiated",
-        description: "Your withdrawal is being processed",
+        title: "Вывод инициирован",
+        description: "Ваш вывод обрабатывается",
       });
       setAmount("");
       setAddress("");
@@ -51,7 +51,7 @@ export default function Withdraw() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Withdrawal failed",
+        title: "Ошибка вывода",
         description: error.message,
         variant: "destructive",
       });
@@ -79,14 +79,14 @@ export default function Withdraw() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Withdraw USDT" subtitle="TRC20 Network" backHref="/wallet" />
+      <PageHeader title="Вывод USDT" subtitle="Сеть TRC20" backHref="/wallet" />
 
       {!bootstrap?.gate?.canWithdraw && (
         <Card className="p-4 mb-6 border-warning/50 bg-warning/5">
           <div className="flex gap-3">
             <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-warning">Withdrawal Blocked</p>
+              <p className="text-sm font-medium text-warning">Вывод заблокирован</p>
               <ul className="text-xs text-muted-foreground mt-1 space-y-1">
                 {bootstrap?.gate?.reasons?.map((reason, i) => (
                   <li key={i}>{reason}</li>
@@ -101,13 +101,13 @@ export default function Withdraw() {
         <div className="space-y-4">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="amount">Amount</Label>
+              <Label htmlFor="amount">Сумма</Label>
               <button
                 onClick={handleMaxClick}
                 className="text-xs text-primary hover:underline"
                 data-testid="button-max-withdraw"
               >
-                Max: {formatMoney(availableBalance, "USDT")} USDT
+                Макс: {formatMoney(availableBalance, "USDT")} USDT
               </button>
             </div>
             <div className="relative">
@@ -130,16 +130,16 @@ export default function Withdraw() {
 
           {whitelistEnabled && activeWhitelist.length > 0 ? (
             <div>
-              <Label>Destination Address</Label>
+              <Label>Адрес назначения</Label>
               <Select value={selectedWhitelist} onValueChange={setSelectedWhitelist}>
                 <SelectTrigger className="mt-2" data-testid="select-whitelist-address">
-                  <SelectValue placeholder="Select whitelisted address" />
+                  <SelectValue placeholder="Выберите адрес из белого списка" />
                 </SelectTrigger>
                 <SelectContent>
                   {activeWhitelist.map((addr) => (
                     <SelectItem key={addr.id} value={addr.address}>
                       <div className="flex flex-col">
-                        <span className="font-medium">{addr.label || "Unlabeled"}</span>
+                        <span className="font-medium">{addr.label || "Без названия"}</span>
                         <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                           {addr.address}
                         </span>
@@ -149,12 +149,12 @@ export default function Withdraw() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-2">
-                Whitelist is enabled. You can only withdraw to approved addresses.
+                Белый список включён. Вывод возможен только на одобренные адреса.
               </p>
             </div>
           ) : (
             <div>
-              <Label htmlFor="address">Destination Address (TRC20)</Label>
+              <Label htmlFor="address">Адрес назначения (TRC20)</Label>
               <Input
                 id="address"
                 type="text"
@@ -170,17 +170,17 @@ export default function Withdraw() {
           {amount && isValidAmount && finalAddress.length > 30 && (
             <div className="flex items-center gap-2 text-sm text-positive">
               <CheckCircle2 className="w-4 h-4" />
-              Ready to withdraw
+              Готово к выводу
             </div>
           )}
 
           <div className="bg-muted rounded-lg p-4">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Network Fee</span>
+              <span className="text-muted-foreground">Комиссия сети</span>
               <span className="font-medium tabular-nums">~{formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT")} USDT</span>
             </div>
             <div className="flex justify-between text-sm mt-2">
-              <span className="text-muted-foreground">You'll receive</span>
+              <span className="text-muted-foreground">Вы получите</span>
               <span className="font-medium tabular-nums">
                 {normalizedAmount && !amountError ? (parseFloat(normalizedAmount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
               </span>
@@ -198,10 +198,10 @@ export default function Withdraw() {
         {withdrawMutation.isPending ? (
           <>
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            Processing...
+            Обработка...
           </>
         ) : (
-          "Confirm Withdrawal"
+          "Подтвердить вывод"
         )}
       </Button>
     </div>

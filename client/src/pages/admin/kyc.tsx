@@ -51,6 +51,15 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
   ON_HOLD: Clock,
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: "Не начато",
+  IN_REVIEW: "На проверке",
+  APPROVED: "Одобрено",
+  NEEDS_ACTION: "Требует действий",
+  REJECTED: "Отклонено",
+  ON_HOLD: "На удержании",
+};
+
 type DecisionType = "APPROVED" | "REJECTED" | "NEEDS_ACTION" | "ON_HOLD";
 
 interface AdminMeResponse {
@@ -105,15 +114,15 @@ export default function AdminKyc() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Decision submitted", description: "KYC status updated successfully" });
+      toast({ title: "Решение отправлено", description: "Статус KYC успешно обновлён" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/kyc/applicants"] });
       setDecisionDialog({ open: false, decision: null });
       setDecisionReason("");
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to submit decision", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось отправить решение", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -155,10 +164,10 @@ export default function AdminKyc() {
             </Link>
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-semibold">KYC Queue</h1>
+              <h1 className="text-lg font-semibold">Очередь KYC</h1>
             </div>
           </div>
-          <Badge variant="outline">Admin Console</Badge>
+          <Badge variant="outline">Консоль администратора</Badge>
         </div>
       </header>
 
@@ -168,7 +177,7 @@ export default function AdminKyc() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by email or user ID..."
+              placeholder="Поиск по email или ID пользователя..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -177,16 +186,16 @@ export default function AdminKyc() {
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40" data-testid="select-status-filter">
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder="Фильтр по статусу" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="NOT_STARTED">Not Started</SelectItem>
-              <SelectItem value="IN_REVIEW">In Review</SelectItem>
-              <SelectItem value="APPROVED">Approved</SelectItem>
-              <SelectItem value="NEEDS_ACTION">Needs Action</SelectItem>
-              <SelectItem value="REJECTED">Rejected</SelectItem>
-              <SelectItem value="ON_HOLD">On Hold</SelectItem>
+              <SelectItem value="all">Все статусы</SelectItem>
+              <SelectItem value="NOT_STARTED">Не начат</SelectItem>
+              <SelectItem value="IN_REVIEW">На рассмотрении</SelectItem>
+              <SelectItem value="APPROVED">Одобрен</SelectItem>
+              <SelectItem value="NEEDS_ACTION">Требует действий</SelectItem>
+              <SelectItem value="REJECTED">Отклонён</SelectItem>
+              <SelectItem value="ON_HOLD">На удержании</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -197,7 +206,7 @@ export default function AdminKyc() {
           </div>
         ) : filteredApplicants.length === 0 ? (
           <Card className="p-8 text-center">
-            <p className="text-muted-foreground">No KYC applicants found</p>
+            <p className="text-muted-foreground">Заявки KYC не найдены</p>
           </Card>
         ) : (
           <div className="space-y-2">
@@ -226,10 +235,10 @@ export default function AdminKyc() {
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge className={STATUS_COLORS[applicant.status]} data-testid="badge-status">
-                        {applicant.status.replace("_", " ")}
+                        {STATUS_LABELS[applicant.status] || applicant.status}
                       </Badge>
                       {applicant.riskLevel && (
-                        <Badge variant="outline">{applicant.riskLevel} risk</Badge>
+                        <Badge variant="outline">{applicant.riskLevel} риск</Badge>
                       )}
                     </div>
                   </div>
@@ -243,7 +252,7 @@ export default function AdminKyc() {
       <Sheet open={!!selectedApplicantId} onOpenChange={(open) => !open && setSelectedApplicantId(null)}>
         <SheetContent className="w-[450px] sm:max-w-[450px] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>KYC Application Details</SheetTitle>
+            <SheetTitle>Детали заявки KYC</SheetTitle>
           </SheetHeader>
           
           {detailLoading ? (
@@ -253,50 +262,50 @@ export default function AdminKyc() {
           ) : detail ? (
             <div className="mt-6 space-y-6">
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">User Info</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Информация о пользователе</h3>
                 <Card className="p-4 space-y-2">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email</span>
+                    <span className="text-muted-foreground">Эл. почта</span>
                     <span className="font-medium" data-testid="text-detail-email">{detail.email || "—"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Name</span>
+                    <span className="text-muted-foreground">Имя</span>
                     <span className="font-medium">
                       {detail.user?.firstName} {detail.user?.lastName}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">User ID</span>
+                    <span className="text-muted-foreground">ID пользователя</span>
                     <span className="font-mono text-xs">{detail.userId}</span>
                   </div>
                 </Card>
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">KYC Status</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Статус KYC</h3>
                 <Card className="p-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Status</span>
+                    <span className="text-muted-foreground">Статус</span>
                     <Badge className={STATUS_COLORS[detail.status]} data-testid="text-detail-status">
-                      {detail.status.replace("_", " ")}
+                      {STATUS_LABELS[detail.status] || detail.status}
                     </Badge>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Level</span>
+                    <span className="text-muted-foreground">Уровень</span>
                     <span className="font-medium">{detail.level || "—"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">PEP Flag</span>
-                    <span className="font-medium">{detail.pepFlag ? "Yes" : "No"}</span>
+                    <span className="text-muted-foreground">Флаг PEP</span>
+                    <span className="font-medium">{detail.pepFlag ? "Да" : "Нет"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Submitted</span>
+                    <span className="text-muted-foreground">Отправлено</span>
                     <span className="font-medium">
                       {detail.submittedAt ? new Date(detail.submittedAt).toLocaleString() : "—"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Reviewed</span>
+                    <span className="text-muted-foreground">Проверено</span>
                     <span className="font-medium">
                       {detail.reviewedAt ? new Date(detail.reviewedAt).toLocaleString() : "—"}
                     </span>
@@ -306,7 +315,7 @@ export default function AdminKyc() {
 
               {(detail.rejectionReason || detail.needsActionReason) && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Decision Notes</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Примечания к решению</h3>
                   <Card className="p-4">
                     {detail.rejectionReason && (
                       <p className="text-destructive">{detail.rejectionReason}</p>
@@ -320,7 +329,7 @@ export default function AdminKyc() {
 
               {detail.allowedTransitions.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Actions</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Действия</h3>
                   <div className="flex flex-wrap gap-2">
                     {detail.allowedTransitions.includes("APPROVED") && (
                       <Button 
@@ -329,7 +338,7 @@ export default function AdminKyc() {
                         data-testid="button-approve"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Approve
+                        Одобрить
                       </Button>
                     )}
                     {detail.allowedTransitions.includes("NEEDS_ACTION") && (
@@ -339,7 +348,7 @@ export default function AdminKyc() {
                         data-testid="button-needs-action"
                       >
                         <AlertTriangle className="h-4 w-4 mr-2" />
-                        Needs Action
+                        Требует действий
                       </Button>
                     )}
                     {detail.allowedTransitions.includes("ON_HOLD") && (
@@ -349,7 +358,7 @@ export default function AdminKyc() {
                         data-testid="button-on-hold"
                       >
                         <Clock className="h-4 w-4 mr-2" />
-                        On Hold
+                        На удержании
                       </Button>
                     )}
                     {detail.allowedTransitions.includes("REJECTED") && (
@@ -359,7 +368,7 @@ export default function AdminKyc() {
                         data-testid="button-reject"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
-                        Reject
+                        Отклонить
                       </Button>
                     )}
                   </div>
@@ -374,15 +383,15 @@ export default function AdminKyc() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Confirm {decisionDialog.decision?.replace("_", " ")} Decision
+              Подтверждение решения: {decisionDialog.decision?.replace("_", " ")}
             </DialogTitle>
             <DialogDescription>
-              Please provide a reason for this decision. This will be recorded in the audit log.
+              Укажите причину этого решения. Она будет записана в журнал аудита.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
-              placeholder="Enter reason for this decision..."
+              placeholder="Введите причину этого решения..."
               value={decisionReason}
               onChange={(e) => setDecisionReason(e.target.value)}
               rows={4}
@@ -391,7 +400,7 @@ export default function AdminKyc() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDecisionDialog({ open: false, decision: null })}>
-              Cancel
+              Отмена
             </Button>
             <Button
               onClick={handleConfirmDecision}
@@ -399,7 +408,7 @@ export default function AdminKyc() {
               data-testid="button-confirm-decision"
             >
               {decisionMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirm
+              Подтвердить
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -4,38 +4,38 @@ import { Shield, AlertTriangle, TrendingDown, Info } from "lucide-react";
 
 const riskFactors = [
   {
-    title: "Market Volatility",
-    level: "Medium",
-    description: "Cryptocurrency markets can experience significant price fluctuations.",
+    title: "Рыночная волатильность",
+    level: "Средний",
+    description: "Криптовалютные рынки могут испытывать значительные колебания цен.",
     icon: TrendingDown,
   },
   {
-    title: "Regulatory Risk",
-    level: "Low",
-    description: "We comply with all applicable regulations and maintain required licenses.",
+    title: "Регуляторный риск",
+    level: "Низкий",
+    description: "Мы соблюдаем все применимые нормативные требования и имеем необходимые лицензии.",
     icon: Shield,
   },
   {
-    title: "Liquidity Risk",
-    level: "Low",
-    description: "Assets are held in liquid markets with established trading volumes.",
+    title: "Риск ликвидности",
+    level: "Низкий",
+    description: "Активы хранятся на ликвидных рынках с устоявшимися объёмами торгов.",
     icon: Info,
   },
   {
-    title: "Counterparty Risk",
-    level: "Low",
-    description: "We work only with established, regulated financial institutions.",
+    title: "Контрагентный риск",
+    level: "Низкий",
+    description: "Мы работаем только с проверенными, регулируемыми финансовыми учреждениями.",
     icon: AlertTriangle,
   },
 ];
 
 function getRiskColor(level: string) {
   switch (level) {
-    case "Low":
+    case "Низкий":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "Medium":
+    case "Средний":
       return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
-    case "High":
+    case "Высокий":
       return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
     default:
       return "bg-muted text-muted-foreground";
@@ -46,9 +46,9 @@ export default function Risk() {
   return (
     <div className="container mx-auto max-w-4xl space-y-6 p-6" data-testid="risk-page">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Risk Disclosure</h1>
+        <h1 className="text-2xl font-bold">Раскрытие рисков</h1>
         <p className="text-muted-foreground">
-          Understanding the risks associated with your investments.
+          Понимание рисков, связанных с вашими инвестициями.
         </p>
       </div>
 
@@ -56,14 +56,14 @@ export default function Risk() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Your Risk Profile
+            Ваш профиль риска
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Based on your investment selections, here is an overview of the risk factors 
-            that may affect your portfolio. We recommend reviewing this information 
-            periodically and adjusting your strategy as needed.
+            На основе ваших инвестиционных решений представлен обзор факторов риска, 
+            которые могут повлиять на ваш портфель. Мы рекомендуем периодически 
+            пересматривать эту информацию и корректировать стратегию по мере необходимости.
           </p>
         </CardContent>
       </Card>
@@ -92,10 +92,11 @@ export default function Risk() {
       <Card data-testid="risk-disclaimer-card">
         <CardContent className="p-4">
           <p className="text-xs text-muted-foreground">
-            <strong>Disclaimer:</strong> This information is provided for educational purposes only 
-            and does not constitute financial advice. Past performance is not indicative of future 
-            results. All investments carry risk, and you may lose some or all of your invested capital. 
-            Please consult with a qualified financial advisor before making investment decisions.
+            <strong>Отказ от ответственности:</strong> Данная информация предоставлена исключительно 
+            в образовательных целях и не является финансовой рекомендацией. Прошлые результаты не 
+            гарантируют будущей доходности. Все инвестиции сопряжены с риском, и вы можете потерять 
+            часть или весь инвестированный капитал. Проконсультируйтесь с квалифицированным финансовым 
+            консультантом перед принятием инвестиционных решений.
           </p>
         </CardContent>
       </Card>

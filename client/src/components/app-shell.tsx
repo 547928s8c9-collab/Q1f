@@ -30,12 +30,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/invest", label: "Invest", icon: TrendingUp },
-  { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "Главная", icon: Home },
+  { href: "/dashboard", label: "Панель", icon: LayoutDashboard },
+  { href: "/wallet", label: "Кошелёк", icon: Wallet },
+  { href: "/invest", label: "Инвестиции", icon: TrendingUp },
+  { href: "/activity", label: "Активность", icon: Activity },
+  { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
 function AppSidebar() {

@@ -24,44 +24,44 @@ export default function Receipt() {
 
     if (operation.type.includes("DEPOSIT")) {
       steps.push({
-        label: "Initiated",
+        label: "Инициирован",
         status: "completed" as const,
-        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString() : undefined,
+        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString("ru-RU") : undefined,
       });
       steps.push({
-        label: "Processing",
+        label: "Обработка",
         status: operation.status === "pending" ? "current" as const : "completed" as const,
       });
       steps.push({
-        label: "Credited",
+        label: "Зачислен",
         status: operation.status === "completed" ? "completed" as const : "pending" as const,
       });
     } else if (operation.type.includes("WITHDRAW")) {
       steps.push({
-        label: "Requested",
+        label: "Запрос отправлен",
         status: "completed" as const,
-        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString() : undefined,
+        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString("ru-RU") : undefined,
       });
       steps.push({
-        label: "Reviewing",
+        label: "Проверка",
         status: operation.status === "pending" ? "current" as const : "completed" as const,
       });
       steps.push({
-        label: "Broadcasting",
+        label: "Отправка",
         status: operation.status === "processing" ? "current" as const : operation.status === "completed" ? "completed" as const : "pending" as const,
       });
       steps.push({
-        label: "Confirmed",
+        label: "Подтверждён",
         status: operation.status === "completed" ? "completed" as const : operation.status === "failed" ? "failed" as const : "pending" as const,
       });
     } else {
       steps.push({
-        label: "Created",
+        label: "Создан",
         status: "completed" as const,
-        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString() : undefined,
+        timestamp: operation.createdAt ? new Date(operation.createdAt).toLocaleString("ru-RU") : undefined,
       });
       steps.push({
-        label: operation.status === "completed" ? "Completed" : operation.status === "failed" ? "Failed" : "Processing",
+        label: operation.status === "completed" ? "Выполнен" : operation.status === "failed" ? "Ошибка" : "Обработка",
         status: operation.status === "completed" ? "completed" as const : operation.status === "failed" ? "failed" as const : "current" as const,
       });
     }
@@ -84,7 +84,7 @@ export default function Receipt() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Transaction Details" backHref="/activity" />
+      <PageHeader title="Детали транзакции" backHref="/activity" />
 
       {isLoading ? (
         <div className="space-y-4">
@@ -113,30 +113,30 @@ export default function Receipt() {
           </Card>
 
           <Card className="p-5 mb-6">
-            <h3 className="font-medium mb-4">Timeline</h3>
+            <h3 className="font-medium mb-4">Хронология</h3>
             <OperationTimeline steps={getTimelineSteps()} />
           </Card>
 
           <Card className="p-5">
-            <h3 className="font-medium mb-2">Details</h3>
-            <DetailRow label="Operation ID" value={operation.id} copyable />
-            <DetailRow label="Type" value={operation.type} />
+            <h3 className="font-medium mb-2">Подробности</h3>
+            <DetailRow label="ID операции" value={operation.id} copyable />
+            <DetailRow label="Тип" value={operation.type} />
             <DetailRow
-              label="Date"
-              value={operation.createdAt ? new Date(operation.createdAt).toLocaleString() : undefined}
+              label="Дата"
+              value={operation.createdAt ? new Date(operation.createdAt).toLocaleString("ru-RU") : undefined}
             />
-            <DetailRow label="Transaction Hash" value={operation.txHash} copyable />
-            <DetailRow label="Provider Reference" value={operation.providerRef} copyable />
-            <DetailRow label="Strategy" value={operation.strategyName} />
+            <DetailRow label="Хеш транзакции" value={operation.txHash} copyable />
+            <DetailRow label="Ссылка провайдера" value={operation.providerRef} copyable />
+            <DetailRow label="Стратегия" value={operation.strategyName} />
             {operation.fee && BigInt(operation.fee) > BigInt(0) && (
-              <DetailRow label="Fee" value={`${formatMoney(operation.fee, operation.asset || "USDT")} ${operation.asset || "USDT"}`} />
+              <DetailRow label="Комиссия" value={`${formatMoney(operation.fee, operation.asset || "USDT")} ${operation.asset || "USDT"}`} />
             )}
-            {operation.reason && <DetailRow label="Reason" value={operation.reason} />}
+            {operation.reason && <DetailRow label="Причина" value={operation.reason} />}
           </Card>
         </>
       ) : (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Transaction not found</p>
+          <p className="text-muted-foreground">Транзакция не найдена</p>
         </Card>
       )}
     </div>

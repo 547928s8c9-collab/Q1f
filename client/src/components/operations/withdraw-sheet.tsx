@@ -27,8 +27,8 @@ export function WithdrawSheet({ open, onOpenChange, bootstrap }: WithdrawSheetPr
     <ActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Withdraw USDT"
-      description="Send funds to an external wallet"
+      title="Вывод USDT"
+      description="Отправить средства на внешний кошелёк"
     >
       <WithdrawFlow bootstrap={bootstrap} onClose={() => onOpenChange(false)} />
     </ActionSheet>
@@ -76,15 +76,15 @@ function WithdrawFlow({
     const maxVal = BigInt(availableBalance) - BigInt(NETWORK_FEE);
     
     if (!address || address.length < 30) {
-      setError("Please enter a valid wallet address");
+      setError("Введите корректный адрес кошелька");
       return;
     }
     if (BigInt(minorAmount) < minVal) {
-      setError("Minimum withdrawal is 1 USDT");
+      setError("Минимальный вывод — 1 USDT");
       return;
     }
     if (BigInt(minorAmount) > maxVal) {
-      setError("Insufficient balance (including network fee)");
+      setError("Недостаточный баланс (с учётом комиссии сети)");
       return;
     }
     setStep("confirm");
@@ -123,15 +123,15 @@ function WithdrawFlow({
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       toast({
-        title: "Withdrawal submitted",
-        description: `${formatMoney(minorAmount, "USDT")} USDT withdrawal is processing`,
+        title: "Вывод отправлен",
+        description: `Вывод ${formatMoney(minorAmount, "USDT")} USDT обрабатывается`,
       });
     },
     onError: (error: Error) => {
       setStatus("failed");
       setStep("result");
       toast({
-        title: "Withdrawal failed",
+        title: "Ошибка вывода",
         description: error.message,
         variant: "destructive",
       });
@@ -145,16 +145,16 @@ function WithdrawFlow({
 
   const statusMessages = {
     success: {
-      title: "Withdrawal Complete",
-      message: `${formatMoney(minorAmount, "USDT")} USDT has been sent.`,
+      title: "Вывод выполнен",
+      message: `${formatMoney(minorAmount, "USDT")} USDT отправлено.`,
     },
     pending: {
-      title: "Withdrawal Processing",
-      message: `Your withdrawal of ${formatMoney(minorAmount, "USDT")} USDT is being processed.`,
+      title: "Вывод обрабатывается",
+      message: `Ваш вывод ${formatMoney(minorAmount, "USDT")} USDT обрабатывается.`,
     },
     failed: {
-      title: "Withdrawal Failed",
-      message: withdrawMutation.error?.message || "Something went wrong. Please try again.",
+      title: "Ошибка вывода",
+      message: withdrawMutation.error?.message || "Что-то пошло не так. Попробуйте снова.",
     },
   };
 
@@ -163,11 +163,11 @@ function WithdrawFlow({
       {step === "amount" && (
         <div className="space-y-4">
           <div>
-            <Label htmlFor="address">Wallet Address</Label>
+            <Label htmlFor="address">Адрес кошелька</Label>
             <Input
               id="address"
               type="text"
-              placeholder="TRC20 address (T...)"
+              placeholder="Адрес TRC20 (T...)"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="mt-1.5 font-mono text-sm"
@@ -176,7 +176,7 @@ function WithdrawFlow({
           </div>
 
           <div>
-            <Label htmlFor="amount">Amount</Label>
+            <Label htmlFor="amount">Сумма</Label>
             <div className="relative mt-1.5">
               <Input
                 id="amount"
@@ -196,7 +196,7 @@ function WithdrawFlow({
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Available</span>
+            <span className="text-muted-foreground">Доступно</span>
             <button
               type="button"
               onClick={setMax}
@@ -208,7 +208,7 @@ function WithdrawFlow({
           </div>
 
           <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-            Network fee: {formatMoney(NETWORK_FEE, "USDT")} USDT
+            Комиссия сети: {formatMoney(NETWORK_FEE, "USDT")} USDT
           </div>
 
           <Button
@@ -217,7 +217,7 @@ function WithdrawFlow({
             disabled={!amount || amount === "0" || !address}
             data-testid="button-next-step"
           >
-            Continue
+            Продолжить
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -229,10 +229,10 @@ function WithdrawFlow({
         balanceAfter={balanceAfter}
         fee={NETWORK_FEE}
         details={[
-          { label: "To Address", value: `${address.slice(0, 8)}...${address.slice(-6)}` },
-          { label: "Network", value: "TRON (TRC20)" },
+          { label: "Адрес получателя", value: `${address.slice(0, 8)}...${address.slice(-6)}` },
+          { label: "Сеть", value: "TRON (TRC20)" },
         ]}
-        ctaLabel="Withdraw"
+        ctaLabel="Вывести"
         onConfirm={() => withdrawMutation.mutate()}
         onBack={() => setStep("amount")}
         isLoading={withdrawMutation.isPending}

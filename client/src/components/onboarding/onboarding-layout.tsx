@@ -8,7 +8,7 @@ interface OnboardingLayoutProps {
   children: React.ReactNode;
 }
 
-const stepLabels = ["Verify", "Consent", "Identity"];
+const stepLabels = ["Проверка", "Согласие", "Личность"];
 
 export function OnboardingLayout({ currentStep, totalSteps, children }: OnboardingLayoutProps) {
   return (
@@ -19,7 +19,7 @@ export function OnboardingLayout({ currentStep, totalSteps, children }: Onboardi
             <span className="text-xl font-bold tracking-tight">ZEON</span>
           </Link>
           <span className="text-sm text-muted-foreground">
-            Step {currentStep} of {totalSteps}
+            Шаг {currentStep} из {totalSteps}
           </span>
         </div>
       </header>

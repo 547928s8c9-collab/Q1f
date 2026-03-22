@@ -77,12 +77,12 @@ export default function Vaults() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
-      toast({ title: "Transfer successful" });
+      toast({ title: "Перевод выполнен" });
       setTransferDialog({ ...transferDialog, open: false });
       setAmount("");
     },
     onError: (error: Error) => {
-      toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
+      toast({ title: "Ошибка перевода", description: error.message, variant: "destructive" });
     },
   });
 
@@ -98,11 +98,11 @@ export default function Vaults() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: "Goal updated" });
+      toast({ title: "Цель обновлена" });
       setGoalDialog({ ...goalDialog, open: false });
     },
     onError: (error: Error) => {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Ошибка обновления", description: error.message, variant: "destructive" });
     },
   });
 
@@ -154,7 +154,7 @@ export default function Vaults() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Vaults" subtitle="Secure storage for your capital" backHref="/wallet" />
+      <PageHeader title="Сейфы" subtitle="Надёжное хранилище для вашего капитала" backHref="/wallet" />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {isLoading ? (
@@ -196,9 +196,9 @@ export default function Vaults() {
       <Card className="p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-medium">Global Auto-Sweep</h3>
+            <h3 className="font-medium">Глобальный авто-перевод</h3>
             <p className="text-sm text-muted-foreground">
-              Automatically move daily payout profits to Profit Vault
+              Автоматически переводить ежедневную прибыль в сейф прибыли
             </p>
           </div>
           <Switch
@@ -206,7 +206,7 @@ export default function Vaults() {
             onCheckedChange={(checked) => {
               apiRequest("POST", "/api/security/auto-sweep", { enabled: checked }).then(() => {
                 queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-                toast({ title: "Auto-sweep updated" });
+                toast({ title: "Авто-перевод обновлён" });
               });
             }}
             data-testid="toggle-auto-sweep"
@@ -218,17 +218,17 @@ export default function Vaults() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {transferDialog.direction === "in" ? "Transfer to" : "Transfer from"} {transferDialog.vault.charAt(0).toUpperCase() + transferDialog.vault.slice(1)} Vault
+              {transferDialog.direction === "in" ? "Перевод в" : "Перевод из"} сейф{transferDialog.direction === "in" ? "" : "а"} {transferDialog.vault === "principal" ? "Основной" : transferDialog.vault === "profit" ? "Прибыль" : "Налоги"}
             </DialogTitle>
             <DialogDescription>
               {transferDialog.direction === "in"
-                ? "Move USDT from your wallet to this vault"
-                : "Withdraw USDT from this vault to your wallet"}
+                ? "Перевести USDT из кошелька в этот сейф"
+                : "Вывести USDT из этого сейфа в кошелёк"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="transfer-amount">Amount (USDT)</Label>
+              <Label htmlFor="transfer-amount">Сумма (USDT)</Label>
               <Input
                 id="transfer-amount"
                 type="text"
@@ -246,7 +246,7 @@ export default function Vaults() {
               disabled={transferMutation.isPending || !amount}
               data-testid="button-confirm-transfer"
             >
-              {transferMutation.isPending ? "Processing..." : "Confirm Transfer"}
+              {transferMutation.isPending ? "Обработка..." : "Подтвердить перевод"}
             </Button>
           </div>
         </DialogContent>
@@ -256,19 +256,19 @@ export default function Vaults() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {goalDialog.vault.charAt(0).toUpperCase() + goalDialog.vault.slice(1)} Vault Goal
+              Цель сейфа {goalDialog.vault === "principal" ? "Основной" : goalDialog.vault === "profit" ? "Прибыль" : "Налоги"}
             </DialogTitle>
             <DialogDescription>
-              Set a savings goal and optional auto-sweep percentage
+              Установите цель накопления и опциональный процент авто-перевода
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="goal-name">Goal Name (optional)</Label>
+              <Label htmlFor="goal-name">Название цели (необязательно)</Label>
               <Input
                 id="goal-name"
                 type="text"
-                placeholder="e.g., Emergency Fund"
+                placeholder="напр., Резервный фонд"
                 value={goalName}
                 onChange={(e) => setGoalName(e.target.value)}
                 className="mt-2"
@@ -277,7 +277,7 @@ export default function Vaults() {
               />
             </div>
             <div>
-              <Label htmlFor="goal-amount">Target Amount (USDT)</Label>
+              <Label htmlFor="goal-amount">Целевая сумма (USDT)</Label>
               <Input
                 id="goal-amount"
                 type="text"
@@ -291,7 +291,7 @@ export default function Vaults() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Auto-Sweep Profit</Label>
+                <Label>Авто-перевод прибыли</Label>
                 <Switch
                   checked={autoSweepEnabled}
                   onCheckedChange={setAutoSweepEnabled}
@@ -301,7 +301,7 @@ export default function Vaults() {
               {autoSweepEnabled && (
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Percentage of profit</span>
+                    <span className="text-muted-foreground">Процент от прибыли</span>
                     <span className="font-medium">{autoSweepPct}%</span>
                   </div>
                   <Slider
@@ -316,7 +316,7 @@ export default function Vaults() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Automatically transfer a percentage of daily profits to this vault
+                Автоматически переводить процент от ежедневной прибыли в этот сейф
               </p>
             </div>
             <Button
@@ -325,7 +325,7 @@ export default function Vaults() {
               disabled={goalMutation.isPending}
               data-testid="button-save-goal"
             >
-              {goalMutation.isPending ? "Saving..." : "Save Goal"}
+              {goalMutation.isPending ? "Сохранение..." : "Сохранить цель"}
             </Button>
           </div>
         </DialogContent>

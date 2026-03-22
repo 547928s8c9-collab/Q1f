@@ -4,23 +4,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const safetyFeatures = [
   {
     icon: Shield,
-    title: "Insured Assets",
-    description: "Your funds are protected up to $250,000",
+    title: "Застрахованные активы",
+    description: "Ваши средства защищены на сумму до $250 000",
   },
   {
     icon: Lock,
-    title: "Bank-Grade Security",
-    description: "256-bit encryption and secure storage",
+    title: "Банковский уровень безопасности",
+    description: "256-битное шифрование и безопасное хранение",
   },
   {
     icon: Eye,
-    title: "Full Transparency",
-    description: "Real-time portfolio tracking and reports",
+    title: "Полная прозрачность",
+    description: "Отслеживание портфеля и отчёты в реальном времени",
   },
   {
     icon: FileCheck,
-    title: "Regulatory Compliance",
-    description: "Licensed and regulated operations",
+    title: "Соответствие нормативам",
+    description: "Лицензированная и регулируемая деятельность",
   },
 ];
 
@@ -28,7 +28,7 @@ export function ProofOfSafety() {
   return (
     <Card data-testid="proof-of-safety-card">
       <CardHeader>
-        <CardTitle className="text-lg">Your Safety Matters</CardTitle>
+        <CardTitle className="text-lg">Ваша безопасность важна</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

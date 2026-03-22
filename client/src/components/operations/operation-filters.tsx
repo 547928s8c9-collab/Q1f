@@ -15,12 +15,12 @@ interface FilterOption {
 }
 
 const filterOptions: FilterOption[] = [
-  { value: "all", label: "All" },
-  { value: "DEPOSIT_USDT,DEPOSIT_CARD,DAILY_PAYOUT,PROFIT_PAYOUT,PRINCIPAL_REDEEM_EXECUTED", label: "In", icon: ArrowDownLeft },
-  { value: "WITHDRAW_USDT,INVEST,SUBSCRIPTION", label: "Out", icon: ArrowUpRight },
-  { value: "INVEST,PROFIT_ACCRUAL,PROFIT_PAYOUT,PRINCIPAL_REDEEM_EXECUTED", label: "Invest", icon: TrendingUp },
-  { value: "VAULT_TRANSFER", label: "Transfers", icon: RefreshCw },
-  { value: "SUBSCRIPTION,FX", label: "Fees", icon: Percent },
+  { value: "all", label: "Все" },
+  { value: "DEPOSIT_USDT,DEPOSIT_CARD,DAILY_PAYOUT,PROFIT_PAYOUT,PRINCIPAL_REDEEM_EXECUTED", label: "Входящие", icon: ArrowDownLeft },
+  { value: "WITHDRAW_USDT,INVEST,SUBSCRIPTION", label: "Исходящие", icon: ArrowUpRight },
+  { value: "INVEST,PROFIT_ACCRUAL,PROFIT_PAYOUT,PRINCIPAL_REDEEM_EXECUTED", label: "Инвестиции", icon: TrendingUp },
+  { value: "VAULT_TRANSFER", label: "Переводы", icon: RefreshCw },
+  { value: "SUBSCRIPTION,FX", label: "Комиссии", icon: Percent },
 ];
 
 interface OperationFiltersProps {

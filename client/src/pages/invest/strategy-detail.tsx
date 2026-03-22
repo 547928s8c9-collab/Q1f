@@ -49,9 +49,9 @@ import { getMoneyInputState, normalizeMoneyInput } from "@/lib/moneyInput";
 import { toMajorUnits } from "@/lib/money";
 
 const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Low Risk" },
-  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Core Risk" },
-  HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "High Risk" },
+  LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Низкий риск" },
+  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Средний риск" },
+  HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "Высокий риск" },
 };
 
 const timeframeOptions: { value: Timeframe; label: string }[] = [
@@ -232,11 +232,11 @@ export default function StrategyDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/payout-instructions", params.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
-      toast({ title: "Payout settings saved" });
+      toast({ title: "Настройки выплат сохранены" });
     },
     onError: (error: Error & { code?: string }) => {
       toast({
-        title: "Save failed",
+        title: "Ошибка сохранения",
         description: error.message,
         variant: "destructive",
       });
@@ -247,7 +247,7 @@ export default function StrategyDetail() {
 
   const handleSavePayout = () => {
     if (!payoutMinState.minor) {
-      toast({ title: "Enter a valid minimum payout amount", description: payoutMinState.error, variant: "destructive" });
+      toast({ title: "Введите корректную минимальную сумму выплаты", description: payoutMinState.error, variant: "destructive" });
       return;
     }
     savePayoutMutation.mutate({
@@ -267,10 +267,10 @@ export default function StrategyDetail() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/positions", params.id, "risk-controls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: data.message || "Strategy pause status updated" });
+      toast({ title: data.message || "Статус паузы стратегии обновлён" });
     },
     onError: (error: Error) => {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Ошибка обновления", description: error.message, variant: "destructive" });
     },
   });
 
@@ -280,10 +280,10 @@ export default function StrategyDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/positions", params.id, "risk-controls"] });
-      toast({ title: "Risk controls updated" });
+      toast({ title: "Настройки риска обновлены" });
     },
     onError: (error: Error) => {
-      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      toast({ title: "Ошибка обновления", description: error.message, variant: "destructive" });
     },
   });
 
@@ -386,7 +386,7 @@ export default function StrategyDetail() {
             position: "belowBar" as const,
             color: "hsl(var(--success))",
             shape: "arrowUp" as const,
-            text: "Buy",
+            text: "Покупка",
             tradeId: trade.id,
             type: "entry" as const,
           },
@@ -395,7 +395,7 @@ export default function StrategyDetail() {
             position: "aboveBar" as const,
             color: "hsl(var(--danger))",
             shape: "arrowDown" as const,
-            text: "Sell",
+            text: "Продажа",
             tradeId: trade.id,
             type: "exit" as const,
           },
@@ -405,12 +405,12 @@ export default function StrategyDetail() {
 
   const formatPrice = (value: number) => value.toFixed(2);
   const formatDateTime = (ts: number) => format(new Date(ts), "MMM d, HH:mm");
-  const benchmarkLabel = candlePayload?.symbol ? `${candlePayload.symbol} Benchmark` : "Market Benchmark";
+  const benchmarkLabel = candlePayload?.symbol ? `${candlePayload.symbol} Бенчмарк` : "Рыночный бенчмарк";
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
-        title={strategy?.name || "Strategy"}
+        title={strategy?.name || "Стратегия"}
         subtitle={strategy?.description || undefined}
         backHref="/invest"
       />
@@ -453,7 +453,7 @@ export default function StrategyDetail() {
           <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
             <p className="text-sm text-muted-foreground">
-              Strategy returns can be volatile. Review risk controls below.
+              Доходность стратегии может быть нестабильной. Ознакомьтесь с настройками риска ниже.
             </p>
           </div>
 
@@ -461,14 +461,14 @@ export default function StrategyDetail() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Performance</h3>
+                <h3 className="text-lg font-semibold">Доходность</h3>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <RangeSelector value={range} onChange={setRange} />
                 {[
-                  { value: "strategy", label: "Strategy" },
-                  { value: "benchmark", label: "Benchmark" },
-                  { value: "both", label: "Both" },
+                  { value: "strategy", label: "Стратегия" },
+                  { value: "benchmark", label: "Бенчмарк" },
+                  { value: "both", label: "Оба" },
                 ].map((option) => (
                   <Button
                     key={option.value}
@@ -488,11 +488,11 @@ export default function StrategyDetail() {
               </div>
             ) : perfError ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Unable to load performance data. Please try again shortly.
+                Не удалось загрузить данные о доходности. Попробуйте позже.
               </div>
             ) : strategyData.length === 0 ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No performance data available for this range.
+                Нет данных о доходности за выбранный период.
               </div>
             ) : (
               <div className="space-y-3">
@@ -506,10 +506,10 @@ export default function StrategyDetail() {
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {periodDays}D · {strategyData.length} points
+                    {periodDays}Д · {strategyData.length} точек
                   </span>
                   <span className="tabular-nums">
-                    Latest index: {lastStrategyValue.toFixed(1)}
+                    Последний индекс: {lastStrategyValue.toFixed(1)}
                   </span>
                 </div>
               </div>
@@ -520,7 +520,7 @@ export default function StrategyDetail() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Market Activity</h3>
+                <h3 className="text-lg font-semibold">Рыночная активность</h3>
                 {candlePayload?.symbol && (
                   <Badge variant="outline" className="text-xs">
                     {candlePayload.symbol}
@@ -530,7 +530,7 @@ export default function StrategyDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 <Select value={chartTimeframe} onValueChange={(value) => setChartTimeframe(value as Timeframe)}>
                   <SelectTrigger className="w-[96px]" data-testid="select-timeframe">
-                    <SelectValue placeholder="Timeframe" />
+                    <SelectValue placeholder="Таймфрейм" />
                   </SelectTrigger>
                   <SelectContent>
                     {timeframeOptions.map((option) => (
@@ -549,11 +549,11 @@ export default function StrategyDetail() {
               </div>
             ) : candlesError ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Unable to load market data. Please try again shortly.
+                Не удалось загрузить рыночные данные. Попробуйте позже.
               </div>
             ) : candleData.length === 0 ? (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No candles available for this range. Try a shorter period.
+                Нет свечей за выбранный период. Попробуйте более короткий интервал.
               </div>
             ) : (
               <div className="space-y-3">
@@ -565,11 +565,11 @@ export default function StrategyDetail() {
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
-                    {periodDays}D · {candleData.length} candles · {candlePayload?.source ?? "source"}
+                    {periodDays}Д · {candleData.length} свечей · {candlePayload?.source ?? "источник"}
                   </span>
                   {candleData[candleData.length - 1] && (
                     <span className="tabular-nums">
-                      Last close: {formatPrice(candleData[candleData.length - 1].close)}
+                      Последнее закрытие: {formatPrice(candleData[candleData.length - 1].close)}
                     </span>
                   )}
                 </div>
@@ -581,7 +581,7 @@ export default function StrategyDetail() {
             <Card className="p-5 lg:col-span-2">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold">Strategy Metrics</h3>
+                <h3 className="text-lg font-semibold">Метрики стратегии</h3>
               </div>
               {insightsLoading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -591,16 +591,16 @@ export default function StrategyDetail() {
                 </div>
               ) : insightsError ? (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Unable to load strategy metrics right now.
+                  Не удалось загрузить метрики стратегии.
                 </div>
               ) : metrics ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Total Trades</p>
+                    <p className="text-xs text-muted-foreground uppercase">Всего сделок</p>
                     <p className="text-xl font-semibold tabular-nums">{metrics.totalTrades}</p>
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Win Rate</p>
+                    <p className="text-xs text-muted-foreground uppercase">Винрейт</p>
                     <p className="text-xl font-semibold tabular-nums">{metrics.winRatePct.toFixed(1)}%</p>
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
@@ -623,13 +623,13 @@ export default function StrategyDetail() {
                     </p>
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Avg Hold</p>
+                    <p className="text-xs text-muted-foreground uppercase">Ср. удержание</p>
                     <p className="text-xl font-semibold tabular-nums">
-                      {metrics.avgHoldBars.toFixed(1)} bars
+                      {metrics.avgHoldBars.toFixed(1)} баров
                     </p>
                   </div>
                   <div className="rounded-xl border border-border/60 p-4">
-                    <p className="text-xs text-muted-foreground uppercase">Profit Factor</p>
+                    <p className="text-xs text-muted-foreground uppercase">Профит-фактор</p>
                     <p className="text-xl font-semibold tabular-nums">
                       {metrics.profitFactor === Number.POSITIVE_INFINITY
                         ? "∞"
@@ -639,7 +639,7 @@ export default function StrategyDetail() {
                 </div>
               ) : (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Metrics will appear once data is available.
+                  Метрики появятся, когда данные будут доступны.
                 </div>
               )}
             </Card>
@@ -648,10 +648,10 @@ export default function StrategyDetail() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Activity className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Trade Tape</h3>
+                  <h3 className="text-lg font-semibold">Лента сделок</h3>
                 </div>
                 <Badge variant="outline" className="text-xs">
-                  {trades.length} trades
+                  {trades.length} сделок
                 </Badge>
               </div>
               {insightsLoading ? (
@@ -662,19 +662,19 @@ export default function StrategyDetail() {
                 </div>
               ) : insightsError ? (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  Unable to load trade history.
+                  Не удалось загрузить историю сделок.
                 </div>
               ) : trades.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No trades for this window yet.
+                  Нет сделок за выбранный период.
                 </div>
               ) : (
                 <ScrollArea className="h-[280px] pr-3">
                   <div className="hidden md:grid grid-cols-6 gap-2 text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
-                    <span className="col-span-2">Exit</span>
-                    <span>Side</span>
-                    <span>Entry</span>
-                    <span>Exit</span>
+                    <span className="col-span-2">Выход</span>
+                    <span>Сторона</span>
+                    <span>Вход</span>
+                    <span>Выход</span>
                     <span>P&amp;L</span>
                   </div>
                   <div className="space-y-2">
@@ -711,14 +711,14 @@ export default function StrategyDetail() {
           <Card className="p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Calculator className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold">Calculator</h3>
+              <h3 className="text-lg font-semibold">Калькулятор</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              See what your investment would have returned over the selected {periodDays}-day period.
+              Посмотрите, какую доходность принесла бы ваша инвестиция за выбранный период ({periodDays} дней).
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label htmlFor="amount">Initial Investment (USDT)</Label>
+                <Label htmlFor="amount">Начальная инвестиция (USDT)</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -729,11 +729,11 @@ export default function StrategyDetail() {
                 />
               </div>
               <div className="flex flex-col justify-end">
-                <Label className="text-muted-foreground">Final Value</Label>
+                <Label className="text-muted-foreground">Итоговая стоимость</Label>
                 <p className="text-2xl font-bold tabular-nums">{result.toFixed(2)} USDT</p>
               </div>
               <div className="flex flex-col justify-end">
-                <Label className="text-muted-foreground">Profit / Loss</Label>
+                <Label className="text-muted-foreground">Прибыль / Убыток</Label>
                 <p className={cn("text-2xl font-bold tabular-nums", pnl >= 0 ? "text-positive" : "text-negative")}>
                   {pnl >= 0 ? "+" : ""}
                   {pnl.toFixed(2)} USDT
@@ -741,7 +741,7 @@ export default function StrategyDetail() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Results may vary. Investment returns can be negative.
+              Результаты могут отличаться. Инвестиционная доходность может быть отрицательной.
             </p>
           </Card>
 
@@ -749,13 +749,13 @@ export default function StrategyDetail() {
           <Card className="p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Wallet className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold">Payout Settings</h3>
+              <h3 className="text-lg font-semibold">Настройки выплат</h3>
             </div>
 
             <div className="space-y-5">
               {/* Frequency Toggle */}
               <div>
-                <Label className="text-sm text-muted-foreground mb-2 block">Payout Frequency</Label>
+                <Label className="text-sm text-muted-foreground mb-2 block">Частота выплат</Label>
                 <div className="flex gap-2">
                   <Button
                     variant={payoutFrequency === "DAILY" ? "default" : "outline"}
@@ -763,7 +763,7 @@ export default function StrategyDetail() {
                     onClick={() => setPayoutFrequency("DAILY")}
                     data-testid="button-frequency-daily"
                   >
-                    Daily
+                    Ежедневно
                   </Button>
                   <Button
                     variant={payoutFrequency === "MONTHLY" ? "default" : "outline"}
@@ -771,18 +771,18 @@ export default function StrategyDetail() {
                     onClick={() => setPayoutFrequency("MONTHLY")}
                     data-testid="button-frequency-monthly"
                   >
-                    Monthly
+                    Ежемесячно
                   </Button>
                 </div>
               </div>
 
               {/* Address Selection */}
               <div>
-                <Label className="text-sm text-muted-foreground mb-2 block">Payout Address (TRC20)</Label>
+                <Label className="text-sm text-muted-foreground mb-2 block">Адрес выплат (TRC20)</Label>
                 {hasActiveAddress ? (
                   <Select value={payoutAddressId} onValueChange={setPayoutAddressId}>
                     <SelectTrigger data-testid="select-payout-address">
-                      <SelectValue placeholder="Select address" />
+                      <SelectValue placeholder="Выберите адрес" />
                     </SelectTrigger>
                     <SelectContent>
                       {activeAddresses.map((addr) => (
@@ -799,7 +799,7 @@ export default function StrategyDetail() {
                             {addr.label ? `${addr.label}: ` : ""}
                             {addr.address.slice(0, 8)}...{addr.address.slice(-6)}
                             <span className="ml-2 text-warning">
-                              (activates {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString() : "..."})
+                              (активируется {addr.activatesAt ? new Date(addr.activatesAt).toLocaleDateString("ru-RU") : "..."})
                             </span>
                           </span>
                         </SelectItem>
@@ -808,11 +808,11 @@ export default function StrategyDetail() {
                   </Select>
                 ) : (
                   <div className="p-4 border border-dashed rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground mb-3">No active payout addresses</p>
+                    <p className="text-sm text-muted-foreground mb-3">Нет активных адресов для выплат</p>
                     <Link href="/settings/security">
                       <Button variant="outline" size="sm" data-testid="button-add-address">
                         <ExternalLink className="w-4 h-4 mr-2" />
-                        Add address
+                        Добавить адрес
                       </Button>
                     </Link>
                   </div>
@@ -822,7 +822,7 @@ export default function StrategyDetail() {
               {/* Min Payout Amount */}
               <div>
                 <Label htmlFor="min-payout" className="text-sm text-muted-foreground mb-2 block">
-                  Minimum Payout Amount (USDT)
+                  Минимальная сумма выплаты (USDT)
                 </Label>
                 <Input
                   id="min-payout"
@@ -846,8 +846,8 @@ export default function StrategyDetail() {
               {/* Active Switch */}
               <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                 <div>
-                  <p className="font-medium">Auto-Payout Profits</p>
-                  <p className="text-xs text-muted-foreground">Automatically send profits to the selected address</p>
+                  <p className="font-medium">Автовыплата прибыли</p>
+                  <p className="text-xs text-muted-foreground">Автоматическая отправка прибыли на выбранный адрес</p>
                 </div>
                 <Switch
                   checked={payoutActive}
@@ -861,11 +861,11 @@ export default function StrategyDetail() {
               <div className="space-y-2">
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>Network fee (1 USDT) is deducted from each payout.</span>
+                  <span>Комиссия сети (1 USDT) удерживается с каждой выплаты.</span>
                 </div>
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>If the post-fee amount is below the threshold, profits roll over to the next payout.</span>
+                  <span>Если сумма после комиссии ниже порога, прибыль переносится на следующую выплату.</span>
                 </div>
               </div>
 
@@ -876,7 +876,7 @@ export default function StrategyDetail() {
                 className="w-full"
                 data-testid="button-save-payout"
               >
-                {savePayoutMutation.isPending ? "Saving..." : "Save payout settings"}
+                {savePayoutMutation.isPending ? "Сохранение..." : "Сохранить настройки выплат"}
               </Button>
             </div>
           </Card>
@@ -886,7 +886,7 @@ export default function StrategyDetail() {
             <Card className="p-5 mb-6">
               <div className="flex items-center gap-2 mb-4">
                 <ShieldAlert className="w-5 h-5 text-warning" />
-                <h3 className="text-lg font-semibold">Risk Controls</h3>
+                <h3 className="text-lg font-semibold">Управление рисками</h3>
               </div>
 
               {/* Paused Banner */}
@@ -913,8 +913,8 @@ export default function StrategyDetail() {
                       )}
                     >
                       {riskControls.pausedReason === "dd_breach"
-                        ? "Auto-paused due to drawdown limit breach"
-                        : "Strategy is manually paused"}
+                        ? "Автопауза из-за превышения лимита просадки"
+                        : "Стратегия приостановлена вручную"}
                     </span>
                   </div>
                   <Button
@@ -925,7 +925,7 @@ export default function StrategyDetail() {
                     data-testid="button-resume-strategy"
                   >
                     <Play className="w-4 h-4 mr-1" />
-                    Resume
+                    Возобновить
                   </Button>
                 </div>
               )}
@@ -933,7 +933,7 @@ export default function StrategyDetail() {
               {/* Current Drawdown */}
               {riskControls.currentDrawdownPct > 0 && (
                 <div className="p-3 rounded-lg bg-muted/50 mb-4">
-                  <p className="text-sm text-muted-foreground">Current Drawdown</p>
+                  <p className="text-sm text-muted-foreground">Текущая просадка</p>
                   <p
                     className={cn(
                       "text-xl font-semibold tabular-nums",
@@ -952,8 +952,8 @@ export default function StrategyDetail() {
                 {!riskControls.paused && (
                   <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                     <div>
-                      <p className="font-medium">Pause Strategy</p>
-                      <p className="text-xs text-muted-foreground">Stop accrual and block new investments</p>
+                      <p className="font-medium">Приостановить стратегию</p>
+                      <p className="text-xs text-muted-foreground">Остановить начисление и заблокировать новые инвестиции</p>
                     </div>
                     <Button
                       variant="outline"
@@ -963,7 +963,7 @@ export default function StrategyDetail() {
                       data-testid="button-pause-strategy"
                     >
                       <Pause className="w-4 h-4 mr-1" />
-                      Pause
+                      Пауза
                     </Button>
                   </div>
                 )}
@@ -971,8 +971,8 @@ export default function StrategyDetail() {
                 {/* DD Limit Slider */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Drawdown Limit</Label>
-                    <span className="text-sm font-medium tabular-nums">{ddLimitPct === 0 ? "Off" : `${ddLimitPct}%`}</span>
+                    <Label>Лимит просадки</Label>
+                    <span className="text-sm font-medium tabular-nums">{ddLimitPct === 0 ? "Выкл" : `${ddLimitPct}%`}</span>
                   </div>
                   <Slider
                     value={[ddLimitPct]}
@@ -984,15 +984,15 @@ export default function StrategyDetail() {
                     data-testid="slider-dd-limit"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Maximum allowed loss from initial investment (0 = no limit)
+                    Максимально допустимый убыток от начальной инвестиции (0 = без лимита)
                   </p>
                 </div>
 
                 {/* Auto-Pause Toggle */}
                 <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
                   <div>
-                    <p className="font-medium">Auto-Pause on Breach</p>
-                    <p className="text-xs text-muted-foreground">Automatically pause if drawdown exceeds limit</p>
+                    <p className="font-medium">Автопауза при превышении</p>
+                    <p className="text-xs text-muted-foreground">Автоматическая пауза при превышении лимита просадки</p>
                   </div>
                   <Switch
                     checked={autoPauseEnabled}
@@ -1005,7 +1005,7 @@ export default function StrategyDetail() {
                 {/* Info Message */}
                 <div className="flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>When a strategy is paused, no daily returns are accrued and new investments are blocked.</span>
+                  <span>Когда стратегия приостановлена, ежедневная доходность не начисляется и новые инвестиции заблокированы.</span>
                 </div>
 
                 {/* Save Button */}
@@ -1015,7 +1015,7 @@ export default function StrategyDetail() {
                   className="w-full"
                   data-testid="button-save-risk-controls"
                 >
-                  {riskControlsMutation.isPending ? "Saving..." : "Save Risk Settings"}
+                  {riskControlsMutation.isPending ? "Сохранение..." : "Сохранить настройки риска"}
                 </Button>
               </div>
             </Card>
@@ -1023,19 +1023,19 @@ export default function StrategyDetail() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Monthly Range</p>
+              <p className="text-xs text-muted-foreground uppercase">Месячный диапазон</p>
               <p className="text-xl font-semibold text-positive">{minReturn}% - {maxReturn}%</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Worst Month</p>
+              <p className="text-xs text-muted-foreground uppercase">Худший месяц</p>
               <p className="text-xl font-semibold text-negative">{strategy?.worstMonth || "N/A"}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Max Drawdown</p>
+              <p className="text-xs text-muted-foreground uppercase">Макс. просадка</p>
               <p className="text-xl font-semibold text-negative">{strategy?.maxDrawdown || "N/A"}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Min Investment</p>
+              <p className="text-xs text-muted-foreground uppercase">Мин. инвестиция</p>
               <p className="text-xl font-semibold tabular-nums">
                 {minInvestmentMajor.toLocaleString()}{" "}
                 <span className="text-sm font-medium text-muted-foreground">USDT</span>
@@ -1044,10 +1044,10 @@ export default function StrategyDetail() {
           </div>
 
           <Card className="p-5 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Strategy Details</h3>
+            <h3 className="text-lg font-semibold mb-4">Детали стратегии</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Trading Pairs</p>
+                <p className="text-sm text-muted-foreground">Торговые пары</p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {pairs.map((pair: string) => (
                     <Badge key={pair} variant="outline" className="text-xs">
@@ -1057,25 +1057,25 @@ export default function StrategyDetail() {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Fees</p>
+                <p className="text-sm text-muted-foreground">Комиссии</p>
                 <p className="text-sm">
-                  Management Fee: {fees?.management || "0.5%"} | Performance Fee: {fees?.performance || "10%"}
+                  За управление: {fees?.management || "0.5%"} | За результат: {fees?.performance || "10%"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Profit Payout</p>
-                <p className="text-sm">{terms?.profitPayout === "DAILY" ? "Daily" : "Monthly"}</p>
+                <p className="text-sm text-muted-foreground">Выплата прибыли</p>
+                <p className="text-sm">{terms?.profitPayout === "DAILY" ? "Ежедневно" : "Ежемесячно"}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Principal Redemption</p>
-                <p className="text-sm">Weekly Window</p>
+                <p className="text-sm text-muted-foreground">Возврат основного капитала</p>
+                <p className="text-sm">Еженедельное окно</p>
               </div>
             </div>
           </Card>
 
           <Link href={`/invest/${params.id}/confirm`}>
             <Button className="w-full min-h-[44px]" data-testid="button-invest">
-              Invest in {strategy?.name}
+              Инвестировать в {strategy?.name}
             </Button>
           </Link>
         </>
@@ -1085,9 +1085,9 @@ export default function StrategyDetail() {
       <Sheet open={tradeDetailsOpen} onOpenChange={setTradeDetailsOpen}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Trade Details</SheetTitle>
+            <SheetTitle>Детали сделки</SheetTitle>
             <SheetDescription>
-              Timeline and breakdown of trade execution
+              Хронология и разбор исполнения сделки
             </SheetDescription>
           </SheetHeader>
           
@@ -1124,7 +1124,7 @@ function TradeDetailsContent({
   if (!trade) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
-        Trade not found
+        Сделка не найдена
       </div>
     );
   }
@@ -1142,32 +1142,32 @@ function TradeDetailsContent({
       {/* Trade Summary */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Entry Price</span>
+          <span className="text-sm text-muted-foreground">Цена входа</span>
           <span className="text-sm font-medium tabular-nums">
             ${trade.entryPrice?.toFixed(2) || "0.00"}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Exit Price</span>
+          <span className="text-sm text-muted-foreground">Цена выхода</span>
           <span className="text-sm font-medium tabular-nums">
             ${trade.exitPrice?.toFixed(2) || "0.00"}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Quantity</span>
+          <span className="text-sm text-muted-foreground">Количество</span>
           <span className="text-sm font-medium tabular-nums">
             {trade.qty?.toFixed(4) || "0.0000"}
           </span>
         </div>
         <Separator />
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Fee</span>
+          <span className="text-sm text-muted-foreground">Комиссия</span>
           <span className="text-sm font-medium tabular-nums">
             ${fee.toFixed(2)}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Slippage</span>
+          <span className="text-sm text-muted-foreground">Проскальзывание</span>
           <span className="text-sm font-medium tabular-nums">
             ${slippage.toFixed(2)}
           </span>
@@ -1187,7 +1187,7 @@ function TradeDetailsContent({
 
       {/* Timeline */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold">Timeline</h3>
+        <h3 className="text-sm font-semibold">Хронология</h3>
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -1196,7 +1196,7 @@ function TradeDetailsContent({
           </div>
         ) : sortedEvents.length === 0 ? (
           <div className="text-sm text-muted-foreground py-4">
-            No events available
+            Нет доступных событий
           </div>
         ) : (
           <div className="space-y-3">
@@ -1217,10 +1217,10 @@ function TradeDetailsContent({
               <div className="flex-1 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    {event.type === "TRADE_INTENT" ? "Trade Intent" :
-                     event.type === "ORDER_PLACED" ? "Order Placed" :
-                     event.type === "FILLED" ? "Filled" :
-                     event.type === "CLOSED" ? "Closed" : event.type}
+                    {event.type === "TRADE_INTENT" ? "Намерение сделки" :
+                     event.type === "ORDER_PLACED" ? "Ордер размещён" :
+                     event.type === "FILLED" ? "Исполнен" :
+                     event.type === "CLOSED" ? "Закрыт" : event.type}
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {format(new Date(event.ts), "MMM d, HH:mm:ss")}
@@ -1230,12 +1230,12 @@ function TradeDetailsContent({
                   <div className="text-xs text-muted-foreground">
                     {event.type === "FILLED" || event.type === "CLOSED" ? (
                       <>
-                        Price: ${event.payloadJson.price?.toFixed(2) || "0.00"} · 
-                        Qty: {event.payloadJson.qty?.toFixed(4) || "0.0000"}
+                        Цена: ${event.payloadJson.price?.toFixed(2) || "0.00"} · 
+                        Кол-во: {event.payloadJson.qty?.toFixed(4) || "0.0000"}
                       </>
                     ) : event.type === "TRADE_INTENT" ? (
                       <>
-                        Intended: ${event.payloadJson.intendedPrice?.toFixed(2) || "0.00"} · 
+                        Цель: ${event.payloadJson.intendedPrice?.toFixed(2) || "0.00"} · 
                         {event.payloadJson.reason || ""}
                       </>
                     ) : null}

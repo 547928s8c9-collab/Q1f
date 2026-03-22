@@ -37,14 +37,14 @@ export default function DepositCard() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
-        title: "Card deposit simulated",
-        description: "RUB has been credited and converted to USDT",
+        title: "Пополнение картой смоделировано",
+        description: "RUB зачислен и конвертирован в USDT",
       });
       setAmount("");
     },
     onError: (error: Error) => {
       toast({
-        title: "Deposit failed",
+        title: "Ошибка пополнения",
         description: error.message,
         variant: "destructive",
       });

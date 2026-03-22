@@ -25,8 +25,8 @@ const currencyConfig = {
     color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
   RUB: {
-    name: "Russian Ruble",
-    network: "Bank Transfer",
+    name: "Российский рубль",
+    network: "Банковский перевод",
     icon: "₽",
     color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   },
@@ -61,7 +61,7 @@ export function CurrencyCard({
           <p className="text-xs text-muted-foreground">{config.name} ({config.network})</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-muted-foreground mb-0.5">Total Balance</p>
+          <p className="text-xs text-muted-foreground mb-0.5">Общий баланс</p>
           <span data-testid={`text-total-balance-${asset.toLowerCase()}`}>
             <Money value={totalMajor} currency={asset} size="lg" />
           </span>
@@ -71,17 +71,17 @@ export function CurrencyCard({
       <div className="space-y-2 mb-4 bg-muted/30 rounded-lg p-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5">
-            <span className="text-sm text-muted-foreground">Available</span>
+            <span className="text-sm text-muted-foreground">Доступно</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <HelpCircle 
                   className="w-3.5 h-3.5 text-muted-foreground/60 cursor-help" 
-                  aria-label="What is Available balance"
+                  aria-label="Что такое доступный баланс"
                   data-testid={`tooltip-available-${asset.toLowerCase()}`}
                 />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[200px]">
-                <p className="text-xs">Funds ready to use for withdrawals, investments, or transfers</p>
+                <p className="text-xs">Средства, готовые для вывода, инвестиций или переводов</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -93,17 +93,17 @@ export function CurrencyCard({
         {hasInvested && (
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm text-muted-foreground">Invested</span>
+              <span className="text-sm text-muted-foreground">Инвестировано</span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle 
                     className="w-3.5 h-3.5 text-muted-foreground/60 cursor-help" 
-                    aria-label="What is Invested balance"
+                    aria-label="Что такое инвестированный баланс"
                     data-testid={`tooltip-invested-${asset.toLowerCase()}`}
                   />
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-[200px]">
-                  <p className="text-xs">Capital currently working in investment strategies. Redeem to move back to Available.</p>
+                  <p className="text-xs">Капитал, работающий в инвестиционных стратегиях. Погасите, чтобы вернуть в Доступные.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -123,7 +123,7 @@ export function CurrencyCard({
           data-testid={`button-deposit-${asset.toLowerCase()}`}
         >
           <Plus className="w-4 h-4 mr-1.5" />
-          {asset === "USDT" ? "Deposit" : "Top Up"}
+          Пополнить
         </Button>
         {asset === "USDT" && (
           <Button
@@ -134,7 +134,7 @@ export function CurrencyCard({
             data-testid={`button-withdraw-${asset.toLowerCase()}`}
           >
             <ArrowUpRight className="w-4 h-4 mr-1.5" />
-            Withdraw
+            Вывести
           </Button>
         )}
       </div>

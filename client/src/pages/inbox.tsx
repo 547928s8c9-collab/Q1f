@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { getInboxConfig } from "@/lib/inbox-map";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
 import type { InboxCard } from "@shared/schema";
 
 interface NotificationsResponse {
@@ -89,7 +90,7 @@ function NotificationCard({
           </p>
           <div className="flex items-center justify-between mt-2.5">
             <p className="text-xs text-muted-foreground">
-              {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true })}
+              {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ru })}
             </p>
             {card.ctaLabel && (
               <Button
@@ -161,8 +162,8 @@ export default function InboxPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Inbox"
-        subtitle={unreadCount > 0 ? `${unreadCount} unread` : undefined}
+        title="Входящие"
+        subtitle={unreadCount > 0 ? `${unreadCount} непрочитанных` : undefined}
         action={
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
@@ -174,7 +175,7 @@ export default function InboxPage() {
                 data-testid="button-mark-all-read"
               >
                 <Check className="h-4 w-4 mr-1" />
-                Mark all read
+                Прочитать все
               </Button>
             )}
             <Button
@@ -193,9 +194,9 @@ export default function InboxPage() {
       <div className="px-4 pb-4">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "unread")}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
+            <TabsTrigger value="all" data-testid="tab-all">Все</TabsTrigger>
             <TabsTrigger value="unread" data-testid="tab-unread">
-              Unread {unreadCount > 0 && `(${unreadCount})`}
+              Непрочитанные {unreadCount > 0 && `(${unreadCount})`}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -211,20 +212,20 @@ export default function InboxPage() {
         ) : error ? (
           <EmptyState
             icon={Bell}
-            title="Failed to load"
-            description="Could not load your notifications"
+            title="Ошибка загрузки"
+            description="Не удалось загрузить уведомления"
             action={{
-              label: "Try again",
+              label: "Попробовать снова",
               onClick: () => refetch(),
             }}
           />
         ) : notifications.length === 0 ? (
           <EmptyState
             icon={Inbox}
-            title={filter === "unread" ? "All caught up" : "No notifications yet"}
+            title={filter === "unread" ? "Всё прочитано" : "Уведомлений пока нет"}
             description={filter === "unread" 
-              ? "You have no unread messages" 
-              : "When something important happens, you'll see it here"
+              ? "У вас нет непрочитанных сообщений" 
+              : "Когда произойдёт что-то важное, вы увидите это здесь"
             }
           />
         ) : (

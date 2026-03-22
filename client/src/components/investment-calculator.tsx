@@ -33,7 +33,7 @@ function compound(principal: number, rate: number, months: number): number {
 }
 
 function fmt(value: number): string {
-  return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return value.toLocaleString("ru-RU", { maximumFractionDigits: 0 });
 }
 
 export function InvestmentCalculator() {

@@ -22,8 +22,8 @@ export function DepositSheet({ open, onOpenChange, bootstrap }: DepositSheetProp
     <ActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Deposit USDT"
-      description="Add funds to your wallet"
+      title="Пополнение USDT"
+      description="Добавить средства в кошелёк"
     >
       <DepositFlow bootstrap={bootstrap} onClose={() => onOpenChange(false)} />
     </ActionSheet>
@@ -71,15 +71,15 @@ function DepositFlow({
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       toast({
-        title: "Deposit successful",
-        description: `${formatMoney(minorAmount, "USDT")} USDT added to your wallet`,
+        title: "Пополнение выполнено",
+        description: `${formatMoney(minorAmount, "USDT")} USDT добавлено в кошелёк`,
       });
     },
     onError: (error: Error) => {
       setStatus("failed");
       setStep("result");
       toast({
-        title: "Deposit failed",
+        title: "Ошибка пополнения",
         description: error.message,
         variant: "destructive",
       });
@@ -88,16 +88,16 @@ function DepositFlow({
 
   const statusMessages = {
     success: {
-      title: "Deposit Complete",
-      message: `${formatMoney(minorAmount, "USDT")} USDT has been added to your wallet.`,
+      title: "Пополнение выполнено",
+      message: `${formatMoney(minorAmount, "USDT")} USDT добавлено в ваш кошелёк.`,
     },
     pending: {
-      title: "Deposit Processing",
-      message: "Your deposit is being processed. This may take a few minutes.",
+      title: "Пополнение обрабатывается",
+      message: "Ваше пополнение обрабатывается. Это может занять несколько минут.",
     },
     failed: {
-      title: "Deposit Failed",
-      message: "Something went wrong. Please try again.",
+      title: "Ошибка пополнения",
+      message: "Что-то пошло не так. Попробуйте снова.",
     },
   };
 
@@ -111,7 +111,7 @@ function DepositFlow({
         availableBalance="999999999999999"
         onNext={() => setStep("confirm")}
         minAmount="1000000"
-        label="Deposit Amount"
+        label="Сумма пополнения"
         placeholder="100.00"
       />
 
@@ -120,8 +120,8 @@ function DepositFlow({
         balanceBefore={availableBalance}
         balanceAfter={balanceAfter}
         fee="0"
-        details={[{ label: "Method", value: "Simulated Deposit" }]}
-        ctaLabel="Deposit"
+        details={[{ label: "Метод", value: "Симулированное пополнение" }]}
+        ctaLabel="Пополнить"
         onConfirm={() => depositMutation.mutate()}
         onBack={() => setStep("amount")}
         isLoading={depositMutation.isPending}

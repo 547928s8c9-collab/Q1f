@@ -64,15 +64,15 @@ export function GlobalBanner() {
     banners.push({
       id: "kyc-verify",
       type: "kyc",
-      message: "Complete identity verification to unlock withdrawals and higher limits",
-      action: { label: "Verify", href: "/settings/security" },
+      message: "Пройдите верификацию личности, чтобы разблокировать выводы и повышенные лимиты",
+      action: { label: "Верифицировать", href: "/settings/security" },
       priority: 1,
     });
   } else if (kycStatus === "in_review") {
     banners.push({
       id: "kyc-review",
       type: "info",
-      message: "Your verification is being reviewed. This usually takes 1-2 business days.",
+      message: "Ваша верификация на рассмотрении. Обычно это занимает 1-2 рабочих дня.",
       dismissible: true,
       priority: 2,
     });
@@ -80,23 +80,23 @@ export function GlobalBanner() {
     banners.push({
       id: "kyc-action",
       type: "danger",
-      message: "Action required: Additional information needed for verification",
-      action: { label: "Update Now", href: "/settings/security" },
+      message: "Требуется действие: необходима дополнительная информация для верификации",
+      action: { label: "Обновить сейчас", href: "/settings/security" },
       priority: 1,
     });
   } else if (kycStatus === "rejected") {
     banners.push({
       id: "kyc-rejected",
       type: "danger",
-      message: "Your verification was not approved. Please contact support.",
-      action: { label: "Contact Support", href: "/settings/security" },
+      message: "Ваша верификация не была одобрена. Обратитесь в поддержку.",
+      action: { label: "Связаться с поддержкой", href: "/settings/security" },
       priority: 1,
     });
   } else if (kycStatus === "on_hold") {
     banners.push({
       id: "kyc-hold",
       type: "warning",
-      message: "Your verification is on hold for manual review",
+      message: "Ваша верификация приостановлена для ручной проверки",
       dismissible: true,
       priority: 2,
     });
@@ -106,8 +106,8 @@ export function GlobalBanner() {
     banners.push({
       id: "2fa-disabled",
       type: "warning",
-      message: "Protect your account with two-factor authentication",
-      action: { label: "Enable 2FA", href: "/settings/security" },
+      message: "Защитите свой аккаунт двухфакторной аутентификацией",
+      action: { label: "Включить 2FA", href: "/settings/security" },
       dismissible: true,
       priority: 3,
     });
@@ -117,16 +117,16 @@ export function GlobalBanner() {
     banners.push({
       id: "system-degraded",
       type: "warning",
-      message: systemStatus.message || "Some services are experiencing degraded performance",
-      action: { label: "View Status", href: "/status" },
+      message: systemStatus.message || "Некоторые сервисы работают с пониженной производительностью",
+      action: { label: "Статус", href: "/status" },
       priority: 0,
     });
   } else if (systemStatus?.overall === "maintenance") {
     banners.push({
       id: "system-maintenance",
       type: "maintenance",
-      message: systemStatus.message || "Scheduled maintenance in progress. Some features may be unavailable.",
-      action: { label: "View Status", href: "/status" },
+      message: systemStatus.message || "Плановое обслуживание. Некоторые функции могут быть недоступны.",
+      action: { label: "Статус", href: "/status" },
       priority: 0,
     });
   }

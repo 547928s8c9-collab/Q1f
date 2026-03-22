@@ -44,24 +44,24 @@ function SettingsLink({ icon, label, description, href, badge }: SettingsLinkPro
 }
 
 export default function Settings() {
-  useSetPageTitle("Settings");
+  useSetPageTitle("Настройки");
   const { data: bootstrap, isLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
   });
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Settings" />
+      <PageHeader title="Настройки" />
 
       <div className="space-y-4">
         <Card className="divide-y divide-border">
           <div className="p-4">
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Account</h3>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Аккаунт</h3>
           </div>
           <SettingsLink
             icon={<User className="w-5 h-5 text-muted-foreground" />}
-            label="Profile"
-            description="Manage your account details"
+            label="Профиль"
+            description="Управление данными аккаунта"
             href="/settings/profile"
           />
           <div className="flex items-center gap-4 p-4">
@@ -69,8 +69,8 @@ export default function Settings() {
               <FileText className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Identity Verification</p>
-              <p className="text-xs text-muted-foreground">KYC status</p>
+              <p className="text-sm font-medium text-foreground">Верификация личности</p>
+              <p className="text-xs text-muted-foreground">Статус KYC</p>
             </div>
             {isLoading ? (
               <Skeleton className="h-6 w-20" />
@@ -79,12 +79,12 @@ export default function Settings() {
                 {bootstrap?.onboarding.kycStatus === "APPROVED" ? (
                   <span className="flex items-center gap-1.5 text-xs text-positive">
                     <CheckCircle2 className="w-4 h-4" />
-                    Verified
+                    Подтверждено
                   </span>
                 ) : bootstrap?.onboarding.kycStatus === "IN_REVIEW" ? (
                   <span className="flex items-center gap-1.5 text-xs text-warning">
                     <Clock className="w-4 h-4" />
-                    Pending
+                    На рассмотрении
                   </span>
                 ) : (
                   <StatusBadge status="pending" />
@@ -96,12 +96,12 @@ export default function Settings() {
 
         <Card className="divide-y divide-border">
           <div className="p-4">
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Security</h3>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Безопасность</h3>
           </div>
           <SettingsLink
             icon={<Shield className="w-5 h-5 text-muted-foreground" />}
-            label="Security Center"
-            description="2FA, whitelist, and security settings"
+            label="Центр безопасности"
+            description="2FA, белый список и настройки безопасности"
             href="/settings/security"
             badge={
               isLoading ? (
@@ -109,10 +109,10 @@ export default function Settings() {
               ) : bootstrap?.security.twoFactorEnabled ? (
                 <span className="text-xs text-positive flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
-                  Secured
+                  Защищено
                 </span>
               ) : (
-                <span className="text-xs text-warning">Setup Required</span>
+                <span className="text-xs text-warning">Требуется настройка</span>
               )
             }
           />
@@ -120,24 +120,24 @@ export default function Settings() {
 
         <Card className="divide-y divide-border">
           <div className="p-4">
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Preferences</h3>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Предпочтения</h3>
           </div>
           <SettingsLink
             icon={<Bell className="w-5 h-5 text-muted-foreground" />}
-            label="Notifications"
-            description="Manage notification preferences"
+            label="Уведомления"
+            description="Управление уведомлениями"
             href="/settings/notifications"
           />
         </Card>
 
         <Card className="divide-y divide-border">
           <div className="p-4">
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Support</h3>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Поддержка</h3>
           </div>
           <SettingsLink
             icon={<HelpCircle className="w-5 h-5 text-muted-foreground" />}
-            label="Help & Support"
-            description="Get help with your account"
+            label="Помощь и поддержка"
+            description="Получить помощь по аккаунту"
             href="/settings/support"
           />
         </Card>

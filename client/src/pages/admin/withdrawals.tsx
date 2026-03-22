@@ -83,6 +83,18 @@ const STATUS_ICONS: Record<string, typeof CheckCircle> = {
   CANCELLED: X,
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  PENDING_REVIEW: "На проверке",
+  PENDING_APPROVAL: "Ожидает одобрения",
+  PENDING: "В ожидании",
+  APPROVED: "Одобрено",
+  PROCESSING: "Обработка",
+  COMPLETED: "Завершено",
+  FAILED: "Ошибка",
+  REJECTED: "Отклонено",
+  CANCELLED: "Отменено",
+};
+
 type ActionType = "REVIEW" | "REQUEST_APPROVAL" | "APPROVE" | "REJECT" | "MARK_PROCESSING" | "MARK_COMPLETED" | "MARK_FAILED";
 
 function formatAmount(amountMinor: string, currency: string): string {
@@ -141,14 +153,14 @@ export default function AdminWithdrawals() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Review completed", description: "Withdrawal is now pending approval by another admin" });
+      toast({ title: "Проверка завершена", description: "Вывод ожидает одобрения другого администратора" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       setActionDialog({ open: false, action: null });
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to review withdrawal", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось проверить вывод", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -172,14 +184,14 @@ export default function AdminWithdrawals() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Approval requested", description: "Waiting for another admin to approve" });
+      toast({ title: "Запрос на одобрение отправлен", description: "Ожидается одобрение другого администратора" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       setActionDialog({ open: false, action: null });
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to request approval", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось запросить одобрение", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -203,14 +215,14 @@ export default function AdminWithdrawals() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Withdrawal approved", description: "Withdrawal is now approved for processing" });
+      toast({ title: "Вывод одобрен", description: "Вывод одобрен для обработки" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       setActionDialog({ open: false, action: null });
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to approve withdrawal", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось одобрить вывод", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -235,15 +247,15 @@ export default function AdminWithdrawals() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Withdrawal rejected", description: "Withdrawal has been rejected" });
+      toast({ title: "Вывод отклонён", description: "Запрос на вывод был отклонён" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       setActionDialog({ open: false, action: null });
       setActionReason("");
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to reject withdrawal", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось отклонить вывод", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -279,11 +291,11 @@ export default function AdminWithdrawals() {
     },
     onSuccess: (data) => {
       const messages: Record<string, string> = {
-        PROCESSING: "Withdrawal is now being processed",
-        COMPLETED: "Withdrawal completed successfully",
-        FAILED: "Withdrawal marked as failed",
+        PROCESSING: "Вывод обрабатывается",
+        COMPLETED: "Вывод успешно завершён",
+        FAILED: "Вывод отмечен как неудачный",
       };
-      toast({ title: "Status updated", description: messages[data.data?.status] || "Status updated" });
+      toast({ title: "Статус обновлён", description: messages[data.data?.status] || "Статус обновлён" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       setActionDialog({ open: false, action: null });
       setActionReason("");
@@ -292,8 +304,8 @@ export default function AdminWithdrawals() {
     },
     onError: (error: any) => {
       toast({ 
-        title: "Failed to update status", 
-        description: error.message || "Something went wrong",
+        title: "Не удалось обновить статус", 
+        description: error.message || "Что-то пошло не так",
         variant: "destructive",
       });
     },
@@ -369,7 +381,7 @@ export default function AdminWithdrawals() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copied", description: "Address copied to clipboard" });
+    toast({ title: "Скопировано", description: "Адрес скопирован в буфер обмена" });
   };
 
   return (
@@ -384,10 +396,10 @@ export default function AdminWithdrawals() {
             </Link>
             <div className="flex items-center gap-2">
               <Wallet className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-semibold">Withdrawals Queue</h1>
+              <h1 className="text-lg font-semibold">Очередь выводов</h1>
             </div>
           </div>
-          <Badge variant="outline">Admin Console</Badge>
+          <Badge variant="outline">Консоль администратора</Badge>
         </div>
       </header>
 
@@ -397,7 +409,7 @@ export default function AdminWithdrawals() {
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by email, user ID, or withdrawal ID..."
+              placeholder="Поиск по email, ID пользователя или ID вывода..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -406,17 +418,17 @@ export default function AdminWithdrawals() {
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40" data-testid="select-status-filter">
-              <SelectValue placeholder="Filter by status" />
+              <SelectValue placeholder="Фильтр по статусу" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="PENDING">Pending</SelectItem>
-              <SelectItem value="APPROVED">Approved</SelectItem>
-              <SelectItem value="PROCESSING">Processing</SelectItem>
-              <SelectItem value="COMPLETED">Completed</SelectItem>
-              <SelectItem value="FAILED">Failed</SelectItem>
-              <SelectItem value="REJECTED">Rejected</SelectItem>
-              <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              <SelectItem value="all">Все статусы</SelectItem>
+              <SelectItem value="PENDING">Ожидает</SelectItem>
+              <SelectItem value="APPROVED">Одобрен</SelectItem>
+              <SelectItem value="PROCESSING">В обработке</SelectItem>
+              <SelectItem value="COMPLETED">Завершён</SelectItem>
+              <SelectItem value="FAILED">Неудача</SelectItem>
+              <SelectItem value="REJECTED">Отклонён</SelectItem>
+              <SelectItem value="CANCELLED">Отменён</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -427,7 +439,7 @@ export default function AdminWithdrawals() {
           </div>
         ) : filteredWithdrawals.length === 0 ? (
           <Card className="p-8 text-center">
-            <p className="text-muted-foreground">No withdrawals found</p>
+            <p className="text-muted-foreground">Заявки на вывод не найдены</p>
           </Card>
         ) : (
           <div className="space-y-2">
@@ -462,12 +474,12 @@ export default function AdminWithdrawals() {
                         </p>
                       </div>
                       <Badge className={STATUS_COLORS[withdrawal.status]} data-testid="badge-status">
-                        {withdrawal.status}
+                        {STATUS_LABELS[withdrawal.status] || withdrawal.status}
                       </Badge>
                       {withdrawal.riskScore !== null && withdrawal.riskScore > 50 && (
                         <Badge variant="outline" className="text-warning border-warning">
                           <AlertTriangle className="h-3 w-3 mr-1" />
-                          Risk: {withdrawal.riskScore}
+                          Риск: {withdrawal.riskScore}
                         </Badge>
                       )}
                     </div>
@@ -482,7 +494,7 @@ export default function AdminWithdrawals() {
       <Sheet open={!!selectedWithdrawalId} onOpenChange={(open) => !open && setSelectedWithdrawalId(null)}>
         <SheetContent className="w-[500px] sm:max-w-[500px] overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Withdrawal Details</SheetTitle>
+            <SheetTitle>Детали вывода</SheetTitle>
           </SheetHeader>
           
           {detailLoading ? (
@@ -492,19 +504,19 @@ export default function AdminWithdrawals() {
           ) : detail ? (
             <div className="mt-6 space-y-6">
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Amount</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Сумма</h3>
                 <Card className="p-4">
                   <div className="text-2xl font-bold" data-testid="text-detail-amount">
                     {formatAmount(detail.amountMinor, detail.currency)}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    Fee: {formatAmount(detail.feeMinor, detail.currency)}
+                    Комиссия: {formatAmount(detail.feeMinor, detail.currency)}
                   </div>
                 </Card>
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Destination</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Адрес назначения</h3>
                 <Card className="p-4">
                   <div className="flex items-center justify-between gap-2">
                     <code className="text-xs break-all" data-testid="text-detail-address">{detail.address}</code>
@@ -516,43 +528,43 @@ export default function AdminWithdrawals() {
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">User</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Пользователь</h3>
                 <Card className="p-4 space-y-2">
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Email</span>
+                    <span className="text-muted-foreground">Эл. почта</span>
                     <span className="font-medium" data-testid="text-detail-email">{detail.email || "—"}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Name</span>
+                    <span className="text-muted-foreground">Имя</span>
                     <span className="font-medium">
                       {detail.user?.firstName} {detail.user?.lastName}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">User ID</span>
+                    <span className="text-muted-foreground">ID пользователя</span>
                     <span className="font-mono text-xs">{detail.userId}</span>
                   </div>
                 </Card>
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Status</h3>
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Статус</h3>
                 <Card className="p-4 space-y-2">
                   <div className="flex justify-between items-center gap-2">
-                    <span className="text-muted-foreground">Status</span>
+                    <span className="text-muted-foreground">Статус</span>
                     <Badge className={STATUS_COLORS[detail.status]} data-testid="text-detail-status">
-                      {detail.status}
+                      {STATUS_LABELS[detail.status] || detail.status}
                     </Badge>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Created</span>
+                    <span className="text-muted-foreground">Создано</span>
                     <span className="font-medium">
                       {new Date(detail.createdAt).toLocaleString()}
                     </span>
                   </div>
                   {detail.approvedAt && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Approved</span>
+                      <span className="text-muted-foreground">Одобрено</span>
                       <span className="font-medium">
                         {new Date(detail.approvedAt).toLocaleString()}
                       </span>
@@ -560,7 +572,7 @@ export default function AdminWithdrawals() {
                   )}
                   {detail.processedAt && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Processed</span>
+                      <span className="text-muted-foreground">Обработано</span>
                       <span className="font-medium">
                         {new Date(detail.processedAt).toLocaleString()}
                       </span>
@@ -568,7 +580,7 @@ export default function AdminWithdrawals() {
                   )}
                   {detail.completedAt && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Completed</span>
+                      <span className="text-muted-foreground">Завершено</span>
                       <span className="font-medium">
                         {new Date(detail.completedAt).toLocaleString()}
                       </span>
@@ -576,7 +588,7 @@ export default function AdminWithdrawals() {
                   )}
                   {detail.txHash && (
                     <div className="flex justify-between items-center gap-2">
-                      <span className="text-muted-foreground">TX Hash</span>
+                      <span className="text-muted-foreground">Хеш TX</span>
                       <div className="flex items-center gap-1">
                         <span className="font-mono text-xs">{detail.txHash.slice(0, 10)}...</span>
                         <Button variant="ghost" size="icon" onClick={() => copyToClipboard(detail.txHash!)} data-testid="button-copy-txhash">
@@ -590,14 +602,14 @@ export default function AdminWithdrawals() {
 
               {detail.pendingAction && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Pending Approval</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Ожидает одобрения</h3>
                   <Card className="p-4 border-warning/50 bg-warning/5">
                     <div className="flex items-center gap-2 mb-2">
                       <Clock className="h-4 w-4 text-warning" />
-                      <span className="font-medium text-warning">Awaiting 4-eyes approval</span>
+                      <span className="font-medium text-warning">Ожидание одобрения по принципу 4-х глаз</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Requested by another admin. A different admin must approve this withdrawal.
+                      Запрошено другим администратором. Другой администратор должен одобрить этот вывод.
                     </p>
                   </Card>
                 </div>
@@ -605,17 +617,17 @@ export default function AdminWithdrawals() {
 
               {(detail.rejectionReason || detail.lastError) && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Notes</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Примечания</h3>
                   <Card className="p-4">
                     {detail.rejectionReason && (
                       <div className="text-destructive">
-                        <span className="font-medium">Rejection reason: </span>
+                        <span className="font-medium">Причина отклонения: </span>
                         {detail.rejectionReason}
                       </div>
                     )}
                     {detail.lastError && (
                       <div className="text-destructive mt-2">
-                        <span className="font-medium">Error: </span>
+                        <span className="font-medium">Ошибка: </span>
                         {detail.lastError}
                       </div>
                     )}
@@ -625,7 +637,7 @@ export default function AdminWithdrawals() {
 
               {detail.riskFlags && detail.riskFlags.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Risk Flags</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Флаги рисков</h3>
                   <Card className="p-4">
                     <div className="flex flex-wrap gap-2">
                       {detail.riskFlags.map((flag, i) => (
@@ -641,7 +653,7 @@ export default function AdminWithdrawals() {
 
               {(permissions.canApprove || permissions.canManage) && detail.allowedTransitions.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Actions</h3>
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Действия</h3>
                   <div className="flex flex-wrap gap-2">
                     {permissions.canApprove && (detail.status === "PENDING_REVIEW" || detail.status === "PENDING") && !detail.reviewedByAdminId && (
                       <Button 
@@ -649,7 +661,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-review"
                       >
                         <Play className="h-4 w-4 mr-2" />
-                        Review
+                        Проверить
                       </Button>
                     )}
                     {permissions.canApprove && (detail.status === "PENDING_APPROVAL" || detail.status === "PENDING") && !detail.pendingAction && detail.reviewedByAdminId && (
@@ -658,7 +670,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-request-approval"
                       >
                         <Play className="h-4 w-4 mr-2" />
-                        Request Approval
+                        Запросить одобрение
                       </Button>
                     )}
                     {permissions.canApprove && detail.pendingAction && (detail.status === "PENDING_APPROVAL" || detail.status === "PENDING") && (
@@ -667,7 +679,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-approve"
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Approve (4-eyes)
+                        Одобрить (4 глаза)
                       </Button>
                     )}
                     {permissions.canApprove && detail.allowedTransitions.includes("REJECTED") && (
@@ -677,7 +689,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-reject"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
-                        Reject
+                        Отклонить
                       </Button>
                     )}
                     {permissions.canManage && detail.allowedTransitions.includes("PROCESSING") && (
@@ -686,7 +698,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-mark-processing"
                       >
                         <RefreshCw className="h-4 w-4 mr-2" />
-                        Mark Processing
+                        В обработку
                       </Button>
                     )}
                     {permissions.canManage && detail.allowedTransitions.includes("COMPLETED") && (
@@ -695,7 +707,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-mark-completed"
                       >
                         <Check className="h-4 w-4 mr-2" />
-                        Mark Completed
+                        Завершить
                       </Button>
                     )}
                     {permissions.canManage && detail.allowedTransitions.includes("FAILED") && (
@@ -705,7 +717,7 @@ export default function AdminWithdrawals() {
                         data-testid="button-mark-failed"
                       >
                         <XCircle className="h-4 w-4 mr-2" />
-                        Mark Failed
+                        Отметить неудачу
                       </Button>
                     )}
                   </div>
@@ -720,28 +732,28 @@ export default function AdminWithdrawals() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionDialog.action === "REVIEW" && "Review Withdrawal"}
-              {actionDialog.action === "REQUEST_APPROVAL" && "Request Approval"}
-              {actionDialog.action === "APPROVE" && "Approve Withdrawal"}
-              {actionDialog.action === "REJECT" && "Reject Withdrawal"}
-              {actionDialog.action === "MARK_PROCESSING" && "Mark as Processing"}
-              {actionDialog.action === "MARK_COMPLETED" && "Mark as Completed"}
-              {actionDialog.action === "MARK_FAILED" && "Mark as Failed"}
+              {actionDialog.action === "REVIEW" && "Проверка вывода"}
+              {actionDialog.action === "REQUEST_APPROVAL" && "Запрос одобрения"}
+              {actionDialog.action === "APPROVE" && "Одобрение вывода"}
+              {actionDialog.action === "REJECT" && "Отклонение вывода"}
+              {actionDialog.action === "MARK_PROCESSING" && "Отметить как обрабатываемый"}
+              {actionDialog.action === "MARK_COMPLETED" && "Отметить как завершённый"}
+              {actionDialog.action === "MARK_FAILED" && "Отметить как неудачный"}
             </DialogTitle>
             <DialogDescription>
-              {actionDialog.action === "REVIEW" && "This will mark the withdrawal as reviewed. Another admin must then approve it (4-eyes principle)."}
-              {actionDialog.action === "REQUEST_APPROVAL" && "This will create a pending approval request that must be approved by another admin (4-eyes principle)."}
-              {actionDialog.action === "APPROVE" && "You are approving this withdrawal as the second reviewer. The withdrawal will be ready for processing."}
-              {actionDialog.action === "REJECT" && "This will reject the withdrawal request. Please provide a reason."}
-              {actionDialog.action === "MARK_PROCESSING" && "Mark this withdrawal as being processed. This indicates the transaction is being sent to the blockchain."}
-              {actionDialog.action === "MARK_COMPLETED" && "Mark this withdrawal as completed. You may provide the transaction hash."}
-              {actionDialog.action === "MARK_FAILED" && "Mark this withdrawal as failed. Please provide the error details."}
+              {actionDialog.action === "REVIEW" && "Вывод будет отмечен как проверенный. Другой администратор должен затем одобрить его (принцип 4-х глаз)."}
+              {actionDialog.action === "REQUEST_APPROVAL" && "Будет создан запрос на одобрение, который должен быть одобрен другим администратором (принцип 4-х глаз)."}
+              {actionDialog.action === "APPROVE" && "Вы одобряете этот вывод как второй проверяющий. Вывод будет готов к обработке."}
+              {actionDialog.action === "REJECT" && "Запрос на вывод будет отклонён. Укажите причину."}
+              {actionDialog.action === "MARK_PROCESSING" && "Вывод будет отмечен как обрабатываемый. Это означает, что транзакция отправляется в блокчейн."}
+              {actionDialog.action === "MARK_COMPLETED" && "Вывод будет отмечен как завершённый. Вы можете указать хеш транзакции."}
+              {actionDialog.action === "MARK_FAILED" && "Вывод будет отмечен как неудачный. Укажите детали ошибки."}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {needsReason && (
               <Textarea
-                placeholder="Enter reason for this action..."
+                placeholder="Введите причину этого действия..."
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 rows={3}
@@ -750,7 +762,7 @@ export default function AdminWithdrawals() {
             )}
             {actionDialog.action === "MARK_COMPLETED" && (
               <Input
-                placeholder="Transaction hash (optional)"
+                placeholder="Хеш транзакции (необязательно)"
                 value={txHash}
                 onChange={(e) => setTxHash(e.target.value)}
                 data-testid="input-txhash"
@@ -758,7 +770,7 @@ export default function AdminWithdrawals() {
             )}
             {actionDialog.action === "MARK_FAILED" && (
               <Input
-                placeholder="Error message (optional)"
+                placeholder="Сообщение об ошибке (необязательно)"
                 value={errorMessage}
                 onChange={(e) => setErrorMessage(e.target.value)}
                 data-testid="input-error"
@@ -767,7 +779,7 @@ export default function AdminWithdrawals() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialog({ open: false, action: null })}>
-              Cancel
+              Отмена
             </Button>
             <Button
               onClick={handleConfirmAction}
@@ -775,7 +787,7 @@ export default function AdminWithdrawals() {
               data-testid="button-confirm-action"
             >
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirm
+              Подтвердить
             </Button>
           </DialogFooter>
         </DialogContent>

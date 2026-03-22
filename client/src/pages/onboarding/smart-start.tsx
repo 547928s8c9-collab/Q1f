@@ -16,9 +16,9 @@ import {
 type Step = "riskProfile" | "timeHorizon" | "investmentGoal";
 
 const stepConfig: Record<Step, { icon: typeof Target; title: string }> = {
-  riskProfile: { icon: Target, title: "Risk Tolerance" },
-  timeHorizon: { icon: Clock, title: "Time Horizon" },
-  investmentGoal: { icon: TrendingUp, title: "Investment Goal" },
+  riskProfile: { icon: Target, title: "Толерантность к риску" },
+  timeHorizon: { icon: Clock, title: "Горизонт инвестирования" },
+  investmentGoal: { icon: TrendingUp, title: "Цель инвестирования" },
 };
 
 const steps: Step[] = ["riskProfile", "timeHorizon", "investmentGoal"];
@@ -69,7 +69,7 @@ export default function SmartStart() {
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
           <span className="text-xl font-bold tracking-tight">ZEON</span>
           <Button variant="ghost" size="sm" onClick={handleSkip} data-testid="button-skip">
-            Skip
+            Пропустить
           </Button>
         </div>
       </header>
@@ -82,7 +82,7 @@ export default function SmartStart() {
           </div>
           <Progress value={progress} className="h-2" />
           <p className="text-xs text-muted-foreground mt-2">
-            Question {currentStep + 1} of {steps.length}
+            Вопрос {currentStep + 1} из {steps.length}
           </p>
         </div>
 
@@ -130,7 +130,7 @@ export default function SmartStart() {
             data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            Назад
           </Button>
         )}
       </main>

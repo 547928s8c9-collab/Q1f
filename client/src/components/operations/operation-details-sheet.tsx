@@ -70,17 +70,17 @@ const iconColorMap: Record<string, string> = {
 };
 
 const statusConfig: Record<string, { icon: LucideIcon; variant: "default" | "success" | "warning" | "danger"; label: string }> = {
-  pending: { icon: Clock, variant: "warning", label: "Pending" },
-  processing: { icon: Loader2, variant: "warning", label: "Processing" },
-  completed: { icon: CheckCircle2, variant: "success", label: "Completed" },
-  failed: { icon: XCircle, variant: "danger", label: "Failed" },
-  cancelled: { icon: XCircle, variant: "default", label: "Cancelled" },
+  pending: { icon: Clock, variant: "warning", label: "Ожидание" },
+  processing: { icon: Loader2, variant: "warning", label: "Обработка" },
+  completed: { icon: CheckCircle2, variant: "success", label: "Выполнен" },
+  failed: { icon: XCircle, variant: "danger", label: "Ошибка" },
+  cancelled: { icon: XCircle, variant: "default", label: "Отменён" },
 };
 
 function formatDetailDate(date: Date | string | null): string {
   if (!date) return "-";
   const d = new Date(date);
-  return d.toLocaleString("en-US", {
+  return d.toLocaleString("ru-RU", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -95,11 +95,11 @@ function StatusTimeline({ operation }: { operation: Operation }) {
   const isCancelled = operation.status === "cancelled";
   const isTerminalError = isFailed || isCancelled;
 
-  const finalLabel = isFailed ? "Failed" : isCancelled ? "Cancelled" : "Completed";
+  const finalLabel = isFailed ? "Ошибка" : isCancelled ? "Отменён" : "Выполнен";
 
   const steps = [
-    { status: "pending", label: "Request received" },
-    { status: "processing", label: "Processing" },
+    { status: "pending", label: "Запрос получен" },
+    { status: "processing", label: "Обработка" },
     { status: "completed", label: finalLabel },
   ];
 
@@ -192,13 +192,13 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
 
   const handleCopyRef = () => {
     navigator.clipboard.writeText(operation.id);
-    toast({ title: "Reference copied" });
+    toast({ title: "Ссылка скопирована" });
   };
 
   const handleReportProblem = () => {
     toast({ 
-      title: "Report submitted",
-      description: "Our team will review your issue shortly."
+      title: "Жалоба отправлена",
+      description: "Наша команда рассмотрит вашу проблему в ближайшее время."
     });
     onOpenChange(false);
   };
@@ -241,17 +241,17 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
 
         <div className="space-y-6">
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">Status</h4>
+            <h4 className="text-sm font-medium text-muted-foreground mb-3">Статус</h4>
             <StatusTimeline operation={operation} />
           </div>
 
           <Separator />
 
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">Breakdown</h4>
+            <h4 className="text-sm font-medium text-muted-foreground mb-2">Детализация</h4>
             <div className="space-y-1">
               <DetailRow 
-                label="Amount" 
+                label="Сумма" 
                 value={
                   <Money 
                     value={amount} 
@@ -263,7 +263,7 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
               />
               {fee > 0 && (
                 <DetailRow 
-                  label="Network fee" 
+                  label="Комиссия сети" 
                   value={
                     <Money 
                       value={-fee} 
@@ -277,7 +277,7 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
               )}
               <Separator className="my-2" />
               <DetailRow 
-                label={isDebit ? "Total debited" : "Net credited"} 
+                label={isDebit ? "Итого списано" : "Итого зачислено"} 
                 value={
                   <Money 
                     value={net} 
@@ -295,26 +295,26 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
           <Separator />
 
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">Details</h4>
+            <h4 className="text-sm font-medium text-muted-foreground mb-2">Подробности</h4>
             <div className="space-y-1">
-              <DetailRow label="Created" value={formatDetailDate(operation.createdAt)} />
+              <DetailRow label="Создан" value={formatDetailDate(operation.createdAt)} />
               {operation.updatedAt && operation.updatedAt !== operation.createdAt && (
-                <DetailRow label="Updated" value={formatDetailDate(operation.updatedAt)} />
+                <DetailRow label="Обновлён" value={formatDetailDate(operation.updatedAt)} />
               )}
               {operation.strategyName && (
-                <DetailRow label="Strategy" value={operation.strategyName} />
+                <DetailRow label="Стратегия" value={operation.strategyName} />
               )}
               {operation.fromVault && (
-                <DetailRow label="From" value={operation.fromVault.charAt(0).toUpperCase() + operation.fromVault.slice(1)} />
+                <DetailRow label="Откуда" value={operation.fromVault.charAt(0).toUpperCase() + operation.fromVault.slice(1)} />
               )}
               {operation.toVault && (
-                <DetailRow label="To" value={operation.toVault.charAt(0).toUpperCase() + operation.toVault.slice(1)} />
+                <DetailRow label="Куда" value={operation.toVault.charAt(0).toUpperCase() + operation.toVault.slice(1)} />
               )}
               {operation.txHash && (
                 <DetailRow label="TX Hash" value={operation.txHash.slice(0, 16) + "..."} mono />
               )}
               <div className="flex justify-between items-center py-2">
-                <span className="text-sm text-muted-foreground">Reference</span>
+                <span className="text-sm text-muted-foreground">Ссылка</span>
                 <button 
                   onClick={handleCopyRef}
                   className="flex items-center gap-1.5 text-sm font-mono text-xs hover-elevate px-2 py-1 rounded"
@@ -336,7 +336,7 @@ export function OperationDetailsSheet({ operation, open, onOpenChange }: Operati
             data-testid="button-report-problem"
           >
             <AlertTriangle className="w-4 h-4 mr-2" />
-            Report a problem
+            Сообщить о проблеме
           </Button>
         </div>
       </SheetContent>

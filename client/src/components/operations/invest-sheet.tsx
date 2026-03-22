@@ -53,8 +53,8 @@ export function InvestSheet({
     <ActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Invest"
-      description="Put your USDT to work"
+      title="Инвестировать"
+      description="Заставьте ваши USDT работать"
     >
       <InvestFlow
         bootstrap={bootstrap}
@@ -109,18 +109,18 @@ function InvestFlow({
 
   const handleNext = () => {
     if (!strategyId) {
-      setError("Please select a strategy");
+      setError("Выберите стратегию");
       return;
     }
     const minVal = BigInt(selectedStrategy?.minInvestment || "10000000");
     const maxVal = BigInt(availableBalance);
     
     if (BigInt(minorAmount) < minVal) {
-      setError(`Minimum investment is ${formatMoney(selectedStrategy?.minInvestment || "10000000", "USDT")} USDT`);
+      setError(`Минимальная инвестиция: ${formatMoney(selectedStrategy?.minInvestment || "10000000", "USDT")} USDT`);
       return;
     }
     if (BigInt(minorAmount) > maxVal) {
-      setError("Insufficient balance");
+      setError("Недостаточный баланс");
       return;
     }
     setStep("confirm");
@@ -161,15 +161,15 @@ function InvestFlow({
       queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/overview"] });
       toast({
-        title: "Investment successful",
-        description: `${formatMoney(minorAmount, "USDT")} USDT invested in ${selectedStrategy?.name}`,
+        title: "Инвестиция выполнена",
+        description: `${formatMoney(minorAmount, "USDT")} USDT инвестировано в ${selectedStrategy?.name}`,
       });
     },
     onError: (error: Error) => {
       setStatus("failed");
       setStep("result");
       toast({
-        title: "Investment failed",
+        title: "Ошибка инвестиции",
         description: error.message,
         variant: "destructive",
       });
@@ -183,16 +183,16 @@ function InvestFlow({
 
   const statusMessages = {
     success: {
-      title: "Investment Complete",
-      message: `${formatMoney(minorAmount, "USDT")} USDT is now working for you in ${selectedStrategy?.name || "your chosen strategy"}.`,
+      title: "Инвестиция выполнена",
+      message: `${formatMoney(minorAmount, "USDT")} USDT теперь работает на вас в ${selectedStrategy?.name || "выбранной стратегии"}.`,
     },
     pending: {
-      title: "Investment Processing",
-      message: "Your investment is being processed.",
+      title: "Инвестиция обрабатывается",
+      message: "Ваша инвестиция обрабатывается.",
     },
     failed: {
-      title: "Investment Failed",
-      message: investMutation.error?.message || "Something went wrong. Please try again.",
+      title: "Ошибка инвестиции",
+      message: investMutation.error?.message || "Что-то пошло не так. Попробуйте снова.",
     },
   };
 
@@ -201,10 +201,10 @@ function InvestFlow({
       {step === "amount" && (
         <div className="space-y-4">
           <div>
-            <Label>Strategy</Label>
+            <Label>Стратегия</Label>
             <Select value={strategyId} onValueChange={setStrategyId}>
               <SelectTrigger className="mt-1.5" data-testid="select-strategy">
-                <SelectValue placeholder="Select a strategy" />
+                <SelectValue placeholder="Выберите стратегию" />
               </SelectTrigger>
               <SelectContent>
                 {strategies.map((s) => (
@@ -227,18 +227,18 @@ function InvestFlow({
           {selectedStrategy && (
             <div className="bg-muted/50 rounded-lg p-3 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Expected Return</span>
-                <span className="font-medium">{selectedStrategy.expectedMonthlyRange}/mo</span>
+                <span className="text-muted-foreground">Ожидаемая доходность</span>
+                <span className="font-medium">{selectedStrategy.expectedMonthlyRange}/мес</span>
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-muted-foreground">Min Investment</span>
+                <span className="text-muted-foreground">Мин. инвестиция</span>
                 <span className="font-medium">{formatMoney(selectedStrategy.minInvestment, "USDT")} USDT</span>
               </div>
             </div>
           )}
 
           <div>
-            <Label htmlFor="amount">Amount</Label>
+            <Label htmlFor="amount">Сумма</Label>
             <div className="relative mt-1.5">
               <Input
                 id="amount"
@@ -258,7 +258,7 @@ function InvestFlow({
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Available</span>
+            <span className="text-muted-foreground">Доступно</span>
             <button
               type="button"
               onClick={setMax}
@@ -275,7 +275,7 @@ function InvestFlow({
             disabled={!amount || amount === "0" || !strategyId}
             data-testid="button-next-step"
           >
-            Continue
+            Продолжить
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -287,11 +287,11 @@ function InvestFlow({
         balanceAfter={balanceAfter}
         fee="0"
         details={[
-          { label: "Strategy", value: selectedStrategy?.name || "" },
-          { label: "Risk Tier", value: selectedStrategy?.riskTier || "" },
-          { label: "Expected Return", value: selectedStrategy?.expectedMonthlyRange + "/mo" || "" },
+          { label: "Стратегия", value: selectedStrategy?.name || "" },
+          { label: "Уровень риска", value: selectedStrategy?.riskTier || "" },
+          { label: "Ожидаемая доходность", value: selectedStrategy?.expectedMonthlyRange + "/мес" || "" },
         ]}
-        ctaLabel="Invest"
+        ctaLabel="Инвестировать"
         onConfirm={() => investMutation.mutate()}
         onBack={() => setStep("amount")}
         isLoading={investMutation.isPending}

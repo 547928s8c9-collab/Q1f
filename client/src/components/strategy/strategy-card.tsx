@@ -20,9 +20,9 @@ interface StrategyCardProps {
 }
 
 const riskConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string }> = {
-  LOW: { color: "bg-positive/10 text-positive", chipVariant: "success", icon: Shield, label: "Low Risk" },
-  CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Core Risk" },
-  HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "High Risk" },
+  LOW: { color: "bg-positive/10 text-positive", chipVariant: "success", icon: Shield, label: "Низкий риск" },
+  CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Средний риск" },
+  HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "Высокий риск" },
 };
 
 export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails, liveMetrics }: StrategyCardProps) {
@@ -39,7 +39,6 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
     ? sparklineData[sparklineData.length - 1].value >= sparklineData[0].value
     : true;
 
-  // Live metrics
   const hasLiveMetrics = !!liveMetrics;
   const equity = liveMetrics?.equityMinor || "0";
   const pnl = liveMetrics?.pnlMinor || "0";
@@ -97,7 +96,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
       {hasSparkline && (
         <div className="mb-4 bg-muted/30 rounded-lg p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">30-Day Performance</span>
+            <span className="text-xs text-muted-foreground">Динамика за 30 дней</span>
             <span className={cn("text-xs font-medium tabular-nums", isPositive ? "text-positive" : "text-negative")}>
               {isPositive ? "+" : ""}{((sparklineData[sparklineData.length - 1].value / sparklineData[0].value - 1) * 100).toFixed(1)}%
             </span>
@@ -109,7 +108,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
       {hasLiveMetrics ? (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Equity</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Капитал</p>
             <p className="text-sm font-semibold tabular-nums">
               {formatMoney(equity, "USDT")}
             </p>
@@ -121,13 +120,13 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">30d ROI</p>
+            <p className="text-xs text-muted-foreground mb-0.5">ROI 30д</p>
             <p className={cn("text-sm font-semibold tabular-nums", roi30dBps >= 0 ? "text-positive" : "text-negative")}>
               {roi30dBps >= 0 ? "+" : ""}{(roi30dBps / 100).toFixed(2)}%
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Trades 24h</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Сделки 24ч</p>
             <p className="text-sm font-semibold tabular-nums">
               {trades24h}
             </p>
@@ -136,14 +135,14 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
       ) : (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Expected Return</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Ожидаемая доходность</p>
             <p className="text-sm font-semibold text-positive tabular-nums">
               {minReturn}% - {maxReturn}%
-              <span className="text-xs text-muted-foreground font-normal">/mo</span>
+              <span className="text-xs text-muted-foreground font-normal">/мес</span>
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Min Investment</p>
+            <p className="text-xs text-muted-foreground mb-0.5">Мин. инвестиция</p>
             <p className="text-sm font-semibold tabular-nums">
               {minInvestment.toLocaleString()} USDT
             </p>
@@ -157,11 +156,11 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
             variant={state === "INVESTED_ACTIVE" ? "default" : state === "PAUSED" ? "secondary" : "outline"}
             className="text-xs"
           >
-            {state === "INVESTED_ACTIVE" ? "ACTIVE" : state === "PAUSED" ? "PAUSED" : "NOT_INVESTED"}
+            {state === "INVESTED_ACTIVE" ? "АКТИВНА" : state === "PAUSED" ? "ПАУЗА" : "НЕ ИНВЕСТИРОВАНО"}
           </Badge>
           {maxDrawdown30dBps > 0 && (
             <span className="text-xs text-muted-foreground">
-              Max DD: {(maxDrawdown30dBps / 100).toFixed(2)}%
+              Макс. просадка: {(maxDrawdown30dBps / 100).toFixed(2)}%
             </span>
           )}
         </div>
@@ -172,7 +171,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
         onClick={handleInvestClick}
         data-testid={`button-invest-${strategy.id}`}
       >
-        Invest
+        Инвестировать
       </Button>
     </Card>
   );

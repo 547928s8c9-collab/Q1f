@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { getInboxConfig } from "@/lib/inbox-map";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
 import type { InboxCard } from "@shared/schema";
 
 interface NotificationsResponse {
@@ -77,7 +78,7 @@ export function NotificationBell() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0" data-testid="notifications-popover">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <h3 className="font-semibold text-sm">Notifications</h3>
+          <h3 className="font-semibold text-sm">Уведомления</h3>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
@@ -88,7 +89,7 @@ export function NotificationBell() {
               data-testid="button-mark-all-read-popover"
             >
               <Check className="h-3 w-3 mr-1" />
-              Mark all read
+              Прочитать все
             </Button>
           )}
         </div>
@@ -96,7 +97,7 @@ export function NotificationBell() {
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-sm text-muted-foreground">
               <Bell className="h-8 w-8 mb-2 opacity-50" />
-              <p>No notifications</p>
+              <p>Нет уведомлений</p>
             </div>
           ) : (
             <div className="divide-y">
@@ -139,7 +140,7 @@ export function NotificationBell() {
                         <p className="text-xs text-muted-foreground line-clamp-1">{card.message}</p>
                         <div className="flex items-center justify-between mt-1">
                           <p className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true })}
+                            {formatDistanceToNow(new Date(card.createdAt), { addSuffix: true, locale: ru })}
                           </p>
                           {card.ctaLabel && (
                             <span className="text-xs text-primary flex items-center gap-0.5 font-medium">
@@ -164,7 +165,7 @@ export function NotificationBell() {
             onClick={() => navigate("/inbox")}
             data-testid="button-see-all"
           >
-            See all notifications
+            Все уведомления
             <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>

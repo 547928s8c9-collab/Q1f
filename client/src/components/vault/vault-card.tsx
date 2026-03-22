@@ -51,30 +51,30 @@ interface VaultCardProps {
 
 const vaultConfig = {
   principal: {
-    label: "Principal Vault",
-    description: "Secured investment capital",
+    label: "Основной сейф",
+    description: "Защищённый инвестиционный капитал",
     icon: Lock,
     color: "bg-primary/10 text-primary",
   },
   profit: {
-    label: "Profit Vault",
-    description: "Accumulated earnings",
+    label: "Сейф прибыли",
+    description: "Накопленные доходы",
     icon: TrendingUp,
     color: "bg-positive/10 text-positive",
   },
   taxes: {
-    label: "Tax Reserve",
-    description: "Set aside for taxes",
+    label: "Налоговый резерв",
+    description: "Отложено на налоги",
     icon: Receipt,
     color: "bg-warning/10 text-warning",
   },
 };
 
 const milestoneMessages: Record<number, { title: string; description: string }> = {
-  25: { title: "25% Milestone!", description: "Great start! You're a quarter of the way there." },
-  50: { title: "Halfway There!", description: "Amazing progress! You've reached 50% of your goal." },
-  75: { title: "75% Complete!", description: "Almost there! Just a little more to go." },
-  100: { title: "Goal Achieved!", description: "Congratulations! You've reached your savings goal!" },
+  25: { title: "25% достигнуто!", description: "Отличное начало! Вы прошли четверть пути." },
+  50: { title: "Половина пути!", description: "Впечатляющий прогресс! Вы достигли 50% цели." },
+  75: { title: "75% выполнено!", description: "Почти готово! Осталось совсем немного." },
+  100: { title: "Цель достигнута!", description: "Поздравляем! Вы достигли своей цели накопления!" },
 };
 
 export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEditGoal }: VaultCardProps) {
@@ -126,14 +126,14 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
           size="icon"
           onClick={onEditGoal}
           data-testid={`vault-${type}-edit-goal`}
-          aria-label="Edit goal"
+          aria-label="Редактировать цель"
         >
           <Settings className="w-4 h-4" />
         </Button>
       </div>
 
       <div className="mb-4">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Balance</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Баланс</p>
         <p className="text-2xl font-semibold tabular-nums">
           {formatMoney(data.balance, asset)}
           <span className="text-sm text-muted-foreground font-normal ml-1">{asset}</span>
@@ -147,7 +147,7 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1 text-muted-foreground">
                 <Target className="w-3 h-3" />
-                <span>{data.goalName || "Goal"}</span>
+                <span>{data.goalName || "Цель"}</span>
               </div>
               <span className="text-foreground font-medium">{cappedProgress}%</span>
             </div>
@@ -207,7 +207,7 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
 
       {data.autoSweepEnabled && data.autoSweepPct > 0 && (
         <div className="mb-4 p-2 rounded-md bg-muted/50 text-xs text-muted-foreground">
-          Auto-sweep: {data.autoSweepPct}% of profit
+          Авто-перевод: {data.autoSweepPct}% от прибыли
         </div>
       )}
 
@@ -220,7 +220,7 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
           data-testid={`vault-${type}-transfer-in`}
         >
           <ArrowDownLeft className="w-4 h-4 mr-1" />
-          <span className="truncate">Transfer In</span>
+          <span className="truncate">Пополнить</span>
         </Button>
         <Button
           variant="outline"
@@ -230,7 +230,7 @@ export function VaultCard({ type, data, asset, onTransferIn, onTransferOut, onEd
           data-testid={`vault-${type}-transfer-out`}
         >
           <ArrowUpRight className="w-4 h-4 mr-1" />
-          <span className="truncate">Transfer Out</span>
+          <span className="truncate">Вывести</span>
         </Button>
       </div>
     </Card>

@@ -23,10 +23,10 @@ function formatDateHeader(dateStr: string): string {
   const isToday = date.toDateString() === today.toDateString();
   const isYesterday = date.toDateString() === yesterday.toDateString();
 
-  if (isToday) return "Today";
-  if (isYesterday) return "Yesterday";
+  if (isToday) return "Сегодня";
+  if (isYesterday) return "Вчера";
 
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("ru-RU", {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -58,7 +58,7 @@ function groupOperationsByDay(operations: Operation[]): Map<string, Operation[]>
 }
 
 export default function ActivityPage() {
-  useSetPageTitle("Activity");
+  useSetPageTitle("Активность");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [isExporting, setIsExporting] = useState(false);
@@ -101,9 +101,9 @@ export default function ActivityPage() {
       window.URL.revokeObjectURL(blobUrl);
       document.body.removeChild(a);
       
-      toast({ title: "Statement exported successfully" });
+      toast({ title: "Выписка успешно экспортирована" });
     } catch (error) {
-      toast({ title: "Export failed", variant: "destructive" });
+      toast({ title: "Ошибка экспорта", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -124,7 +124,7 @@ export default function ActivityPage() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <PageHeader title="Activity" subtitle="View your transaction history" />
+        <PageHeader title="Активность" subtitle="Просмотр истории транзакций" />
         <Button
           variant="outline"
           size="sm"
@@ -133,7 +133,7 @@ export default function ActivityPage() {
           data-testid="button-export-csv"
         >
           <Download className="w-4 h-4 mr-1" />
-          Export
+          Экспорт
         </Button>
       </div>
 
@@ -142,7 +142,7 @@ export default function ActivityPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search transactions..."
+            placeholder="Поиск транзакций..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -186,8 +186,8 @@ export default function ActivityPage() {
         <Card>
           <EmptyState
             icon={Activity}
-            title="No transactions"
-            description={search || filter !== "all" ? "No matching transactions found" : "Your transaction history will appear here"}
+            title="Нет транзакций"
+            description={search || filter !== "all" ? "Совпадающие транзакции не найдены" : "Здесь появится история ваших транзакций"}
           />
         </Card>
       )}

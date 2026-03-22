@@ -4,8 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-// Check if demo endpoints should be shown
-// Show demo buttons if VITE_ALLOW_DEMO_ENDPOINTS is explicitly set to "true"
 const showDemoButtons = import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
 export default function Landing() {
@@ -33,9 +31,9 @@ export default function Landing() {
       if (res.ok && data.ok) {
         window.location.href = "/admin";
       } else {
-        const errorMessage = data?.error?.message || "Demo admin login failed";
+        const errorMessage = data?.error?.message || "Не удалось войти как демо-администратор";
         toast({
-          title: "Demo Admin Login Failed",
+          title: "Ошибка входа",
           description: errorMessage,
           variant: "destructive",
         });
@@ -44,8 +42,8 @@ export default function Landing() {
     } catch (error) {
       console.error("Demo admin login error", error);
       toast({
-        title: "Demo Admin Login Error",
-        description: "Failed to connect to server. Please try again.",
+        title: "Ошибка входа",
+        description: "Не удалось подключиться к серверу. Попробуйте ещё раз.",
         variant: "destructive",
       });
       setIsDemoAdminLoading(false);
@@ -77,16 +75,16 @@ export default function Landing() {
                   {isDemoAdminLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
+                      Загрузка...
                     </>
                   ) : (
-                    "Demo Admin"
+                    "Демо Админ"
                   )}
                 </Button>
               </>
             )}
             <Button onClick={handleLogin} data-testid="button-login-header">
-              Login
+              Войти
             </Button>
           </div>
         </div>
@@ -97,15 +95,15 @@ export default function Landing() {
           <div className="flex flex-col items-center text-center space-y-8">
             <div className="space-y-4 max-w-3xl">
               <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                Grow Your Wealth with Smart Investing
+                Приумножайте капитал с умным инвестированием
               </h1>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Professional-grade portfolio management, automated investment strategies, and secure multi-asset wallet. All in one platform.
+                Профессиональное управление портфелем, автоматизированные инвестиционные стратегии и безопасный мультивалютный кошелёк. Всё в одной платформе.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 items-center">
               <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
-                Login
+                Войти
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               {showDemoButtons && (
@@ -123,13 +121,13 @@ export default function Landing() {
                     {isDemoAdminLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
+                        Загрузка...
                       </>
                     ) : (
-                      "Demo Admin"
+                      "Демо Админ"
                     )}
                   </Button>
-                  <span className="text-xs text-muted-foreground">Dev only</span>
+                  <span className="text-xs text-muted-foreground">Только для разработки</span>
                 </>
               )}
             </div>
@@ -141,36 +139,36 @@ export default function Landing() {
             <Card>
               <CardHeader>
                 <TrendingUp className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Portfolio Tracking</CardTitle>
+                <CardTitle>Отслеживание портфеля</CardTitle>
                 <CardDescription>
-                  Real-time portfolio analytics with detailed performance charts
+                  Аналитика портфеля в реальном времени с подробными графиками доходности
                 </CardDescription>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
                 <ChartLine className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Investment Strategies</CardTitle>
+                <CardTitle>Инвестиционные стратегии</CardTitle>
                 <CardDescription>
-                  Curated strategies with transparent performance metrics
+                  Проверенные стратегии с прозрачными показателями эффективности
                 </CardDescription>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
                 <Wallet className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Multi-Asset Wallet</CardTitle>
+                <CardTitle>Мультивалютный кошелёк</CardTitle>
                 <CardDescription>
-                  Manage USDT and RUB with seamless deposits and withdrawals
+                  Управляйте USDT и RUB с удобными депозитами и выводами
                 </CardDescription>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
                 <Shield className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Bank-Grade Security</CardTitle>
+                <CardTitle>Банковская безопасность</CardTitle>
                 <CardDescription>
-                  Two-factor authentication, address whitelisting, and more
+                  Двухфакторная аутентификация, белый список адресов и многое другое
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -180,13 +178,13 @@ export default function Landing() {
         <section className="container max-w-6xl mx-auto px-4 py-16">
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="flex flex-col items-center text-center py-12 space-y-6">
-              <h2 className="text-3xl font-bold">Ready to Start?</h2>
+              <h2 className="text-3xl font-bold">Готовы начать?</h2>
               <p className="text-muted-foreground max-w-lg">
-                Join ZEON today and take control of your financial future with powerful tools and transparent investing.
+                Присоединяйтесь к ZEON сегодня и возьмите под контроль своё финансовое будущее с мощными инструментами и прозрачным инвестированием.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <Button size="lg" onClick={handleLogin} data-testid="button-sign-in-cta">
-                  Login
+                  Войти
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
                 {showDemoButtons && (
@@ -204,13 +202,13 @@ export default function Landing() {
                       {isDemoAdminLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Loading...
+                          Загрузка...
                         </>
                       ) : (
-                        "Demo Admin"
+                        "Демо Админ"
                       )}
                     </Button>
-                    <span className="text-xs text-muted-foreground">Dev only</span>
+                    <span className="text-xs text-muted-foreground">Только для разработки</span>
                   </>
                 )}
               </div>
@@ -221,7 +219,7 @@ export default function Landing() {
 
       <footer className="border-t py-8">
         <div className="container max-w-6xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>ZEON Fintech Dashboard MVP</p>
+          <p>ZEON — финтех-платформа для инвестиций</p>
         </div>
       </footer>
     </div>

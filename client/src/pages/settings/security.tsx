@@ -61,12 +61,10 @@ export default function SecuritySettings() {
     queryKey: ["/api/telegram/notifications/status"],
   });
 
-  // Local state for optimistic UI updates
   const [localNotifPrefs, setLocalNotifPrefs] = useState<Partial<NotificationPreferences>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSavingNotifs, setIsSavingNotifs] = useState(false);
 
-  // Sync local state with server data
   useEffect(() => {
     if (notifPrefs) {
       setLocalNotifPrefs({
@@ -88,7 +86,6 @@ export default function SecuritySettings() {
     onError: (error: Error) => {
       toast({ title: "Не удалось сохранить", description: error.message, variant: "destructive" });
       setIsSavingNotifs(false);
-      // Revert to server state
       if (notifPrefs) {
         setLocalNotifPrefs({
           inAppEnabled: notifPrefs.inAppEnabled,
@@ -115,11 +112,9 @@ export default function SecuritySettings() {
   });
 
   const handleNotifToggle = useCallback((key: keyof NotificationPreferences, value: boolean) => {
-    // Optimistic update
     setLocalNotifPrefs((prev) => ({ ...prev, [key]: value }));
     setIsSavingNotifs(true);
 
-    // Debounce the API call
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -134,7 +129,7 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: "2FA settings updated" });
+      toast({ title: "Настройки 2FA обновлены" });
     },
   });
 
@@ -144,7 +139,7 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: "Whitelist settings updated" });
+      toast({ title: "Настройки белого списка обновлены" });
     },
   });
 
@@ -154,7 +149,7 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: "Address delay updated" });
+      toast({ title: "Задержка для адреса обновлена" });
     },
   });
 
@@ -164,7 +159,7 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
-      toast({ title: "Anti-phishing code updated" });
+      toast({ title: "Антифишинговый код обновлён" });
       setAntiPhishingDialog(false);
       setAntiPhishingCode("");
     },
@@ -176,12 +171,12 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security/whitelist"] });
-      toast({ title: "Address added to whitelist" });
+      toast({ title: "Адрес добавлен в белый список" });
       setAddAddressDialog(false);
       setNewAddress({ address: "", label: "" });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to add address", description: error.message, variant: "destructive" });
+      toast({ title: "Не удалось добавить адрес", description: error.message, variant: "destructive" });
     },
   });
 
@@ -191,7 +186,7 @@ export default function SecuritySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/security/whitelist"] });
-      toast({ title: "Address removed from whitelist" });
+      toast({ title: "Адрес удалён из белого списка" });
     },
   });
 
@@ -199,7 +194,7 @@ export default function SecuritySettings() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Security Center" subtitle="Manage your security settings" backHref="/settings" />
+      <PageHeader title="Центр безопасности" subtitle="Управление настройками безопасности" backHref="/settings" />
 
       {isLoading ? (
         <div className="space-y-4">
@@ -211,7 +206,7 @@ export default function SecuritySettings() {
       ) : (
         <div className="space-y-6">
           <section>
-            <SectionHeader title="Verification Status" />
+            <SectionHeader title="Статус верификации" />
             <KycStatusCard
               status={(bootstrap?.security.kycStatus as any) || "not_started"}
               onStartVerification={() => navigate("/onboarding/kyc")}
@@ -219,20 +214,20 @@ export default function SecuritySettings() {
           </section>
 
           <section>
-            <SectionHeader title="Authentication" />
+            <SectionHeader title="Аутентификация" />
             <Card className="divide-y divide-border">
               <SecuritySettingRow
                 icon={<Shield className="w-5 h-5 text-muted-foreground" />}
-                label="Two-Factor Authentication"
-                description="Add an extra layer of security to your account"
+                label="Двухфакторная аутентификация"
+                description="Добавьте дополнительный уровень защиты аккаунта"
                 type="toggle"
                 value={bootstrap?.security.twoFactorEnabled ?? false}
                 onChange={(enabled) => toggle2FAMutation.mutate(enabled)}
               />
               <SecuritySettingRow
                 icon={<Eye className="w-5 h-5 text-muted-foreground" />}
-                label="Anti-Phishing Code"
-                description={bootstrap?.security.antiPhishingCode ? `Code: ${bootstrap.security.antiPhishingCode}` : "Set a code to verify emails"}
+                label="Антифишинговый код"
+                description={bootstrap?.security.antiPhishingCode ? `Код: ${bootstrap.security.antiPhishingCode}` : "Установите код для проверки подлинности писем"}
                 type="action"
                 onClick={() => setAntiPhishingDialog(true)}
               />
@@ -240,12 +235,12 @@ export default function SecuritySettings() {
           </section>
 
           <section>
-            <SectionHeader title="Withdrawal Security" />
+            <SectionHeader title="Безопасность вывода" />
             <Card className="divide-y divide-border">
               <SecuritySettingRow
                 icon={<ListChecks className="w-5 h-5 text-muted-foreground" />}
-                label="Address Whitelist"
-                description="Only allow withdrawals to approved addresses"
+                label="Белый список адресов"
+                description="Разрешить вывод только на одобренные адреса"
                 type="toggle"
                 value={bootstrap?.security.whitelistEnabled ?? false}
                 onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
@@ -257,8 +252,8 @@ export default function SecuritySettings() {
                       <Clock className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">New Address Delay</p>
-                      <p className="text-xs text-muted-foreground">Waiting period for new addresses</p>
+                      <p className="text-sm font-medium">Задержка нового адреса</p>
+                      <p className="text-xs text-muted-foreground">Период ожидания для новых адресов</p>
                     </div>
                   </div>
                   <Select
@@ -269,8 +264,8 @@ export default function SecuritySettings() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">No delay</SelectItem>
-                      <SelectItem value="24">24 hours</SelectItem>
+                      <SelectItem value="0">Без задержки</SelectItem>
+                      <SelectItem value="24">24 часа</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -280,7 +275,7 @@ export default function SecuritySettings() {
 
           <section>
             <SectionHeader 
-              title="Whitelisted Addresses"
+              title="Адреса белого списка"
               action={
                 <Button
                   variant="outline"
@@ -289,7 +284,7 @@ export default function SecuritySettings() {
                   data-testid="button-add-address"
                 >
                   <Plus className="w-4 h-4 mr-1" />
-                  Add
+                  Добавить
                 </Button>
               }
             />
@@ -299,7 +294,7 @@ export default function SecuritySettings() {
                 {whitelist.map((addr) => (
                   <div key={addr.id} className="flex items-center justify-between p-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{addr.label || "Unlabeled"}</p>
+                      <p className="text-sm font-medium truncate">{addr.label || "Без названия"}</p>
                       <p className="text-xs text-muted-foreground font-mono truncate">{addr.address}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -319,8 +314,8 @@ export default function SecuritySettings() {
             ) : (
               <div className="p-8 text-center" data-testid="empty-state-whitelist">
                 <Wallet className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground" data-testid="text-empty-whitelist">No whitelisted addresses yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Add addresses to enable secure withdrawals</p>
+                <p className="text-sm text-muted-foreground" data-testid="text-empty-whitelist">Нет адресов в белом списке</p>
+                <p className="text-xs text-muted-foreground mt-1">Добавьте адреса для безопасного вывода средств</p>
               </div>
             )}
             </Card>
@@ -376,7 +371,7 @@ export default function SecuritySettings() {
                   <Badge variant="outline" className={telegramStatus?.linked ? "border-positive/30 text-positive" : "border-muted text-muted-foreground"}>
                     <span className="flex items-center gap-2">
                       <span className={telegramStatus?.linked ? "w-1.5 h-1.5 rounded-full bg-positive" : "w-1.5 h-1.5 rounded-full bg-muted-foreground"} />
-                      {telegramStatus?.linked ? "Linked" : "Not linked"}
+                      {telegramStatus?.linked ? "Привязан" : "Не привязан"}
                     </span>
                   </Badge>
                   {telegramStatus?.linked ? (
@@ -387,7 +382,7 @@ export default function SecuritySettings() {
                       disabled={toggleTelegramMutation.isPending}
                       className="h-8"
                     >
-                      {telegramStatus?.enabled ? "Disable" : "Enable"}
+                      {telegramStatus?.enabled ? "Отключить" : "Включить"}
                     </Button>
                   ) : (
                     <Button variant="secondary" size="sm" disabled className="h-8 gap-2">
@@ -405,17 +400,17 @@ export default function SecuritySettings() {
       <Dialog open={antiPhishingDialog} onOpenChange={setAntiPhishingDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Anti-Phishing Code</DialogTitle>
+            <DialogTitle>Антифишинговый код</DialogTitle>
             <DialogDescription>
-              Set a unique code that will appear in all our emails to verify authenticity.
+              Установите уникальный код, который будет отображаться во всех наших письмах для подтверждения подлинности.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="anti-phishing-code">Code</Label>
+              <Label htmlFor="anti-phishing-code">Код</Label>
               <Input
                 id="anti-phishing-code"
-                placeholder="e.g., MYCODE123"
+                placeholder="например, MYCODE123"
                 value={antiPhishingCode}
                 onChange={(e) => setAntiPhishingCode(e.target.value)}
                 className="mt-2"
@@ -428,7 +423,7 @@ export default function SecuritySettings() {
               disabled={setAntiPhishingMutation.isPending || !antiPhishingCode}
               data-testid="button-save-anti-phishing"
             >
-              Save Code
+              Сохранить код
             </Button>
           </div>
         </DialogContent>
@@ -437,17 +432,17 @@ export default function SecuritySettings() {
       <Dialog open={addAddressDialog} onOpenChange={setAddAddressDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Whitelist Address</DialogTitle>
+            <DialogTitle>Добавить адрес в белый список</DialogTitle>
             <DialogDescription>
-              Add a new address to your withdrawal whitelist.
+              Добавьте новый адрес в белый список для вывода средств.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="address-label">Label</Label>
+              <Label htmlFor="address-label">Название</Label>
               <Input
                 id="address-label"
-                placeholder="e.g., My Binance"
+                placeholder="например, Мой Binance"
                 value={newAddress.label}
                 onChange={(e) => setNewAddress({ ...newAddress, label: e.target.value })}
                 className="mt-2"
@@ -455,7 +450,7 @@ export default function SecuritySettings() {
               />
             </div>
             <div>
-              <Label htmlFor="address">Address (TRC20)</Label>
+              <Label htmlFor="address">Адрес (TRC20)</Label>
               <Input
                 id="address"
                 placeholder="T..."
@@ -471,7 +466,7 @@ export default function SecuritySettings() {
               disabled={addAddressMutation.isPending || !newAddress.address}
               data-testid="button-add-whitelist-address"
             >
-              Add Address
+              Добавить адрес
             </Button>
           </div>
         </DialogContent>

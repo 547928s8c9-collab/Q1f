@@ -23,13 +23,13 @@ export default function OnboardingVerify() {
     onSuccess: () => {
       setCodeSent(true);
       toast({
-        title: "Code sent",
-        description: "Check your email for the verification code",
+        title: "Код отправлен",
+        description: "Проверьте вашу электронную почту для получения кода подтверждения",
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to send code",
+        title: "Не удалось отправить код",
         description: error.message,
         variant: "destructive",
       });
@@ -43,14 +43,14 @@ export default function OnboardingVerify() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({
-        title: "Verified!",
-        description: "Your contact has been verified",
+        title: "Подтверждено!",
+        description: "Ваши контактные данные подтверждены",
       });
       setLocation("/onboarding/consent");
     },
     onError: (error: Error) => {
       toast({
-        title: "Verification failed",
+        title: "Ошибка подтверждения",
         description: error.message,
         variant: "destructive",
       });
@@ -73,9 +73,9 @@ export default function OnboardingVerify() {
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-xl font-bold mb-2">Verify Your Contact</h1>
+          <h1 className="text-xl font-bold mb-2">Подтверждение контакта</h1>
           <p className="text-muted-foreground text-sm">
-            We'll send a verification code to your email
+            Мы отправим код подтверждения на вашу электронную почту
           </p>
         </div>
 
@@ -83,7 +83,7 @@ export default function OnboardingVerify() {
           {!codeSent ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground text-center">
-                Click the button below to receive a verification code
+                Нажмите кнопку ниже, чтобы получить код подтверждения
               </p>
               <Button
                 className="w-full"
@@ -94,10 +94,10 @@ export default function OnboardingVerify() {
                 {sendCodeMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Sending...
+                    Отправка...
                   </>
                 ) : (
-                  "Send Verification Code"
+                  "Отправить код подтверждения"
                 )}
               </Button>
             </div>
@@ -105,10 +105,10 @@ export default function OnboardingVerify() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-positive mb-4">
                 <CheckCircle2 className="w-4 h-4" />
-                Code sent to your email
+                Код отправлен на вашу почту
               </div>
               <div>
-                <Label htmlFor="code">Verification Code</Label>
+                <Label htmlFor="code">Код подтверждения</Label>
                 <Input
                   id="code"
                   type="text"
@@ -121,7 +121,7 @@ export default function OnboardingVerify() {
                   data-testid="input-verification-code"
                 />
                 <p className="text-xs text-muted-foreground mt-2 text-center">
-                  Enter the 6-digit code sent to your email
+                  Введите 6-значный код, отправленный на вашу почту
                 </p>
               </div>
               <Button
@@ -133,10 +133,10 @@ export default function OnboardingVerify() {
                 {verifyMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Verifying...
+                    Проверка...
                   </>
                 ) : (
-                  "Verify"
+                  "Подтвердить"
                 )}
               </Button>
               <button
@@ -144,7 +144,7 @@ export default function OnboardingVerify() {
                 className="w-full text-sm text-primary hover:underline"
                 disabled={sendCodeMutation.isPending}
               >
-                Resend code
+                Отправить код повторно
               </button>
             </div>
           )}

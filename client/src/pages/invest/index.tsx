@@ -17,7 +17,7 @@ import { InvestmentCalculator } from "@/components/investment-calculator";
 const TIER_ORDER: RiskTierKey[] = ["LOW", "CORE", "HIGH"];
 
 export default function Invest() {
-  useSetPageTitle("Invest");
+  useSetPageTitle("Инвестиции");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [investOpen, setInvestOpen] = useState(false);
@@ -87,8 +87,8 @@ export default function Invest() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
       <PageHeader
-        title="Investment Strategies"
-        subtitle="Select a risk tier that matches your investment goals"
+        title="Инвестиционные стратегии"
+        subtitle="Выберите уровень риска, соответствующий вашим целям"
         badge={
           <LiveBadge
             pulse={isRunning}
@@ -116,8 +116,8 @@ export default function Invest() {
       ) : isError ? (
         <EmptyState
           icon={AlertTriangle}
-          title="Failed to load strategies"
-          description="Could not fetch investment strategies. Please refresh the page or try again later."
+          title="Не удалось загрузить стратегии"
+          description="Не удалось получить инвестиционные стратегии. Обновите страницу или попробуйте позже."
         />
       ) : activeTiers.length > 0 ? (
         <div className="space-y-6">
@@ -136,8 +136,8 @@ export default function Invest() {
       ) : (
         <EmptyState
           icon={TrendingUp}
-          title="No strategies available"
-          description="Check back later for investment opportunities."
+          title="Нет доступных стратегий"
+          description="Загляните позже — скоро появятся инвестиционные возможности."
         />
       )}
 

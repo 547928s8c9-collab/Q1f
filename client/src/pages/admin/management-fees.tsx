@@ -35,8 +35,8 @@ interface ManagementFeeConfig {
 type TierKey = keyof ManagementFeeConfig["tiers"];
 
 const TIER_LABELS: Record<TierKey, string> = {
-  stable: "Stable",
-  active: "Active",
+  stable: "Стабильный",
+  active: "Активный",
   aggressive: "Агрессивный",
 };
 

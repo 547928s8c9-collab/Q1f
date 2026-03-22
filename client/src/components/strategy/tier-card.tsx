@@ -37,9 +37,9 @@ export const TIER_META: Record<RiskTierKey, TierMeta> = {
   LOW: {
     key: "LOW",
     name: "Стабильный",
-    tagline: "Steady returns, minimal volatility",
+    tagline: "Стабильная доходность, минимальная волатильность",
     description:
-      "Defensive strategies that ride low-volatility regimes and target small, consistent gains. Ideal for capital preservation with modest growth.",
+      "Защитные стратегии, работающие в режимах низкой волатильности и нацеленные на небольшую, но стабильную прибыль. Идеально для сохранения капитала с умеренным ростом.",
     icon: Shield,
     chipVariant: "success",
     iconColor: "text-positive",
@@ -48,9 +48,9 @@ export const TIER_META: Record<RiskTierKey, TierMeta> = {
   CORE: {
     key: "CORE",
     name: "Активный",
-    tagline: "Diversified exposure, moderate risk",
+    tagline: "Диверсифицированная экспозиция, умеренный риск",
     description:
-      "A blend of trend-following and mean-reversion strategies across multiple assets. The backbone of a well-rounded portfolio.",
+      "Сочетание трендовых и контртрендовых стратегий по нескольким активам. Основа сбалансированного портфеля.",
     icon: TrendingUp,
     chipVariant: "warning",
     iconColor: "text-primary",
@@ -59,9 +59,9 @@ export const TIER_META: Record<RiskTierKey, TierMeta> = {
   HIGH: {
     key: "HIGH",
     name: "Агрессивный",
-    tagline: "Higher potential, higher volatility",
+    tagline: "Высокий потенциал, высокая волатильность",
     description:
-      "Momentum and breakout strategies that capture fast market moves. Best suited for investors comfortable with larger drawdowns in exchange for outsized returns.",
+      "Стратегии на основе моментума и пробоев, улавливающие быстрые рыночные движения. Подходит инвесторам, готовым к крупным просадкам ради повышенной доходности.",
     icon: Zap,
     chipVariant: "danger",
     iconColor: "text-warning",
@@ -179,24 +179,24 @@ export function TierCard({
 
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-muted/40 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Target Return</p>
+            <p className="text-xs text-muted-foreground mb-1">Целевая доходность</p>
             <p className="text-base font-bold text-positive tabular-nums">
               {stats.returnRangeMin}–{stats.returnRangeMax}%
             </p>
-            <p className="text-xs text-muted-foreground">/month</p>
+            <p className="text-xs text-muted-foreground">/мес</p>
           </div>
           <div className="bg-muted/40 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Max Drawdown</p>
+            <p className="text-xs text-muted-foreground mb-1">Макс. просадка</p>
             <p className="text-base font-bold text-negative tabular-nums">
               {stats.maxDrawdown}
             </p>
           </div>
           <div className="bg-muted/40 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Strategies</p>
+            <p className="text-xs text-muted-foreground mb-1">Стратегии</p>
             <p className="text-base font-bold tabular-nums">
               {stats.strategyCount}
             </p>
-            <p className="text-xs text-muted-foreground">active</p>
+            <p className="text-xs text-muted-foreground">активных</p>
           </div>
         </div>
 
@@ -218,7 +218,7 @@ export function TierCard({
         >
           <span className="flex items-center gap-2">
             <Info className="w-4 h-4" />
-            Under the Hood — {stats.strategyCount} Strategies
+            Под капотом — {stats.strategyCount} стратегий
           </span>
           {expanded ? (
             <ChevronDown className="w-4 h-4" />
@@ -286,16 +286,16 @@ export function TierCard({
 
                   <div className="flex items-center gap-4 text-xs">
                     <div>
-                      <span className="text-muted-foreground">Return </span>
+                      <span className="text-muted-foreground">Доходность </span>
                       <span className="font-medium text-positive tabular-nums">
                         {minReturn}–{maxReturn}%
                       </span>
-                      <span className="text-muted-foreground">/mo</span>
+                      <span className="text-muted-foreground">/мес</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">DD </span>
+                      <span className="text-muted-foreground">Просадка </span>
                       <span className="font-medium text-negative tabular-nums">
-                        {strategy.maxDrawdown || "N/A"}
+                        {strategy.maxDrawdown || "Н/Д"}
                       </span>
                     </div>
                     {live && live.pnlMinor !== "0" && (
@@ -326,7 +326,7 @@ export function TierCard({
                       }}
                       data-testid={`button-details-${strategy.id}`}
                     >
-                      Details
+                      Подробнее
                     </Button>
                     <Button
                       size="sm"
@@ -337,7 +337,7 @@ export function TierCard({
                       }}
                       data-testid={`button-invest-${strategy.id}`}
                     >
-                      Invest
+                      Инвестировать
                     </Button>
                   </div>
                 </div>
@@ -355,7 +355,7 @@ export function TierCard({
           }}
           data-testid={`button-invest-tier-${tierKey.toLowerCase()}`}
         >
-          Invest in {meta.name} Tier
+          Инвестировать в {meta.name}
         </Button>
       </div>
     </Card>

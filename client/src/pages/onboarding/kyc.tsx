@@ -21,48 +21,48 @@ import type { KycStatusDTO } from "@shared/schema";
 
 const KYC_STATUS_CONFIG = {
   NOT_STARTED: {
-    title: "Identity Verification",
-    description: "Complete KYC to unlock all features",
+    title: "Верификация личности",
+    description: "Пройдите KYC, чтобы разблокировать все функции",
     icon: UserCheck,
     iconColor: "text-primary",
     iconBg: "bg-primary/10",
     showIntro: true,
   },
   IN_REVIEW: {
-    title: "Verification In Progress",
-    description: "We're reviewing your documents. This usually takes a few minutes.",
+    title: "Верификация в процессе",
+    description: "Мы проверяем ваши документы. Обычно это занимает несколько минут.",
     icon: Clock,
     iconColor: "text-amber-500",
     iconBg: "bg-amber-500/10",
     showIntro: false,
   },
   APPROVED: {
-    title: "Identity Verified",
-    description: "Your identity has been successfully verified.",
+    title: "Личность подтверждена",
+    description: "Ваша личность успешно верифицирована.",
     icon: UserCheck,
     iconColor: "text-positive",
     iconBg: "bg-positive/10",
     showIntro: false,
   },
   NEEDS_ACTION: {
-    title: "Action Required",
-    description: "We need additional information to complete your verification.",
+    title: "Требуется действие",
+    description: "Нам нужна дополнительная информация для завершения верификации.",
     icon: AlertCircle,
     iconColor: "text-amber-500",
     iconBg: "bg-amber-500/10",
     showIntro: false,
   },
   REJECTED: {
-    title: "Verification Declined",
-    description: "Unfortunately, we were unable to verify your identity.",
+    title: "Верификация отклонена",
+    description: "К сожалению, мы не смогли подтвердить вашу личность.",
     icon: XCircle,
     iconColor: "text-destructive",
     iconBg: "bg-destructive/10",
     showIntro: false,
   },
   ON_HOLD: {
-    title: "Verification On Hold",
-    description: "Your verification is on hold pending manual review.",
+    title: "Верификация приостановлена",
+    description: "Ваша верификация приостановлена до ручной проверки.",
     icon: PauseCircle,
     iconColor: "text-muted-foreground",
     iconBg: "bg-muted",
@@ -93,13 +93,13 @@ export default function OnboardingKyc() {
       queryClient.invalidateQueries({ queryKey: ["/api/kyc/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({
-        title: "Verification started",
-        description: "Please wait while we verify your identity",
+        title: "Верификация запущена",
+        description: "Пожалуйста, подождите, пока мы проверяем вашу личность",
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to start verification",
+        title: "Не удалось начать верификацию",
         description: error.message,
         variant: "destructive",
       });
@@ -157,9 +157,9 @@ export default function OnboardingKyc() {
                   <FileCheck className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h3 className="font-medium">Government ID</h3>
+                  <h3 className="font-medium">Удостоверение личности</h3>
                   <p className="text-sm text-muted-foreground">
-                    Passport, driver's license, or national ID
+                    Паспорт, водительское удостоверение или ID-карта
                   </p>
                 </div>
               </Card>
@@ -169,9 +169,9 @@ export default function OnboardingKyc() {
                   <Camera className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h3 className="font-medium">Selfie Verification</h3>
+                  <h3 className="font-medium">Селфи-верификация</h3>
                   <p className="text-sm text-muted-foreground">
-                    Take a photo to match with your ID
+                    Сделайте фото для сверки с документом
                   </p>
                 </div>
               </Card>
@@ -181,9 +181,9 @@ export default function OnboardingKyc() {
                   <Clock className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h3 className="font-medium">Quick Process</h3>
+                  <h3 className="font-medium">Быстрый процесс</h3>
                   <p className="text-sm text-muted-foreground">
-                    Usually verified within minutes
+                    Обычно верификация занимает несколько минут
                   </p>
                 </div>
               </Card>
@@ -191,7 +191,7 @@ export default function OnboardingKyc() {
 
             <div className="bg-muted/50 rounded-lg p-4 mb-6">
               <p className="text-xs text-muted-foreground text-center">
-                Click start to begin the verification process
+                Нажмите «Начать», чтобы запустить процесс верификации
               </p>
             </div>
 
@@ -204,10 +204,10 @@ export default function OnboardingKyc() {
               {startKycMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Starting...
+                  Запуск...
                 </>
               ) : (
-                "Start Verification"
+                "Начать верификацию"
               )}
             </Button>
           </>
@@ -216,13 +216,13 @@ export default function OnboardingKyc() {
         {status === "IN_REVIEW" && (
           <Card className="p-8 flex flex-col items-center">
             <Loader2 className="w-12 h-12 animate-spin text-amber-500 mb-4" />
-            <h3 className="font-medium mb-2">Processing...</h3>
+            <h3 className="font-medium mb-2">Обработка...</h3>
             <p className="text-sm text-muted-foreground text-center">
-              Please wait while we verify your identity
+              Пожалуйста, подождите, пока мы проверяем вашу личность
             </p>
             {kycStatus?.submittedAt && (
               <p className="text-xs text-muted-foreground mt-2">
-                Started: {new Date(kycStatus.submittedAt).toLocaleTimeString()}
+                Начало: {new Date(kycStatus.submittedAt).toLocaleTimeString("ru-RU")}
               </p>
             )}
           </Card>
@@ -233,9 +233,9 @@ export default function OnboardingKyc() {
             <div className="w-16 h-16 rounded-full bg-positive/20 flex items-center justify-center mb-4">
               <UserCheck className="w-8 h-8 text-positive" />
             </div>
-            <h3 className="font-medium mb-2 text-positive">Verified!</h3>
+            <h3 className="font-medium mb-2 text-positive">Подтверждено!</h3>
             <p className="text-sm text-muted-foreground text-center">
-              Redirecting to complete setup...
+              Перенаправление для завершения настройки...
             </p>
           </Card>
         )}
@@ -245,9 +245,9 @@ export default function OnboardingKyc() {
             <div className="flex items-start gap-4 mb-4">
               <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0" />
               <div>
-                <h3 className="font-medium mb-1">Additional Information Required</h3>
+                <h3 className="font-medium mb-1">Требуется дополнительная информация</h3>
                 <p className="text-sm text-muted-foreground">
-                  {kycStatus?.needsActionReason || "Please provide additional documentation to complete verification."}
+                  {kycStatus?.needsActionReason || "Пожалуйста, предоставьте дополнительные документы для завершения верификации."}
                 </p>
               </div>
             </div>
@@ -261,12 +261,12 @@ export default function OnboardingKyc() {
                 {startKycMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Resubmitting...
+                    Повторная отправка...
                   </>
                 ) : (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    Resubmit Documents
+                    Отправить документы повторно
                   </>
                 )}
               </Button>
@@ -279,9 +279,9 @@ export default function OnboardingKyc() {
             <div className="flex items-start gap-4">
               <XCircle className="w-6 h-6 text-destructive flex-shrink-0" />
               <div>
-                <h3 className="font-medium mb-1 text-destructive">Verification Declined</h3>
+                <h3 className="font-medium mb-1 text-destructive">Верификация отклонена</h3>
                 <p className="text-sm text-muted-foreground">
-                  {kycStatus?.rejectionReason || "Your verification could not be completed. Please contact support for assistance."}
+                  {kycStatus?.rejectionReason || "Вашу верификацию не удалось завершить. Пожалуйста, обратитесь в службу поддержки."}
                 </p>
               </div>
             </div>
@@ -293,9 +293,9 @@ export default function OnboardingKyc() {
             <div className="flex items-start gap-4">
               <PauseCircle className="w-6 h-6 text-muted-foreground flex-shrink-0" />
               <div>
-                <h3 className="font-medium mb-1">Manual Review Required</h3>
+                <h3 className="font-medium mb-1">Требуется ручная проверка</h3>
                 <p className="text-sm text-muted-foreground">
-                  Your verification requires manual review by our compliance team. This may take 1-2 business days.
+                  Ваша верификация требует ручной проверки нашей командой комплаенса. Это может занять 1–2 рабочих дня.
                 </p>
               </div>
             </div>

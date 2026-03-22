@@ -17,9 +17,9 @@ export default function OnboardingDone() {
           <CheckCircle2 className="w-10 h-10 text-positive" />
         </div>
 
-        <h1 className="text-2xl font-bold mb-2 text-center">You're All Set!</h1>
+        <h1 className="text-2xl font-bold mb-2 text-center">Всё готово!</h1>
         <p className="text-muted-foreground text-center mb-8">
-          Your account is fully verified and ready to use
+          Ваш аккаунт полностью верифицирован и готов к использованию
         </p>
 
         <div className="space-y-4 w-full mb-8">
@@ -28,9 +28,9 @@ export default function OnboardingDone() {
               <Wallet className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Deposit Funds</h3>
+              <h3 className="font-medium">Пополнить счёт</h3>
               <p className="text-sm text-muted-foreground">
-                Add USDT or RUB to start investing
+                Внесите USDT или RUB, чтобы начать инвестировать
               </p>
             </div>
           </Card>
@@ -40,9 +40,9 @@ export default function OnboardingDone() {
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Explore Strategies</h3>
+              <h3 className="font-medium">Обзор стратегий</h3>
               <p className="text-sm text-muted-foreground">
-                Browse investment options and grow your portfolio
+                Просмотрите инвестиционные возможности и увеличьте свой портфель
               </p>
             </div>
           </Card>
@@ -52,9 +52,9 @@ export default function OnboardingDone() {
               <Shield className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-medium">Secure Your Account</h3>
+              <h3 className="font-medium">Защитите аккаунт</h3>
               <p className="text-sm text-muted-foreground">
-                Enable 2FA and set up withdrawal whitelist
+                Включите 2FA и настройте белый список для вывода средств
               </p>
             </div>
           </Card>
@@ -62,7 +62,7 @@ export default function OnboardingDone() {
 
         <Link href="/" className="w-full">
           <Button className="w-full" size="lg" data-testid="button-go-to-dashboard">
-            Go to Dashboard
+            Перейти на панель управления
           </Button>
         </Link>
       </main>

@@ -13,23 +13,23 @@ import type { NotificationPreferences } from "@shared/schema";
 const notificationChannels = [
   {
     key: "inAppEnabled",
-    label: "In-app alerts",
-    description: "Status updates and confirmations",
+    label: "Уведомления в приложении",
+    description: "Обновления статусов и подтверждения",
   },
   {
     key: "emailEnabled",
-    label: "Email summaries",
-    description: "Statements and security notices",
+    label: "Уведомления по эл. почте",
+    description: "Выписки и уведомления безопасности",
   },
   {
     key: "telegramEnabled",
-    label: "Telegram alerts",
-    description: "Real-time portfolio and transfer updates",
+    label: "Уведомления в Telegram",
+    description: "Обновления портфеля и переводов в реальном времени",
   },
 ] as const;
 
 export default function SettingsNotifications() {
-  useSetPageTitle("Notifications");
+  useSetPageTitle("Уведомления");
   const [, navigate] = useLocation();
   const { data, isLoading, error } = useQuery<NotificationPreferences>({
     queryKey: ["/api/notification-preferences"],
@@ -42,8 +42,8 @@ export default function SettingsNotifications() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <PageHeader
-        title="Notifications"
-        subtitle="Review how we keep you informed"
+        title="Уведомления"
+        subtitle="Просмотрите, как мы информируем вас"
         backHref="/settings"
       />
 
@@ -58,19 +58,19 @@ export default function SettingsNotifications() {
         </Card>
       ) : error ? (
         <Alert variant="destructive">
-          <AlertTitle>Unable to load preferences</AlertTitle>
+          <AlertTitle>Не удалось загрузить настройки</AlertTitle>
           <AlertDescription>
-            {error instanceof Error ? error.message : "Please try again in a moment."}
+            {error instanceof Error ? error.message : "Пожалуйста, попробуйте позже."}
           </AlertDescription>
         </Alert>
       ) : !hasAnyEnabled ? (
         <Card>
           <EmptyState
             icon={BellRing}
-            title="Notifications are currently off"
-            description="Enable alerts to stay informed about deposits, withdrawals, and security changes."
+            title="Уведомления отключены"
+            description="Включите уведомления, чтобы быть в курсе депозитов, выводов и изменений безопасности."
             action={{
-              label: "Open Security Center",
+              label: "Открыть Центр безопасности",
               onClick: () => navigate("/settings/security"),
             }}
           />
@@ -95,14 +95,14 @@ export default function SettingsNotifications() {
                       : "text-xs font-medium text-muted-foreground"
                   }
                 >
-                  {enabled ? "Enabled" : "Disabled"}
+                  {enabled ? "Включено" : "Отключено"}
                 </span>
               </div>
             );
           })}
           <div className="flex items-center justify-end">
             <Button variant="outline" onClick={() => navigate("/settings/security")}>
-              Manage preferences
+              Управление настройками
             </Button>
           </div>
         </Card>

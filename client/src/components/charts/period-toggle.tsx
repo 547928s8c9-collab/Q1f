@@ -24,7 +24,7 @@ export function PeriodToggle({ value, onChange }: PeriodToggleProps) {
           )}
           data-testid={`period-toggle-${period}`}
         >
-          {period}D
+          {period}Д
         </button>
       ))}
     </div>

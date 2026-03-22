@@ -9,6 +9,14 @@ interface RangeSelectorProps {
 
 const options: RangeOption[] = ["7D", "30D", "90D", "1Y", "ALL"];
 
+const RANGE_LABELS: Record<RangeOption, string> = {
+  "7D": "7Д",
+  "30D": "30Д",
+  "90D": "90Д",
+  "1Y": "1Г",
+  "ALL": "ВСЕ",
+};
+
 export function rangeToDays(range: RangeOption): number {
   switch (range) {
     case "7D":
@@ -36,7 +44,7 @@ export function RangeSelector({ value, onChange }: RangeSelectorProps) {
           onClick={() => onChange(option)}
           data-testid={`range-option-${option.toLowerCase()}`}
         >
-          {option}
+          {RANGE_LABELS[option]}
         </Button>
       ))}
     </div>

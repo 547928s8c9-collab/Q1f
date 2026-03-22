@@ -63,42 +63,42 @@ export function calculateRecommendations(answers: SmartStartAnswers): SmartStart
 
   const recommendations: StrategyRecommendation[] = [];
   let suggestedDeposit = 500;
-  let profile = "Balanced Investor";
+  let profile = "Сбалансированный инвестор";
 
   if (riskScore <= 2) {
-    profile = "Conservative Investor";
+    profile = "Консервативный инвестор";
     suggestedDeposit = 1000;
     recommendations.push(
-      { strategyName: "Stable Yield", allocation: 50, riskTier: "LOW", reason: "Low-risk stablecoin farming for steady returns" },
-      { strategyName: "Fixed Income Plus", allocation: 30, riskTier: "LOW", reason: "Diversified lending for enhanced yield" },
-      { strategyName: "Market Neutral", allocation: 20, riskTier: "CORE", reason: "Small allocation for market-independent returns" },
+      { strategyName: "Stable Yield", allocation: 50, riskTier: "LOW", reason: "Низкорисковый стейблкоин-фарминг для стабильного дохода" },
+      { strategyName: "Fixed Income Plus", allocation: 30, riskTier: "LOW", reason: "Диверсифицированное кредитование для повышенной доходности" },
+      { strategyName: "Market Neutral", allocation: 20, riskTier: "CORE", reason: "Небольшая аллокация для рыночно-нейтральной доходности" },
     );
   } else if (riskScore <= 4) {
-    profile = "Balanced Investor";
+    profile = "Сбалансированный инвестор";
     suggestedDeposit = 500;
     recommendations.push(
-      { strategyName: "Fixed Income Plus", allocation: 25, riskTier: "LOW", reason: "Stable base with predictable returns" },
-      { strategyName: "Balanced Growth", allocation: 35, riskTier: "CORE", reason: "Core holding for balanced exposure" },
-      { strategyName: "DeFi Momentum", allocation: 25, riskTier: "CORE", reason: "Momentum strategy for active returns" },
-      { strategyName: "Alpha Seeker", allocation: 15, riskTier: "HIGH", reason: "Small high-risk allocation for upside" },
+      { strategyName: "Fixed Income Plus", allocation: 25, riskTier: "LOW", reason: "Стабильная база с предсказуемой доходностью" },
+      { strategyName: "Balanced Growth", allocation: 35, riskTier: "CORE", reason: "Основной актив для сбалансированной экспозиции" },
+      { strategyName: "DeFi Momentum", allocation: 25, riskTier: "CORE", reason: "Моментум-стратегия для активной доходности" },
+      { strategyName: "Alpha Seeker", allocation: 15, riskTier: "HIGH", reason: "Небольшая высокорисковая аллокация для роста" },
     );
   } else if (riskScore <= 5) {
-    profile = "Growth Investor";
+    profile = "Инвестор роста";
     suggestedDeposit = 300;
     recommendations.push(
-      { strategyName: "Balanced Growth", allocation: 25, riskTier: "CORE", reason: "Balanced core for stability" },
-      { strategyName: "DeFi Momentum", allocation: 30, riskTier: "CORE", reason: "Active DeFi exposure for growth" },
-      { strategyName: "Alpha Seeker", allocation: 25, riskTier: "HIGH", reason: "Aggressive arbitrage opportunities" },
-      { strategyName: "Volatility Harvester", allocation: 20, riskTier: "HIGH", reason: "Options-based volatility capture" },
+      { strategyName: "Balanced Growth", allocation: 25, riskTier: "CORE", reason: "Сбалансированная основа для стабильности" },
+      { strategyName: "DeFi Momentum", allocation: 30, riskTier: "CORE", reason: "Активная DeFi-экспозиция для роста" },
+      { strategyName: "Alpha Seeker", allocation: 25, riskTier: "HIGH", reason: "Агрессивные арбитражные возможности" },
+      { strategyName: "Volatility Harvester", allocation: 20, riskTier: "HIGH", reason: "Захват волатильности через опционы" },
     );
   } else {
-    profile = "Aggressive Investor";
+    profile = "Агрессивный инвестор";
     suggestedDeposit = 200;
     recommendations.push(
-      { strategyName: "DeFi Momentum", allocation: 20, riskTier: "CORE", reason: "Active rotation for solid returns" },
-      { strategyName: "Alpha Seeker", allocation: 30, riskTier: "HIGH", reason: "Maximum alpha generation" },
-      { strategyName: "Volatility Harvester", allocation: 25, riskTier: "HIGH", reason: "High volatility capture potential" },
-      { strategyName: "Moonshot Portfolio", allocation: 25, riskTier: "HIGH", reason: "High-conviction altcoin picks" },
+      { strategyName: "DeFi Momentum", allocation: 20, riskTier: "CORE", reason: "Активная ротация для стабильной доходности" },
+      { strategyName: "Alpha Seeker", allocation: 30, riskTier: "HIGH", reason: "Максимальная генерация альфы" },
+      { strategyName: "Volatility Harvester", allocation: 25, riskTier: "HIGH", reason: "Высокий потенциал захвата волатильности" },
+      { strategyName: "Moonshot Portfolio", allocation: 25, riskTier: "HIGH", reason: "Высокоубежденные альткоин-выборки" },
     );
   }
 
@@ -112,27 +112,27 @@ export function calculateRecommendations(answers: SmartStartAnswers): SmartStart
 
 export const questions = {
   riskProfile: {
-    question: "How would you describe your risk tolerance?",
+    question: "Как вы оцениваете свою толерантность к риску?",
     options: [
-      { value: "conservative", label: "Стабильный",  description: "I prefer stability over high returns" },
-      { value: "balanced",     label: "Активный",    description: "I can accept some volatility for better returns" },
-      { value: "aggressive",   label: "Агрессивный", description: "I'm comfortable with high volatility for maximum growth" },
+      { value: "conservative", label: "Стабильный",  description: "Я предпочитаю стабильность высокой доходности" },
+      { value: "balanced",     label: "Активный",    description: "Я допускаю некоторую волатильность ради лучшей доходности" },
+      { value: "aggressive",   label: "Агрессивный", description: "Мне комфортна высокая волатильность ради максимального роста" },
     ],
   },
   timeHorizon: {
-    question: "What's your investment time horizon?",
+    question: "Каков ваш горизонт инвестирования?",
     options: [
-      { value: "short", label: "Short-term", description: "Less than 6 months" },
-      { value: "medium", label: "Medium-term", description: "6 months to 2 years" },
-      { value: "long", label: "Long-term", description: "More than 2 years" },
+      { value: "short", label: "Краткосрочный", description: "Менее 6 месяцев" },
+      { value: "medium", label: "Среднесрочный", description: "От 6 месяцев до 2 лет" },
+      { value: "long", label: "Долгосрочный", description: "Более 2 лет" },
     ],
   },
   investmentGoal: {
-    question: "What's your primary investment goal?",
+    question: "Какова ваша основная инвестиционная цель?",
     options: [
-      { value: "preservation", label: "Capital Preservation", description: "Protect my capital from loss" },
-      { value: "income", label: "Regular Income", description: "Generate steady passive income" },
-      { value: "growth", label: "Maximum Growth", description: "Grow my capital as much as possible" },
+      { value: "preservation", label: "Сохранение капитала", description: "Защитить капитал от потерь" },
+      { value: "income", label: "Регулярный доход", description: "Получать стабильный пассивный доход" },
+      { value: "growth", label: "Максимальный рост", description: "Увеличить капитал максимально" },
     ],
   },
 };

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/ui/live-badge";
 import { formatMoney } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { ru } from "date-fns/locale";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { RefreshCw, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle2, Activity, Users } from "lucide-react";
 import { platformStats } from "@/lib/platform-stats";
@@ -77,14 +78,14 @@ export default function Dashboard() {
   if (isError) {
     return (
       <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-        <PageHeader title="Dashboard" subtitle="Your investment overview" />
+        <PageHeader title="Панель управления" subtitle="Обзор ваших инвестиций" />
         <Card className="p-8 text-center">
           <AlertCircle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">Failed to load dashboard</h3>
-          <p className="text-muted-foreground mb-4">There was an error loading your analytics data.</p>
+          <h3 className="text-lg font-semibold mb-2">Не удалось загрузить панель</h3>
+          <p className="text-muted-foreground mb-4">Произошла ошибка при загрузке аналитических данных.</p>
           <Button onClick={() => refetch()} disabled={isFetching} data-testid="button-retry">
             <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
-            Retry
+            Повторить
           </Button>
         </Card>
       </div>
@@ -94,8 +95,8 @@ export default function Dashboard() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader 
-        title="Dashboard" 
-        subtitle="Your investment overview"
+        title="Панель управления" 
+        subtitle="Обзор ваших инвестиций"
         badge={
           <LiveBadge 
             pulse={isRunning}
@@ -114,13 +115,12 @@ export default function Dashboard() {
         }
       />
 
-      {/* Total Equity Hero */}
       <Card className="p-6 mb-6" data-testid="card-total-equity">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-medium text-muted-foreground">Total Equity</p>
+          <p className="text-sm font-medium text-muted-foreground">Общий капитал</p>
           {data && (
             <span className="text-xs text-muted-foreground">
-              Updated {new Date(data.updatedAt).toLocaleTimeString()}
+              Обновлено {new Date(data.updatedAt).toLocaleTimeString("ru-RU")}
             </span>
           )}
         </div>
@@ -136,7 +136,6 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {isLoading ? (
           <>
@@ -148,24 +147,24 @@ export default function Dashboard() {
         ) : (
           <>
             <MetricCard
-              label="30d PnL"
+              label="PnL за 30д"
               value={formatMoney(data?.metrics.pnl30dMinor || "0", "USDT")}
               suffix="USDT"
               trend={pnlTrend}
               change={`${pnl30d >= 0n ? "+" : ""}${(data?.metrics.roi30dPct || 0).toFixed(2)}%`}
             />
             <MetricCard
-              label="30d ROI"
+              label="ROI за 30д"
               value={`${(data?.metrics.roi30dPct || 0).toFixed(2)}%`}
               trend={data?.metrics.roi30dPct && data.metrics.roi30dPct >= 0 ? "positive" : "negative"}
             />
             <MetricCard
-              label="Max Drawdown"
+              label="Макс. просадка"
               value={`${(data?.metrics.maxDrawdown30dPct || 0).toFixed(2)}%`}
               trend="neutral"
             />
             <MetricCard
-              label="Active Positions"
+              label="Активные позиции"
               value={`${data?.metrics.activePositions || 0}`}
               suffix={`/ ${data?.metrics.positionsCount || 0}`}
             />
@@ -173,10 +172,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Equity Chart */}
       <Card className="p-5 mb-6" data-testid="card-equity-chart">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Portfolio Growth</h2>
+          <h2 className="text-lg font-semibold">Рост портфеля</h2>
           <RangeSelector value={range} onChange={setRange} />
         </div>
         {isLoading ? (
@@ -186,11 +184,11 @@ export default function Dashboard() {
         ) : chartData.length === 0 ? (
           <EmptyState
             icon={TrendingUp}
-            title="No portfolio history"
-            description="Start investing to see your equity growth over time."
+            title="Нет истории портфеля"
+            description="Начните инвестировать, чтобы увидеть рост вашего капитала."
           >
             <Link href="/invest">
-              <Button data-testid="button-go-invest">Start Investing</Button>
+              <Button data-testid="button-go-invest">Начать инвестировать</Button>
             </Link>
           </EmptyState>
         ) : (
@@ -210,7 +208,7 @@ export default function Dashboard() {
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   tickFormatter={(value) => {
                     const date = new Date(value);
-                    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    return date.toLocaleDateString("ru-RU", { month: "short", day: "numeric" });
                   }}
                   minTickGap={40}
                 />
@@ -222,7 +220,7 @@ export default function Dashboard() {
                       return (
                         <div className="bg-popover border border-popover-border rounded-lg p-3 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">
-                            {new Date(point.date).toLocaleDateString("en-US", {
+                            {new Date(point.date).toLocaleDateString("ru-RU", {
                               month: "long",
                               day: "numeric",
                               year: "numeric",
@@ -250,7 +248,6 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {/* Platform Stats Strip */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-muted/40 rounded-xl p-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
@@ -283,14 +280,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Strategy Cards */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Your Strategies</h2>
+          <h2 className="text-lg font-semibold">Ваши стратегии</h2>
           {data && data.strategies.length > 0 && (
             <Link href="/invest">
               <Button variant="outline" size="sm" data-testid="button-view-all-strategies">
-                View All
+                Показать все
               </Button>
             </Link>
           )}
@@ -306,11 +302,11 @@ export default function Dashboard() {
           <Card className="p-8">
             <EmptyState
               icon={Wallet}
-              title="No active strategies"
-              description="Explore our investment strategies and start growing your portfolio."
+              title="Нет активных стратегий"
+              description="Изучите наши инвестиционные стратегии и начните увеличивать свой портфель."
             >
               <Link href="/invest">
-                <Button data-testid="button-explore-strategies">Explore Strategies</Button>
+                <Button data-testid="button-explore-strategies">Обзор стратегий</Button>
               </Link>
             </EmptyState>
           </Card>
@@ -342,7 +338,7 @@ export default function Dashboard() {
                           variant={state === "INVESTED_ACTIVE" || state === "active" ? "default" : state === "PAUSED" || state === "paused" ? "secondary" : "outline"}
                           className="text-xs"
                         >
-                          {state === "INVESTED_ACTIVE" ? "ACTIVE" : state === "PAUSED" ? "PAUSED" : state === "active" ? "active" : state === "paused" ? "paused" : "NOT_INVESTED"}
+                          {state === "INVESTED_ACTIVE" ? "АКТИВНА" : state === "PAUSED" ? "ПАУЗА" : state === "active" ? "активна" : state === "paused" ? "пауза" : "НЕ ИНВЕСТИРОВАНО"}
                         </Badge>
                       </div>
                     </div>
@@ -355,7 +351,7 @@ export default function Dashboard() {
 
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Equity</span>
+                      <span className="text-muted-foreground">Капитал</span>
                       <span className="font-medium tabular-nums">
                         {formatMoney(equity, "USDT")} USDT
                       </span>
@@ -367,14 +363,14 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">30d ROI</span>
+                      <span className="text-muted-foreground">ROI за 30д</span>
                       <span className={cn("font-medium tabular-nums", roiPct >= 0 ? "text-positive" : "text-negative")}>
                         {roiPct >= 0 ? "+" : ""}{roiPct.toFixed(2)}%
                       </span>
                     </div>
                     {trades24h !== undefined && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Trades 24h</span>
+                        <span className="text-muted-foreground">Сделки за 24ч</span>
                         <span className="font-medium tabular-nums">
                           {trades24h}
                         </span>
@@ -382,7 +378,7 @@ export default function Dashboard() {
                     )}
                     {liveMetric?.maxDrawdown30dBps !== undefined && liveMetric.maxDrawdown30dBps > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Max DD 30d</span>
+                        <span className="text-muted-foreground">Макс. просадка 30д</span>
                         <span className="font-medium tabular-nums text-muted-foreground">
                           {(liveMetric.maxDrawdown30dBps / 100).toFixed(2)}%
                         </span>
@@ -396,16 +392,15 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Proof of Safety & Latest Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <ProofOfSafety />
         
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Latest Activity</h2>
+            <h2 className="text-lg font-semibold">Последняя активность</h2>
             <Link href="/activity">
               <Button variant="outline" size="sm">
-                View all
+                Показать все
               </Button>
             </Link>
           </div>
@@ -487,8 +482,8 @@ function LatestActivityWidget() {
       <Card className="p-5">
         <EmptyState
           icon={Activity}
-          title="No recent activity"
-          description="Engine events will appear here when the trading engine is active"
+          title="Нет недавней активности"
+          description="События движка будут отображаться здесь, когда торговый движок активен"
           className="py-8"
         />
       </Card>
@@ -519,7 +514,7 @@ function LatestActivityWidget() {
                 </div>
                 <p className="text-sm font-medium truncate">{event.message}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : "Just now"}
+                  {event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: ru }) : "Только что"}
                 </p>
               </div>
             </div>

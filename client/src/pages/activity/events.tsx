@@ -156,7 +156,7 @@ export default function ActivityEvents() {
             className="flex flex-col items-center justify-center text-center py-12 px-6"
             data-testid="empty-state"
           >
-            <div className="text-4xl mb-4">📊</div>
+            <div className="text-4xl mb-4"><BarChart2 className="w-10 h-10 text-muted-foreground mx-auto" /></div>
             <h3 className="text-lg font-medium mb-1" data-testid="text-empty-title">
               Активность появится после первого расчётного дня
             </h3>

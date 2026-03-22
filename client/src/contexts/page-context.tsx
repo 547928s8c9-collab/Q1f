@@ -10,7 +10,7 @@ interface PageContextValue {
 const PageContext = createContext<PageContextValue | undefined>(undefined);
 
 export function PageProvider({ children }: { children: ReactNode }) {
-  const [title, setTitle] = useState("Home");
+  const [title, setTitle] = useState("Главная");
   const [subtitle, setSubtitle] = useState<string | undefined>();
 
   return (

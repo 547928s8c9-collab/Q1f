@@ -39,14 +39,14 @@ export default function DepositUSDT() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
-        title: "Deposit simulated",
-        description: "USDT has been credited to your wallet",
+        title: "Пополнение смоделировано",
+        description: "USDT зачислен в ваш кошелёк",
       });
       setSimulateAmount("");
     },
     onError: (error: Error) => {
       toast({
-        title: "Deposit failed",
+        title: "Ошибка пополнения",
         description: error.message,
         variant: "destructive",
       });
@@ -63,13 +63,13 @@ export default function DepositUSDT() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Deposit USDT" subtitle="TRC20 Network" backHref="/wallet" />
+      <PageHeader title="Пополнение USDT" subtitle="Сеть TRC20" backHref="/wallet" />
 
       <Card className="p-5 mb-6">
         <div className="mb-4">
-          <h3 className="font-medium mb-2">Deposit Address</h3>
+          <h3 className="font-medium mb-2">Адрес для пополнения</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Send USDT (TRC20) to the address below. Only send USDT on the TRON network.
+            Отправьте USDT (TRC20) на адрес ниже. Отправляйте только USDT в сети TRON.
           </p>
         </div>
 
@@ -83,11 +83,11 @@ export default function DepositUSDT() {
         <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/5 border border-warning/20">
           <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium text-warning">Important</p>
+            <p className="font-medium text-warning">Важно</p>
             <ul className="text-muted-foreground mt-1 space-y-1 text-xs">
-              <li>Only send USDT (TRC20) to this address</li>
-              <li>Minimum deposit: {formatMoney(minDeposit, "USDT")} USDT</li>
-              <li>Deposits typically confirm within 10 minutes</li>
+              <li>Отправляйте только USDT (TRC20) на этот адрес</li>
+              <li>Минимальный депозит: {formatMoney(minDeposit, "USDT")} USDT</li>
+              <li>Депозиты обычно подтверждаются в течение 10 минут</li>
             </ul>
           </div>
         </div>
@@ -95,15 +95,15 @@ export default function DepositUSDT() {
 
       <Card className="p-5">
         <div className="mb-4">
-          <h3 className="font-medium mb-2">Simulate Deposit</h3>
+          <h3 className="font-medium mb-2">Симуляция пополнения</h3>
           <p className="text-sm text-muted-foreground">
-            For testing purposes, you can simulate a USDT deposit.
+            Для тестирования вы можете смоделировать пополнение USDT.
           </p>
         </div>
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="simulate-amount">Amount (USDT)</Label>
+            <Label htmlFor="simulate-amount">Сумма (USDT)</Label>
             <Input
               id="simulate-amount"
               type="text"
@@ -126,10 +126,10 @@ export default function DepositUSDT() {
             {simulateMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Processing...
+                Обработка...
               </>
             ) : (
-              "Simulate Deposit"
+              "Симуляция пополнения"
             )}
           </Button>
         </div>

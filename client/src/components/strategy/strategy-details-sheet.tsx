@@ -31,22 +31,22 @@ const riskConfig: Record<
     color: "bg-positive/10 text-positive",
     chipVariant: "success",
     icon: Shield,
-    label: "Low Risk",
-    description: "Conservative approach with stable returns",
+    label: "Низкий риск",
+    description: "Консервативный подход со стабильной доходностью",
   },
   CORE: {
     color: "bg-warning/10 text-warning",
     chipVariant: "warning",
     icon: TrendingUp,
-    label: "Core Risk",
-    description: "Balanced risk-reward profile",
+    label: "Средний риск",
+    description: "Сбалансированное соотношение риска и доходности",
   },
   HIGH: {
     color: "bg-negative/10 text-negative",
     chipVariant: "danger",
     icon: Zap,
-    label: "High Risk",
-    description: "Higher potential returns with increased volatility",
+    label: "Высокий риск",
+    description: "Более высокая потенциальная доходность при повышенной волатильности",
   },
 };
 
@@ -93,7 +93,7 @@ export function StrategyDetailsSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle className="sr-only">{strategy.name} Details</SheetTitle>
+          <SheetTitle className="sr-only">{strategy.name} — Подробности</SheetTitle>
         </SheetHeader>
 
         <div className="flex items-start gap-4 mb-6">
@@ -116,14 +116,14 @@ export function StrategyDetailsSheet({
         <div className="bg-warning/10 border border-warning/20 rounded-lg p-3 mb-6 flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
           <p className="text-sm text-muted-foreground">
-            Capital is at risk and drawdowns are possible in live trading.
+            Капитал подвержен риску, просадки возможны при реальной торговле.
           </p>
         </div>
 
         {hasSparkline && (
           <Card className="p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">30-Day Performance</span>
+              <span className="text-sm font-medium">Динамика за 30 дней</span>
               <span className={cn("text-sm font-semibold tabular-nums", isPositive ? "text-positive" : "text-negative")}>
                 {isPositive ? "+" : ""}{returnPercent.toFixed(2)}%
               </span>
@@ -134,34 +134,34 @@ export function StrategyDetailsSheet({
 
         <div className="grid grid-cols-2 gap-3 mb-6">
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground mb-1">Expected Return</p>
+            <p className="text-xs text-muted-foreground mb-1">Ожидаемая доходность</p>
             <p className="text-lg font-semibold text-positive tabular-nums">
               {minReturn}% - {maxReturn}%
-              <span className="text-xs text-muted-foreground font-normal">/mo</span>
+              <span className="text-xs text-muted-foreground font-normal">/мес</span>
             </p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground mb-1">Min Investment</p>
+            <p className="text-xs text-muted-foreground mb-1">Мин. инвестиция</p>
             <p className="text-lg font-semibold tabular-nums">
               {minInvestment.toLocaleString()} USDT
             </p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground mb-1">Worst Month</p>
+            <p className="text-xs text-muted-foreground mb-1">Худший месяц</p>
             <p className="text-lg font-semibold text-negative tabular-nums">
-              {strategy.worstMonth || "N/A"}
+              {strategy.worstMonth || "Н/Д"}
             </p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground mb-1">Max Drawdown</p>
+            <p className="text-xs text-muted-foreground mb-1">Макс. просадка</p>
             <p className="text-lg font-semibold text-negative tabular-nums">
-              {strategy.maxDrawdown || "N/A"}
+              {strategy.maxDrawdown || "Н/Д"}
             </p>
           </Card>
         </div>
 
         <Card className="p-4 mb-6">
-          <h3 className="text-sm font-semibold mb-3">Risk Tier</h3>
+          <h3 className="text-sm font-semibold mb-3">Уровень риска</h3>
           <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
             <div className={cn("w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0", config.color)}>
               <Icon className="w-5 h-5" />
@@ -174,30 +174,30 @@ export function StrategyDetailsSheet({
         </Card>
 
         <Card className="p-4 mb-6">
-          <h3 className="text-sm font-semibold mb-3">Fees & Terms</h3>
+          <h3 className="text-sm font-semibold mb-3">Комиссии и условия</h3>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Management Fee</span>
+              <span className="text-muted-foreground">Комиссия за управление</span>
               <span className="font-medium">{fees?.management || "0.5%"}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Performance Fee</span>
+              <span className="text-muted-foreground">Комиссия за результат</span>
               <span className="font-medium">{fees?.performance || "10%"}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Profit Payout</span>
-              <span className="font-medium">Daily / Monthly</span>
+              <span className="text-muted-foreground">Выплата прибыли</span>
+              <span className="font-medium">Ежедневно / Ежемесячно</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Principal Redemption</span>
-              <span className="font-medium">Weekly Window</span>
+              <span className="text-muted-foreground">Возврат основного капитала</span>
+              <span className="font-medium">Еженедельное окно</span>
             </div>
           </div>
         </Card>
 
         {pairs.length > 0 && (
           <Card className="p-4 mb-6">
-            <h3 className="text-sm font-semibold mb-3">Trading Pairs</h3>
+            <h3 className="text-sm font-semibold mb-3">Торговые пары</h3>
             <div className="flex flex-wrap gap-1.5">
               {pairs.map((pair: string) => (
                 <Badge key={pair} variant="outline" className="text-xs">{pair}</Badge>
@@ -208,13 +208,13 @@ export function StrategyDetailsSheet({
 
         <div className="flex items-start gap-2 text-xs text-muted-foreground mb-6 p-3 bg-muted/30 rounded-lg">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <p>Your capital is at risk. The value of your investment may go down as well as up.</p>
+          <p>Ваш капитал подвержен риску. Стоимость инвестиций может как расти, так и снижаться.</p>
         </div>
 
         <div className="flex gap-3">
           <Link href={`/invest/${strategy.id}`} className="flex-1">
             <Button variant="outline" className="w-full" data-testid="button-view-full-details">
-              Full Details
+              Подробнее
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </Link>
@@ -223,7 +223,7 @@ export function StrategyDetailsSheet({
             onClick={onInvest}
             data-testid="button-invest-sheet"
           >
-            Invest Now
+            Инвестировать
           </Button>
         </div>
       </SheetContent>

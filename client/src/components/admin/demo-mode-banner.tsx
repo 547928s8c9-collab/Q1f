@@ -14,7 +14,7 @@ export function DemoModeBanner({ isDemo }: DemoModeBannerProps) {
     >
       <AlertTriangle className="h-4 w-4" />
       <span className="text-sm font-medium">
-        Demo Mode - Changes will not affect real data
+        Демо-режим — изменения не затронут реальные данные
       </span>
     </div>
   );

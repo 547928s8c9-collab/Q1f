@@ -29,14 +29,14 @@ export default function OnboardingConsent() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/consent/status"] });
       toast({
-        title: "Consent accepted",
-        description: "Thank you for accepting our terms",
+        title: "Согласие принято",
+        description: "Спасибо за принятие наших условий",
       });
       setLocation("/onboarding/kyc");
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to submit consent",
+        title: "Не удалось отправить согласие",
         description: error.message,
         variant: "destructive",
       });
@@ -59,12 +59,12 @@ export default function OnboardingConsent() {
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <FileText className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-xl font-bold mb-2" data-testid="text-consent-title">Terms & Privacy</h1>
+          <h1 className="text-xl font-bold mb-2" data-testid="text-consent-title">Условия и конфиденциальность</h1>
           <p className="text-muted-foreground text-sm">
-            Please review and accept our legal agreements
+            Пожалуйста, ознакомьтесь и примите наши юридические соглашения
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Version {consentVersion}
+            Версия {consentVersion}
           </p>
         </div>
 
@@ -74,16 +74,16 @@ export default function OnboardingConsent() {
               <Scale className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-medium mb-1">Terms of Service</h3>
+              <h3 className="font-medium mb-1">Условия использования</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                By continuing, you agree to our terms including investment risks, account responsibilities, and platform usage guidelines.
+                Продолжая, вы соглашаетесь с нашими условиями, включая инвестиционные риски, обязанности по аккаунту и правила использования платформы.
               </p>
               <a
                 href="#terms"
                 className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                 data-testid="link-terms-full"
               >
-                Read full Terms of Service
+                Читать полные Условия использования
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -96,7 +96,7 @@ export default function OnboardingConsent() {
               data-testid="checkbox-terms"
             />
             <Label htmlFor="terms" className="text-sm cursor-pointer">
-              I have read and accept the Terms of Service
+              Я прочитал и принимаю Условия использования
             </Label>
           </div>
         </Card>
@@ -107,16 +107,16 @@ export default function OnboardingConsent() {
               <Shield className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-medium mb-1">Privacy Policy</h3>
+              <h3 className="font-medium mb-1">Политика конфиденциальности</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                We collect and process your data securely to provide our services. You have rights to access, correct, and delete your data.
+                Мы собираем и обрабатываем ваши данные безопасно для предоставления наших услуг. Вы имеете право на доступ, исправление и удаление ваших данных.
               </p>
               <a
                 href="#privacy"
                 className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                 data-testid="link-privacy-full"
               >
-                Read full Privacy Policy
+                Читать полную Политику конфиденциальности
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -129,15 +129,15 @@ export default function OnboardingConsent() {
               data-testid="checkbox-privacy"
             />
             <Label htmlFor="privacy" className="text-sm cursor-pointer">
-              I have read and accept the Privacy Policy
+              Я прочитал и принимаю Политику конфиденциальности
             </Label>
           </div>
         </Card>
 
         <div className="bg-muted/50 rounded-lg p-4 mb-4">
           <p className="text-xs text-muted-foreground text-center">
-            By clicking Accept, you consent to our Terms of Service and Privacy Policy. 
-            Your acceptance will be recorded with a timestamp and document version for compliance.
+            Нажимая «Принять», вы соглашаетесь с нашими Условиями использования и Политикой конфиденциальности.
+            Ваше согласие будет зафиксировано с отметкой времени и версией документа для соответствия требованиям.
           </p>
         </div>
 
@@ -150,10 +150,10 @@ export default function OnboardingConsent() {
           {consentMutation.isPending ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Recording consent...
+              Сохранение согласия...
             </>
           ) : (
-            "Accept and Continue"
+            "Принять и продолжить"
           )}
         </Button>
       </div>

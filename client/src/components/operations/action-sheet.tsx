@@ -127,7 +127,7 @@ export function AmountInput({
   availableBalance,
   onNext,
   minAmount = "1000000",
-  label = "Amount",
+  label = "Сумма",
   placeholder = "0.00",
 }: AmountInputProps) {
   const { amount, setAmount, step } = useActionSheet();
@@ -159,11 +159,11 @@ export function AmountInput({
   const handleNext = () => {
     const minorAmount = toMinorUnits(amount);
     if (BigInt(minorAmount) < minVal) {
-      setError(`Minimum amount is ${formatMoney(minAmount, asset)}`);
+      setError(`Минимальная сумма: ${formatMoney(minAmount, asset)}`);
       return;
     }
     if (BigInt(minorAmount) > maxVal) {
-      setError("Insufficient balance");
+      setError("Недостаточный баланс");
       return;
     }
     onNext();
@@ -201,7 +201,7 @@ export function AmountInput({
       </div>
 
       <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Available</span>
+        <span className="text-muted-foreground">Доступно</span>
         <button
           type="button"
           onClick={setMax}
@@ -218,7 +218,7 @@ export function AmountInput({
         disabled={!amount || amount === "0"}
         data-testid="button-next-step"
       >
-        Continue
+        Продолжить
         <ArrowRight className="ml-2 h-4 w-4" />
       </Button>
     </div>
@@ -267,12 +267,12 @@ export function ConfirmStep({
     <div className="space-y-4">
       <div className="bg-muted/50 rounded-lg p-4 space-y-3">
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Amount</span>
+          <span className="text-muted-foreground">Сумма</span>
           <span className="font-medium tabular-nums">{formatMoney(minorAmount, asset)} {asset}</span>
         </div>
         {fee !== "0" && (
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Network Fee</span>
+            <span className="text-muted-foreground">Комиссия сети</span>
             <span className="font-medium tabular-nums text-warning">{formatMoney(fee, asset)} {asset}</span>
           </div>
         )}
@@ -284,11 +284,11 @@ export function ConfirmStep({
         ))}
         <div className="border-t pt-3 mt-3">
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Balance Before</span>
+            <span className="text-muted-foreground">Баланс до</span>
             <span className="tabular-nums">{formatMoney(balanceBefore, asset)} {asset}</span>
           </div>
           <div className="flex justify-between text-sm mt-1">
-            <span className="text-muted-foreground">Balance After</span>
+            <span className="text-muted-foreground">Баланс после</span>
             <span className="font-semibold tabular-nums text-primary">{formatMoney(balanceAfter, asset)} {asset}</span>
           </div>
         </div>
@@ -297,7 +297,7 @@ export function ConfirmStep({
       <div className="flex gap-3">
         <Button variant="outline" onClick={onBack} className="flex-1" data-testid="button-back">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
+          Назад
         </Button>
         <Button
           onClick={onConfirm}
@@ -305,7 +305,7 @@ export function ConfirmStep({
           disabled={isLoading}
           data-testid="button-confirm"
         >
-          {isLoading ? "Processing..." : ctaLabel}
+          {isLoading ? "Обработка..." : ctaLabel}
         </Button>
       </div>
     </div>
@@ -357,13 +357,13 @@ export function ResultStep({ title, message, onClose }: ResultStepProps) {
       {operationId && (
         <Link href="/activity">
           <Button variant="outline" className="w-full" data-testid="button-view-activity">
-            View in Activity
+            Показать в Активности
           </Button>
         </Link>
       )}
       
       <Button onClick={onClose} className="w-full" data-testid="button-close-sheet">
-        Done
+        Готово
       </Button>
     </div>
   );

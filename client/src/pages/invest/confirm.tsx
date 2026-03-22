@@ -37,14 +37,14 @@ export default function InvestConfirm() {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
       toast({
-        title: "Investment successful",
-        description: `You've invested in ${strategy?.name}`,
+        title: "Инвестиция успешна",
+        description: `Вы инвестировали в ${strategy?.name}`,
       });
       setLocation("/invest");
     },
     onError: (error: Error) => {
       toast({
-        title: "Investment failed",
+        title: "Ошибка инвестиции",
         description: error.message,
         variant: "destructive",
       });
@@ -75,7 +75,7 @@ export default function InvestConfirm() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
       <PageHeader
-        title="Confirm Investment"
+        title="Подтверждение инвестиции"
         backHref={`/invest/${params.id}`}
       />
 
@@ -90,7 +90,7 @@ export default function InvestConfirm() {
             <h3 className="font-semibold mb-2">{strategy?.name}</h3>
             <p className="text-sm text-muted-foreground mb-4">{strategy?.description}</p>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Expected Return</span>
+              <span className="text-muted-foreground">Ожидаемая доходность</span>
               <span className="text-positive font-medium">
                 +{strategy?.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0"}% - 
                 {strategy?.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0"}%
@@ -103,7 +103,7 @@ export default function InvestConfirm() {
               <div className="flex gap-3">
                 <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-warning">Investment Blocked</p>
+                  <p className="text-sm font-medium text-warning">Инвестиция заблокирована</p>
                   <ul className="text-xs text-muted-foreground mt-1 space-y-1">
                     {bootstrap?.gate?.reasons?.map((reason, i) => (
                       <li key={i}>{reason}</li>
@@ -118,13 +118,13 @@ export default function InvestConfirm() {
             <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="amount">Investment Amount</Label>
+                  <Label htmlFor="amount">Сумма инвестиции</Label>
                   <button
                     onClick={handleMaxClick}
                     className="text-xs text-primary hover:underline"
                     data-testid="button-max"
                   >
-                    Max: {formatMoney(availableBalance, "USDT")} USDT
+                    Макс: {formatMoney(availableBalance, "USDT")} USDT
                   </button>
                 </div>
                 <div className="relative">
@@ -144,7 +144,7 @@ export default function InvestConfirm() {
                 </div>
                 {amountError && <p className="text-xs text-destructive mt-2">{amountError}</p>}
                 <p className="text-xs text-muted-foreground mt-2">
-                  Minimum: {formatMoney(minInvestment, "USDT")} USDT
+                  Минимум: {formatMoney(minInvestment, "USDT")} USDT
                 </p>
               </div>
 
@@ -152,15 +152,15 @@ export default function InvestConfirm() {
                 <div className="flex items-center gap-2 text-sm text-negative">
                   <AlertCircle className="w-4 h-4" />
                   {BigInt(amountInMinor ?? "0") < BigInt(minInvestment)
-                    ? "Amount below minimum"
-                    : "Insufficient balance"}
+                    ? "Сумма ниже минимальной"
+                    : "Недостаточно средств"}
                 </div>
               )}
 
               {amount && isValidAmount && (
                 <div className="flex items-center gap-2 text-sm text-positive">
                   <CheckCircle2 className="w-4 h-4" />
-                  Ready to invest
+                  Готово к инвестированию
                 </div>
               )}
             </div>
@@ -175,10 +175,10 @@ export default function InvestConfirm() {
             {investMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Processing...
+                Обработка...
               </>
             ) : (
-              "Confirm Investment"
+              "Подтвердить инвестицию"
             )}
           </Button>
         </>

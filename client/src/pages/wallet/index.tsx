@@ -20,7 +20,7 @@ import type { BootstrapResponse } from "@shared/schema";
 import { toMajorUnits } from "@/lib/money";
 
 export default function Wallet() {
-  useSetPageTitle("Wallet");
+  useSetPageTitle("Кошелёк");
   const [, navigate] = useLocation();
   const [transferOpen, setTransferOpen] = useState(false);
 
@@ -53,31 +53,31 @@ export default function Wallet() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
       <PageHeader 
-        title="Wallet" 
-        subtitle="Manage your balances and vaults"
+        title="Кошелёк" 
+        subtitle="Управление балансами и сейфами"
       />
 
       <section className="mb-8">
         <SectionHeader 
-          title="Balances" 
+          title="Балансы" 
           className="mb-4"
           action={
             <div className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="text-xs">Available vs Invested</span>
+              <span className="text-xs">Доступно vs Инвестировано</span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle 
                     className="w-3.5 h-3.5 cursor-help" 
-                    aria-label="Available vs Invested info"
+                    aria-label="Информация о доступных и инвестированных средствах"
                     data-testid="tooltip-balances-info"
                   />
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-[250px]">
                   <p className="text-xs mb-2">
-                    <strong>Available:</strong> Funds you can withdraw, invest, or transfer at any time.
+                    <strong>Доступно:</strong> Средства, которые можно вывести, инвестировать или перевести в любое время.
                   </p>
                   <p className="text-xs">
-                    <strong>Invested:</strong> Capital working in strategies. Redeem to move back to Available.
+                    <strong>Инвестировано:</strong> Капитал, работающий в стратегиях. Погасите, чтобы вернуть в Доступные.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -111,7 +111,7 @@ export default function Wallet() {
       </section>
 
       <section className="mb-8">
-        <SectionHeader title="Invested Capital" className="mb-4" />
+        <SectionHeader title="Инвестиционный капитал" className="mb-4" />
 
         <Card className="p-5">
           <div className="flex items-center gap-3 mb-4">
@@ -119,13 +119,13 @@ export default function Wallet() {
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
             <div className="flex-1">
-              <p className="text-sm text-muted-foreground">Currently in strategies</p>
+              <p className="text-sm text-muted-foreground">Сейчас в стратегиях</p>
             </div>
           </div>
 
           <div className="flex items-baseline justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Value</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Текущая стоимость</p>
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
               ) : (
@@ -139,7 +139,7 @@ export default function Wallet() {
               )}
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Principal</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Основной капитал</p>
               {isLoading ? (
                 <Skeleton className="h-6 w-24" />
               ) : (
@@ -159,20 +159,20 @@ export default function Wallet() {
 
       <section>
         <SectionHeader 
-          title="Vaults" 
+          title="Сейфы" 
           className="mb-4"
           action={
             <Tooltip>
               <TooltipTrigger asChild>
                 <HelpCircle 
                   className="w-3.5 h-3.5 text-muted-foreground cursor-help" 
-                  aria-label="What are Vaults"
+                  aria-label="Что такое сейфы"
                   data-testid="tooltip-vaults-info"
                 />
               </TooltipTrigger>
               <TooltipContent side="left" className="max-w-[250px]">
                 <p className="text-xs">
-                  Organize your funds by purpose: keep principal safe, track profits separately, and set aside for taxes.
+                  Распределяйте средства по целям: сохраняйте основной капитал, отслеживайте прибыль отдельно и откладывайте на налоги.
                 </p>
               </TooltipContent>
             </Tooltip>

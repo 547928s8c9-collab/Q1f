@@ -74,7 +74,7 @@ export function OperationRow({ operation, onClick }: OperationRowProps) {
   const showAmount = operation.amount && operation.asset && amount !== 0;
 
   const formattedTime = operation.createdAt
-    ? new Date(operation.createdAt).toLocaleTimeString("en-US", {
+    ? new Date(operation.createdAt).toLocaleTimeString("ru-RU", {
         hour: "2-digit",
         minute: "2-digit",
       })

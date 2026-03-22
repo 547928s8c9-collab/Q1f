@@ -32,10 +32,10 @@ interface TransferSheetProps {
 type VaultType = "wallet" | "principal" | "profit" | "taxes";
 
 const VAULT_LABELS: Record<VaultType, string> = {
-  wallet: "Wallet",
-  principal: "Principal Vault",
-  profit: "Profit Vault",
-  taxes: "Taxes Vault",
+  wallet: "Кошелёк",
+  principal: "Сейф Основной",
+  profit: "Сейф Прибыль",
+  taxes: "Сейф Налоги",
 };
 
 export function TransferSheet({ open, onOpenChange, bootstrap }: TransferSheetProps) {
@@ -43,8 +43,8 @@ export function TransferSheet({ open, onOpenChange, bootstrap }: TransferSheetPr
     <ActionSheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Transfer"
-      description="Move funds between wallet and vaults"
+      title="Перевод"
+      description="Переместить средства между кошельком и сейфами"
     >
       <TransferFlow bootstrap={bootstrap} onClose={() => onOpenChange(false)} />
     </ActionSheet>
@@ -108,15 +108,15 @@ function TransferFlow({
     const maxVal = BigInt(sourceBalance);
     
     if (fromVault === toVault) {
-      setError("Source and destination must be different");
+      setError("Источник и назначение должны отличаться");
       return;
     }
     if (BigInt(minorAmount) < minVal) {
-      setError("Minimum transfer is 1 USDT");
+      setError("Минимальный перевод — 1 USDT");
       return;
     }
     if (BigInt(minorAmount) > maxVal) {
-      setError("Insufficient balance");
+      setError("Недостаточный баланс");
       return;
     }
     setStep("confirm");
@@ -161,15 +161,15 @@ function TransferFlow({
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
-        title: "Transfer complete",
-        description: `${formatMoney(minorAmount, "USDT")} USDT transferred`,
+        title: "Перевод выполнен",
+        description: `${formatMoney(minorAmount, "USDT")} USDT переведено`,
       });
     },
     onError: (error: Error) => {
       setStatus("failed");
       setStep("result");
       toast({
-        title: "Transfer failed",
+        title: "Ошибка перевода",
         description: error.message,
         variant: "destructive",
       });
@@ -183,16 +183,16 @@ function TransferFlow({
 
   const statusMessages = {
     success: {
-      title: "Transfer Complete",
-      message: `${formatMoney(minorAmount, "USDT")} USDT moved from ${VAULT_LABELS[fromVault]} to ${VAULT_LABELS[toVault]}.`,
+      title: "Перевод выполнен",
+      message: `${formatMoney(minorAmount, "USDT")} USDT перемещено из ${VAULT_LABELS[fromVault]} в ${VAULT_LABELS[toVault]}.`,
     },
     pending: {
-      title: "Transfer Processing",
-      message: "Your transfer is being processed.",
+      title: "Перевод обрабатывается",
+      message: "Ваш перевод обрабатывается.",
     },
     failed: {
-      title: "Transfer Failed",
-      message: transferMutation.error?.message || "Something went wrong. Please try again.",
+      title: "Ошибка перевода",
+      message: transferMutation.error?.message || "Что-то пошло не так. Попробуйте снова.",
     },
   };
 
@@ -208,7 +208,7 @@ function TransferFlow({
       {step === "amount" && (
         <div className="space-y-4">
           <div>
-            <Label>From</Label>
+            <Label>Откуда</Label>
             <Select value={fromVault} onValueChange={(v) => setFromVault(v as VaultType)}>
               <SelectTrigger className="mt-1.5" data-testid="select-from-vault">
                 <SelectValue />
@@ -235,7 +235,7 @@ function TransferFlow({
           </div>
 
           <div>
-            <Label>To</Label>
+            <Label>Куда</Label>
             <Select value={toVault} onValueChange={(v) => setToVault(v as VaultType)}>
               <SelectTrigger className="mt-1.5" data-testid="select-to-vault">
                 <SelectValue />
@@ -251,7 +251,7 @@ function TransferFlow({
           </div>
 
           <div>
-            <Label htmlFor="amount">Amount</Label>
+            <Label htmlFor="amount">Сумма</Label>
             <div className="relative mt-1.5">
               <Input
                 id="amount"
@@ -271,7 +271,7 @@ function TransferFlow({
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Available in {VAULT_LABELS[fromVault]}</span>
+            <span className="text-muted-foreground">Доступно в {VAULT_LABELS[fromVault]}</span>
             <button
               type="button"
               onClick={setMax}
@@ -288,7 +288,7 @@ function TransferFlow({
             disabled={!amount || amount === "0" || fromVault === toVault}
             data-testid="button-next-step"
           >
-            Continue
+            Продолжить
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>
@@ -300,11 +300,11 @@ function TransferFlow({
         balanceAfter={sourceAfter}
         fee="0"
         details={[
-          { label: "From", value: VAULT_LABELS[fromVault] },
-          { label: "To", value: VAULT_LABELS[toVault] },
-          { label: "Destination After", value: `${formatMoney(destAfter, "USDT")} USDT` },
+          { label: "Откуда", value: VAULT_LABELS[fromVault] },
+          { label: "Куда", value: VAULT_LABELS[toVault] },
+          { label: "Назначение после", value: `${formatMoney(destAfter, "USDT")} USDT` },
         ]}
-        ctaLabel="Transfer"
+        ctaLabel="Перевести"
         onConfirm={() => transferMutation.mutate()}
         onBack={() => setStep("amount")}
         isLoading={transferMutation.isPending}

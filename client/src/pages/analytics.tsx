@@ -51,11 +51,11 @@ export default function Analytics() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Analytics" subtitle="Track your portfolio performance and cashflow" />
+      <PageHeader title="Аналитика" subtitle="Отслеживайте доходность портфеля и денежные потоки" />
 
       <Card className="p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Portfolio Value</h2>
+          <h2 className="text-lg font-semibold">Стоимость портфеля</h2>
           <PeriodToggle value={period} onChange={setPeriod} />
         </div>
         {isLoading ? (
@@ -66,7 +66,7 @@ export default function Analytics() {
       </Card>
 
       <div className="mb-6">
-        <h2 className="text-lg font-semibold mb-4">Cashflow Summary</h2>
+        <h2 className="text-lg font-semibold mb-4">Сводка денежных потоков</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoading ? (
             <>
@@ -78,23 +78,23 @@ export default function Analytics() {
           ) : (
             <>
               <MetricCard
-                label="Net Deposits"
+                label="Чистые депозиты"
                 value={formatMoney(cashflow.netDeposits, "USDT")}
                 suffix="USDT"
               />
               <MetricCard
-                label="Invested"
+                label="Инвестировано"
                 value={formatMoney(cashflow.invested, "USDT")}
                 suffix="USDT"
               />
               <MetricCard
-                label="Realized P&L"
+                label="Реализованный P&L"
                 value={formatMoney(cashflow.realizedPnl, "USDT")}
                 suffix="USDT"
                 trend={BigInt(cashflow.realizedPnl) >= BigInt(0) ? "positive" : "negative"}
               />
               <MetricCard
-                label="Unrealized P&L"
+                label="Нереализованный P&L"
                 value={formatMoney(cashflow.unrealizedPnl, "USDT")}
                 suffix="USDT"
                 trend={BigInt(cashflow.unrealizedPnl) >= BigInt(0) ? "positive" : "negative"}
@@ -106,7 +106,7 @@ export default function Analytics() {
       </div>
 
       <Card className="p-5">
-        <h2 className="text-lg font-semibold mb-4">Weekly Performance</h2>
+        <h2 className="text-lg font-semibold mb-4">Недельная доходность</h2>
         {isLoading ? (
           <ChartSkeleton height={200} />
         ) : (
@@ -118,7 +118,7 @@ export default function Analytics() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  tickFormatter={(value) => new Date(value).toLocaleDateString("ru-RU", { month: "short", day: "numeric" })}
                 />
                 <YAxis
                   hide
@@ -131,7 +131,7 @@ export default function Analytics() {
                       return (
                         <div className="bg-popover border border-popover-border rounded-lg p-3 shadow-lg">
                           <p className="text-xs text-muted-foreground mb-1">
-                            {new Date(data.date).toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+                            {new Date(data.date).toLocaleDateString("ru-RU", { month: "long", day: "numeric" })}
                           </p>
                           <p className={`text-sm font-semibold tabular-nums ${data.change >= 0 ? "text-positive" : "text-negative"}`}>
                             {data.change >= 0 ? "+" : ""}{data.change}%
