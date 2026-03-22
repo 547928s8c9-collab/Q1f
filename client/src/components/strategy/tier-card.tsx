@@ -11,7 +11,9 @@ import {
   ChevronDown,
   ChevronRight,
   Info,
+  Users,
 } from "lucide-react";
+import { platformStats } from "@/lib/platform-stats";
 import { cn } from "@/lib/utils";
 import { type Strategy } from "@shared/schema";
 import type { LiveMetrics } from "@/hooks/use-live-metrics";
@@ -136,6 +138,12 @@ export function TierCard({
   const stats = computeTierStats(strategies);
   const Icon = meta.icon;
 
+  const TIER_TO_STAT: Record<RiskTierKey, { count: number; label: string }> = {
+    LOW:  { count: platformStats.tierDistribution.stable.count,     label: "инвестор" },
+    CORE: { count: platformStats.tierDistribution.active.count,     label: "инвестор" },
+    HIGH: { count: platformStats.tierDistribution.aggressive.count, label: "инвесторов" },
+  };
+
   return (
     <Card
       className="overflow-hidden border border-card-border"
@@ -158,6 +166,10 @@ export function TierCard({
               </Chip>
             </div>
             <p className="text-sm text-muted-foreground">{meta.tagline}</p>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {TIER_TO_STAT[tierKey].count.toLocaleString("ru-RU")} {TIER_TO_STAT[tierKey].label}
+            </p>
           </div>
         </div>
       </div>

@@ -11,7 +11,8 @@ import { LiveBadge } from "@/components/ui/live-badge";
 import { formatMoney } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { RefreshCw, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle2, Activity } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, AlertCircle, Wallet, CheckCircle2, Activity, Users } from "lucide-react";
+import { platformStats } from "@/lib/platform-stats";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { useEngineStream } from "@/hooks/use-engine-stream";
@@ -248,6 +249,39 @@ export default function Dashboard() {
           </div>
         )}
       </Card>
+
+      {/* Platform Stats Strip */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="bg-muted/40 rounded-xl p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+            <Users className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium tabular-nums">
+              {platformStats.totalInvestors.toLocaleString("ru-RU")} инвесторов
+            </p>
+            <p className="text-xs text-muted-foreground">на платформе</p>
+          </div>
+        </div>
+        <div className="bg-muted/40 rounded-xl p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+            <TrendingUp className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium tabular-nums">+{platformStats.monthlyReturn}%</p>
+            <p className="text-xs text-muted-foreground">средняя доходность в марте</p>
+          </div>
+        </div>
+        <div className="bg-muted/40 rounded-xl p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+            <Wallet className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium tabular-nums">$2.3M USDT</p>
+            <p className="text-xs text-muted-foreground">под управлением</p>
+          </div>
+        </div>
+      </div>
 
       {/* Strategy Cards */}
       <div className="mb-6">
