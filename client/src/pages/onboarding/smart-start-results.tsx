@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Sparkles, TrendingUp, Wallet, ArrowRight, Check } from "lucide-react";
+import { Sparkles, TrendingUp, Wallet, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getSmartStartAnswers,
@@ -108,20 +108,16 @@ export default function SmartStartResults() {
           </div>
         </div>
 
-        <div className="space-y-3 mt-auto">
-          <Link href="/invest">
-            <Button className="w-full" size="lg" data-testid="button-view-strategies">
-              <Check className="w-4 h-4 mr-2" />
-              View Strategies
-            </Button>
-          </Link>
-          
-          <Link href="/">
-            <Button variant="outline" className="w-full" size="lg" data-testid="button-go-dashboard">
-              Go to Dashboard
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
+        <div className="mt-auto">
+          <Button
+            className="w-full"
+            size="lg"
+            onClick={() => navigate("/onboarding/du-declaration")}
+            data-testid="button-continue-to-declaration"
+          >
+            Продолжить
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
         </div>
       </main>
     </div>
