@@ -1,5 +1,6 @@
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, LayoutDashboard } from "lucide-react";
+import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, LayoutDashboard, Smartphone, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -23,6 +24,68 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 
+const FORCE_MOBILE_KEY = "zeon-force-mobile-view";
+
+interface ForceMobileContextValue {
+  forceMobile: boolean;
+  toggleForceMobile: () => void;
+  isNativeMobile: boolean;
+}
+
+const ForceMobileContext = createContext<ForceMobileContextValue>({
+  forceMobile: false,
+  toggleForceMobile: () => {},
+  isNativeMobile: false,
+});
+
+function useForceMobile() {
+  return useContext(ForceMobileContext);
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window !== "undefined") return window.matchMedia(query).matches;
+    return false;
+  });
+
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [query]);
+
+  return matches;
+}
+
+function ForceMobileProvider({ children }: { children: React.ReactNode }) {
+  const [forceMobile, setForceMobile] = useState(() => {
+    try {
+      return localStorage.getItem(FORCE_MOBILE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const isNativeMobile = !useMediaQuery("(min-width: 768px)");
+
+  const toggleForceMobile = useCallback(() => {
+    setForceMobile((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(FORCE_MOBILE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  return (
+    <ForceMobileContext.Provider value={{ forceMobile, toggleForceMobile, isNativeMobile }}>
+      {children}
+    </ForceMobileContext.Provider>
+  );
+}
+
 interface NavItem {
   href: string;
   label: string;
@@ -41,6 +104,7 @@ const navItems: NavItem[] = [
 function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { toggleForceMobile } = useForceMobile();
 
   return (
     <Sidebar>
@@ -82,6 +146,16 @@ function AppSidebar() {
             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
           </div>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
+          onClick={toggleForceMobile}
+          data-testid="button-switch-mobile"
+        >
+          <Smartphone className="h-4 w-4" />
+          <span className="text-xs">Мобильная версия</span>
+        </Button>
         <div className="flex items-center justify-between gap-2">
           <NotificationBell />
           <ThemeToggle />
@@ -102,25 +176,43 @@ function AppSidebar() {
 function TopBar() {
   const { title } = usePageTitle();
   const { user } = useAuth();
+  const { forceMobile, toggleForceMobile, isNativeMobile } = useForceMobile();
   const initials = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
+  const showMobileLayout = forceMobile || isNativeMobile;
+  const showDesktopButton = forceMobile && !isNativeMobile;
 
   return (
     <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background border-b border-border sticky top-0 z-[999]">
       <div className="flex items-center gap-3">
-        <h1 
-          className="text-lg font-semibold tracking-tight md:hidden"
-          data-testid="text-page-title"
-        >
-          {title}
-        </h1>
-        <h1 
-          className="hidden md:block text-xl font-semibold tracking-tight"
-          data-testid="text-page-title-desktop"
-        >
-          {title}
-        </h1>
+        {showMobileLayout ? (
+          <h1 
+            className="text-lg font-semibold tracking-tight"
+            data-testid="text-page-title"
+          >
+            {title}
+          </h1>
+        ) : (
+          <h1 
+            className="text-xl font-semibold tracking-tight"
+            data-testid="text-page-title-desktop"
+          >
+            {title}
+          </h1>
+        )}
       </div>
       <div className="flex items-center gap-2">
+        {showDesktopButton && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleForceMobile}
+            data-testid="button-switch-desktop"
+            title="Десктопная версия"
+            aria-label="Десктопная версия"
+          >
+            <Monitor className="h-4 w-4" />
+          </Button>
+        )}
         <NotificationBell />
         <ThemeToggle />
         <Link href="/settings">
@@ -137,9 +229,13 @@ function TopBar() {
 
 function MobileBottomNav() {
   const [location] = useLocation();
+  const { forceMobile, isNativeMobile } = useForceMobile();
+  const showMobileLayout = forceMobile || isNativeMobile;
+
+  if (!showMobileLayout) return null;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-pb">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-pb">
       <div className="flex justify-around items-center h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -178,9 +274,11 @@ interface AppShellProps {
 function AppShellContent({ children }: AppShellProps) {
   const [location] = useLocation();
   const { user } = useAuth();
+  const { forceMobile, isNativeMobile } = useForceMobile();
   useDemoDataSeeder();
   const isDemo = user?.email === "demo@example.com";
   const showDemoBanner = isDemo && !location.startsWith("/admin");
+  const showMobileLayout = forceMobile || isNativeMobile;
 
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -190,14 +288,16 @@ function AppShellContent({ children }: AppShellProps) {
   return (
     <SidebarProvider style={sidebarStyle}>
       <div className="flex min-h-screen w-full bg-background">
-        <div className="hidden md:block">
-          <AppSidebar />
-        </div>
+        {!showMobileLayout && (
+          <div className="hidden md:block">
+            <AppSidebar />
+          </div>
+        )}
         <div className="flex-1 flex flex-col min-h-screen w-full">
           <DemoModeBanner isDemo={showDemoBanner} />
           <TopBar />
           <GlobalBanner />
-          <main className="flex-1 pb-20 md:pb-0 overflow-auto">
+          <main className={cn("flex-1 overflow-auto", showMobileLayout ? "pb-20" : "pb-0")}>
             {children}
           </main>
           <MobileBottomNav />
@@ -210,7 +310,9 @@ function AppShellContent({ children }: AppShellProps) {
 export function AppShell({ children }: AppShellProps) {
   return (
     <PageProvider>
-      <AppShellContent>{children}</AppShellContent>
+      <ForceMobileProvider>
+        <AppShellContent>{children}</AppShellContent>
+      </ForceMobileProvider>
     </PageProvider>
   );
 }
