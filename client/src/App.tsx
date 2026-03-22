@@ -37,6 +37,7 @@ const OnboardingKyc = React.lazy(() => import("@/pages/onboarding/kyc"));
 const OnboardingDone = React.lazy(() => import("@/pages/onboarding/done"));
 const SmartStart = React.lazy(() => import("@/pages/onboarding/smart-start"));
 const SmartStartResults = React.lazy(() => import("@/pages/onboarding/smart-start-results"));
+const DuDeclaration = React.lazy(() => import("@/pages/onboarding/du-declaration"));
 const Inbox = React.lazy(() => import("@/pages/inbox"));
 const Dashboard = React.lazy(() => import("@/pages/dashboard"));
 const AdminKyc = React.lazy(() => import("@/pages/admin/kyc"));
@@ -103,6 +104,7 @@ function OnboardingRouter() {
       <Route path="/onboarding/kyc" component={OnboardingKyc} />
       <Route path="/onboarding/smart-start" component={SmartStart} />
       <Route path="/onboarding/smart-start/results" component={SmartStartResults} />
+      <Route path="/onboarding/du-declaration" component={DuDeclaration} />
       <Route path="/onboarding/done" component={OnboardingDone} />
     </Switch>
   );
@@ -127,6 +129,7 @@ function AuthenticatedApp() {
     <Switch>
       <Route path="/onboarding/smart-start/results" component={SmartStartResults} />
       <Route path="/onboarding/smart-start" component={SmartStart} />
+      <Route path="/onboarding/du-declaration" component={DuDeclaration} />
       <Route path="/onboarding/:rest*" component={OnboardingRouter} />
       <Route component={ProtectedRouter} />
     </Switch>
