@@ -66,7 +66,7 @@ export default function Landing() {
             {showDemoButtons && (
               <>
                 <Button variant="outline" onClick={handleDemoLogin} data-testid="button-demo-header">
-                  Demo
+                  Попробовать демо →
                 </Button>
                 <Button 
                   variant="outline" 
@@ -111,7 +111,7 @@ export default function Landing() {
               {showDemoButtons && (
                 <>
                   <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
-                    Demo
+                    Попробовать демо →
                   </Button>
                   <Button 
                     size="lg" 
@@ -192,7 +192,7 @@ export default function Landing() {
                 {showDemoButtons && (
                   <>
                     <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-cta">
-                      Demo
+                      Попробовать демо →
                     </Button>
                     <Button 
                       size="lg" 
