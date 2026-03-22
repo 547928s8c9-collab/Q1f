@@ -12,6 +12,7 @@ import { useEngineStream } from "@/hooks/use-engine-stream";
 import { useLiveMetrics } from "@/hooks/use-live-metrics";
 import { TrendingUp } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
+import { InvestmentCalculator } from "@/components/investment-calculator";
 
 const TIER_ORDER: RiskTierKey[] = ["LOW", "CORE", "HIGH"];
 
@@ -133,6 +134,8 @@ export default function Invest() {
           description="Check back later for investment opportunities."
         />
       )}
+
+      {!isLoading && <InvestmentCalculator />}
 
       <StrategyDetailsSheet
         strategy={selectedStrategy}
