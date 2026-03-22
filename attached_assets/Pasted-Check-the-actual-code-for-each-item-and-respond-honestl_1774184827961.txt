@@ -1,0 +1,43 @@
+Check the actual code for each item and respond honestly.
+Read the relevant files before answering.
+Use: ✅ DONE / ⚠️ PARTIAL (1 sentence on what's missing) / ❌ MISSING
+
+B01 deposit/card.tsx lines 124-128 — alert div has text content
+B02 withdraw.tsx — amount input uses getMoneyInputState with inline errors
+B03 LiveBadge component — shows green/yellow/grey based on actual status
+
+D01 file exists: client/src/pages/onboarding/du-declaration.tsx
+D02 du-declaration is inserted between smart-start-results and done in router
+D03 page shows: tier name, target return, max drawdown, manager text, risk warning
+D04 checkbox required before button activates
+D05 "Договор ДУ №" text visible on page
+
+A01 client activity feed hides individual trade/order events
+A02 only these types shown: daily_pnl, deposit, withdrawal, strategy_change, settlement, fee_charged
+A03 empty state shows Russian message when no events
+A04 daily_pnl events show green/red icon, +/− USDT, Russian date, tier name
+
+S01 file exists: client/src/lib/platform-stats.ts
+S02 dashboard shows: investor count, monthly return %, AUM
+S03 each TierCard shows user count for that tier
+
+C01 file exists: client/src/components/investment-calculator.tsx
+C02 amount input + tier selector present
+C03 projections for 1/3/6 months update live as user types
+C04 disclaimer text present
+C05 CTA button "Начать инвестировать" present
+C06 calculator visible on invest page or dashboard
+
+M01 deposit page has "Карта → USDT" tab or section
+M02 MoonPay flow shows amount input, fee estimate, card icons, button
+M03 button builds correct MoonPay URL with amount parameter
+M04 Onramper fallback message visible below MoonPay
+
+DM01 file exists: client/src/lib/demo-seed.ts with "Алишер Н., Ташкент"
+DM02 demo history includes November 2025 as negative month −$31.50
+DM03 demo includes 3 withdrawal events
+DM04 data identical on every refresh — no randomization
+DM05 login page has "Попробовать демо →" button
+DM06 demo banner visible when demo mode is active
+
+For every ⚠️ and ❌ — quote the file name and line where the fix is needed.
