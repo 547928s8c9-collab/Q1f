@@ -28,6 +28,7 @@ import { db } from "../db";
 const USDT_MINOR_FACTOR = 1_000_000;
 
 export interface SimTraderOptions {
+  userId: string;
   strategyId: string;
   profileSlug: string;
   initialEquityMinor?: string;
@@ -243,6 +244,10 @@ export class SimTrader {
         defaultConfig: fallbackConfig.defaultConfig,
         configSchema: fallbackConfig.configSchema,
         isEnabled: fallbackConfig.isEnabled,
+        pairsJson: null,
+        benchmarksJson: null,
+        expectedReturnMinBps: null,
+        expectedReturnMaxBps: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -275,6 +280,7 @@ export class SimTrader {
       this.driftBpsMonthly = pickMonthlyDriftBps(this.strategyRecord.id, minBps, maxBps);
       const initialEquityMinor = this.options.initialEquityMinor ?? toMinor(10_000);
       await this.store.upsertPosition({
+        userId: this.options.userId,
         strategyId: this.strategyRecord.id,
         profileSlug: this.profile.slug,
         symbol: normalizeSymbol(this.profile.symbol),
@@ -342,7 +348,9 @@ export class SimTrader {
       if (event.payload.type === "fill" && event.payload.data.side === "BUY") {
         const fill = event.payload.data;
         const created = await this.store.insertTrade({
+          userId: this.options.userId,
           strategyId: this.strategyRecord.id,
+          symbol: normalizeSymbol(this.profile.symbol),
           status: "OPEN",
           entryTs: event.ts,
           entryPrice: formatDecimal(fill.price),
@@ -376,7 +384,9 @@ export class SimTrader {
           this.openTradeId = null;
         } else {
           const fallback = await this.store.insertTrade({
+            userId: this.options.userId,
             strategyId: this.strategyRecord.id,
+            symbol: normalizeSymbol(this.profile.symbol),
             status: "CLOSED",
             entryTs: event.ts - trade.holdBars * stepMs,
             exitTs: event.ts,
@@ -403,6 +413,7 @@ export class SimTrader {
     const peakEquity = Math.max(state.equity, previousPeak);
 
     const positionPayload: InsertSimPosition = {
+      userId: this.options.userId,
       strategyId: this.strategyRecord.id,
       profileSlug: this.profile.slug,
       symbol: normalizeSymbol(this.profile.symbol),
@@ -433,6 +444,7 @@ export class SimTrader {
         ? equityEvent.payload.data.drawdownPct
         : 0;
       equitySnapshot = await this.store.insertEquitySnapshot({
+        userId: this.options.userId,
         strategyId: this.strategyRecord.id,
         ts: candle.ts,
         equityMinor,

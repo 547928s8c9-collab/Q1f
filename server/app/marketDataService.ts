@@ -113,12 +113,12 @@ export async function getMarketCandles(params: MarketDataRequest): Promise<LoadC
   if (!hasEnoughCoverage && actualBars === 0 && params.exchange === "binance_spot") {
     // No data at all: try quick import (current month, last 7 days, max 3 seconds)
     try {
-      const importPromise = ensureHistoryFor(
-        params.symbol,
+      const importPromise = ensureHistoryFor({
+        symbol: params.symbol,
         timeframe,
-        { monthsBack: 0, daysBackForCurrentMonth: 7 },
-        storage
-      );
+        fromTs,
+        toTs,
+      });
       
       // Race: import vs timeout
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -172,12 +172,12 @@ export async function getMarketCandles(params: MarketDataRequest): Promise<LoadC
     source = "db_partial";
     
     // Trigger async import (fire and forget)
-    ensureHistoryFor(
-      params.symbol,
+    ensureHistoryFor({
+      symbol: params.symbol,
       timeframe,
-      { monthsBack: 6, daysBackForCurrentMonth: 14 },
-      storage
-    ).catch((err) => {
+      fromTs,
+      toTs,
+    }).catch((err) => {
       logger.warn("Async import failed", "market-data", { symbol: params.symbol, timeframe, error: err });
     });
     

@@ -813,7 +813,7 @@ export async function registerRoutes(
         source: result.source,
       });
     } catch (error) {
-      logger.error("Market candles error", "routes", { symbol, timeframe, requestId: req.requestId }, error);
+      logger.error("Market candles error", "routes", { symbol: req.query.symbol, timeframe: req.query.timeframe, requestId: req.requestId }, error);
       res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
@@ -824,8 +824,9 @@ export async function registerRoutes(
 
   // GET /api/kyc/status - Get KYC status (protected)
   app.get("/api/kyc/status", isAuthenticated, async (req, res) => {
+    let userId: string | undefined;
     try {
-      const userId = getUserId(req);
+      userId = getUserId(req);
       const applicant = await storage.getKycApplicant(userId);
       
       const status = applicant?.status || "NOT_STARTED";
@@ -850,8 +851,9 @@ export async function registerRoutes(
 
   // POST /api/kyc/start - Start KYC process (uses canonical logic)
   app.post("/api/kyc/start", isAuthenticated, async (req, res) => {
+    let userId: string | undefined;
     try {
-      const userId = getUserId(req);
+      userId = getUserId(req);
       const ip = req.ip || req.headers["x-forwarded-for"]?.toString() || "unknown";
       const userAgent = req.headers["user-agent"] || "unknown";
 
@@ -954,7 +956,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      logger.error("Deposit USDT simulate error", "routes", { userId, amount, requestId: req.requestId }, error);
+      logger.error("Deposit USDT simulate error", "routes", { userId, amount: req.body?.amount, requestId: req.requestId }, error);
       const errorBody = { error: "Internal server error" };
       if (lock?.acquired) {
         await completeIdempotency(lock.keyId, null, 500, errorBody);
@@ -1042,7 +1044,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      logger.error("Deposit card simulate error", "routes", { userId, amount, requestId: req.requestId }, error);
+      logger.error("Deposit card simulate error", "routes", { userId, amount: req.body?.amount, requestId: req.requestId }, error);
       const errorBody = { error: "Internal server error" };
       if (lock?.acquired) {
         await completeIdempotency(lock.keyId, null, 500, errorBody);
@@ -1243,7 +1245,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      logger.error("Invest error", "routes", { userId, strategyId, amount, requestId: req.requestId }, error);
+      logger.error("Invest error", "routes", { userId, strategyId: req.body?.strategyId, amount: req.body?.amount, requestId: req.requestId }, error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
         const errorBody = { error: "Insufficient balance" };
         if (lock?.acquired) {
@@ -1619,7 +1621,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      logger.error("Withdraw error", "routes", { userId, amount, requestId: req.requestId }, error);
+      logger.error("Withdraw error", "routes", { userId, amount: req.body?.amount, requestId: req.requestId }, error);
       if (error instanceof Error && error.message === "INSUFFICIENT_BALANCE") {
         const errorBody = { error: "Insufficient balance" };
         if (lock?.acquired) {
@@ -1803,7 +1805,7 @@ export async function registerRoutes(
       }
       res.json(responseBody);
     } catch (error) {
-      logger.error("Vault transfer error", "routes", { userId, fromVault, toVault, amount, requestId: req.requestId }, error);
+      logger.error("Vault transfer error", "routes", { userId, fromVault: req.body?.fromVault, toVault: req.body?.toVault, amount: req.body?.amount, requestId: req.requestId }, error);
       if (error instanceof Error) {
         if (error.message === "INSUFFICIENT_BALANCE") {
           const errorBody = { error: "Insufficient wallet balance" };
@@ -1846,7 +1848,7 @@ export async function registerRoutes(
 
       res.json({ success: true, vault });
     } catch (error) {
-      logger.error("Update vault goal error", "routes", { userId, vaultType, requestId: req.requestId }, error);
+      logger.error("Update vault goal error", "routes", { requestId: req.requestId }, error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message });
       }
@@ -1862,7 +1864,7 @@ export async function registerRoutes(
       // Demo: In production, would send actual OTP via email/SMS
       res.json({ success: true, message: "Code sent" });
     } catch (error) {
-      logger.error("Send code error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Send code error", "routes", { requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1886,7 +1888,7 @@ export async function registerRoutes(
       await storage.updateSecuritySettings(userId, { contactVerified: true });
       res.json({ success: true });
     } catch (error) {
-      logger.error("Verify code error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Verify code error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1901,7 +1903,7 @@ export async function registerRoutes(
       const result = await acceptConsentCanonical({ userId, ip, userAgent });
       res.json({ success: result.success });
     } catch (error) {
-      logger.error("Accept consent error (onboarding)", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Accept consent error (onboarding)", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1924,7 +1926,7 @@ export async function registerRoutes(
       }
       res.json({ success: result.success, status: result.status });
     } catch (error) {
-      logger.error("Start KYC error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Start KYC error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1942,7 +1944,7 @@ export async function registerRoutes(
       });
       res.json({ success: true, status: "APPROVED" });
     } catch (error) {
-      logger.error("Complete KYC error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Complete KYC error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1967,7 +1969,7 @@ export async function registerRoutes(
         documentHash: CURRENT_DOC_HASH,
       });
     } catch (error) {
-      logger.error("Consent status error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Consent status error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -1982,7 +1984,7 @@ export async function registerRoutes(
       const result = await acceptConsentCanonical({ userId, ip, userAgent });
       res.json(result);
     } catch (error) {
-      logger.error("Accept consent error (consent route)", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Accept consent error (consent route)", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2294,7 +2296,7 @@ export async function registerRoutes(
 
       res.json({ fromAsset, toAsset, fromAmount: amount, toAmount, rate: rate.toString() });
     } catch (error) {
-      logger.error("FX quote error", "routes", { fromAsset, toAsset, requestId: req.requestId }, error);
+      logger.error("FX quote error", "routes", { fromAsset: req.query.from, toAsset: req.query.to, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2310,7 +2312,7 @@ export async function registerRoutes(
       const instructions = await storage.getPayoutInstructions(userId);
       res.json(instructions);
     } catch (error) {
-      logger.error("Get payout instructions error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Get payout instructions error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2322,7 +2324,7 @@ export async function registerRoutes(
       const instruction = await storage.getPayoutInstruction(userId, req.params.strategyId);
       res.json(instruction || null);
     } catch (error) {
-      logger.error("Get payout instruction error", "routes", { userId, instructionId, requestId: req.requestId }, error);
+      logger.error("Get payout instruction error", "routes", { userId: getUserId(req), strategyId: req.params.strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2426,7 +2428,7 @@ export async function registerRoutes(
 
       res.json(instruction);
     } catch (error) {
-      logger.error("Save payout instruction error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Save payout instruction error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2686,7 +2688,7 @@ export async function registerRoutes(
           : `${strategy?.name || "Strategy"} has been resumed`
       });
     } catch (error) {
-      logger.error("Pause position error", "routes", { userId, strategyId, requestId: req.requestId }, error);
+      logger.error("Pause position error", "routes", { userId: getUserId(req), strategyId: req.params.strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2722,7 +2724,7 @@ export async function registerRoutes(
         nextWindow: getNextWeeklyWindow().toISOString(),
       });
     } catch (error) {
-      logger.error("Get redemptions error", "routes", { userId, requestId: req.requestId }, error);
+      logger.error("Get redemptions error", "routes", { userId: getUserId(req), requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -2787,7 +2789,7 @@ export async function registerRoutes(
         status: request.status,
       });
     } catch (error) {
-      logger.error("Create redemption error", "routes", { userId, strategyId, requestId: req.requestId }, error);
+      logger.error("Create redemption error", "routes", { userId: getUserId(req), strategyId: req.body?.strategyId, requestId: req.requestId }, error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -3373,7 +3375,7 @@ export async function registerRoutes(
         },
       });
     } catch (error) {
-      logger.error("Get candles error", "routes", { symbol, timeframe, requestId: req.requestId }, error);
+      logger.error("Get candles error", "routes", { symbol: req.query.symbol, timeframe: req.query.timeframe, requestId: req.requestId }, error);
       const message = error instanceof Error ? error.message : "Internal server error";
       res.status(400).json({ error: message });
     }

@@ -39,7 +39,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
     config: params.config,
     meta: {
       symbol: params.symbol,
-      timeframe: params.timeframe,
+      timeframe: params.timeframe as import("../strategies/types").Timeframe,
     },
   });
 
@@ -61,6 +61,7 @@ export async function runTrader(params: TraderParams): Promise<void> {
     stats: {
       totalTrades: scaledTrades.length,
       wins: scaledTrades.filter((t) => t.netPnl > 0).length,
+      losses: scaledTrades.filter((t) => t.netPnl <= 0).length,
       grossPnl: scaledTrades.reduce((sum, t) => sum + Math.max(0, t.netPnl), 0),
       fees: 0,
       netPnl: scaledTrades.reduce((sum, t) => sum + t.netPnl, 0),

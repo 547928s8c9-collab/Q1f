@@ -34,7 +34,7 @@ async function getCachedCalibration(
 }
 
 export interface EnsureCandleRangeParams {
-  exchange: "synthetic";
+  exchange: string;
   symbol: string;
   timeframe: Timeframe | string;
   fromTs: number;

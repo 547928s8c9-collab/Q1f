@@ -121,7 +121,7 @@ export function registerInvestRoutes({ app, isAuthenticated, getUserId }: RouteD
         lastSnapshotTs: snapshot?.ts ?? null,
       }));
     } catch (error) {
-      logger.error("Invest overview error", "invest-routes", { userId, strategyId: req.params.id }, error);
+      logger.error("Invest overview error", "invest-routes", { userId: getUserId(req), strategyId: req.params.id }, error);
       res.status(500).json(fail("INTERNAL_ERROR", "Internal server error"));
     }
   });

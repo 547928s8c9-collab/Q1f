@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { randomBytes } from "crypto";
 import { eq, and, desc, gte, or, ilike, lte, lt, sql, inArray } from "drizzle-orm";
 import {
   balances,
@@ -1099,8 +1100,9 @@ export class DatabaseStorage implements IStorage {
     const trades = rows.slice(0, limit);
 
     // Generate nextCursor from the last trade's exitTs
-    const nextCursor = hasMore && trades.length > 0 && trades[trades.length - 1].exitTs
-      ? trades[trades.length - 1].exitTs.toString()
+    const lastExitTs = trades.length > 0 ? trades[trades.length - 1].exitTs : null;
+    const nextCursor = hasMore && lastExitTs != null
+      ? lastExitTs.toString()
       : undefined;
 
     return { trades, nextCursor };

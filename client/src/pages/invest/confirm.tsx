@@ -151,7 +151,7 @@ export default function InvestConfirm() {
               {amount && !isValidAmount && (
                 <div className="flex items-center gap-2 text-sm text-negative">
                   <AlertCircle className="w-4 h-4" />
-                  {BigInt(amountInMinor) < BigInt(minInvestment)
+                  {BigInt(amountInMinor ?? "0") < BigInt(minInvestment)
                     ? "Amount below minimum"
                     : "Insufficient balance"}
                 </div>

@@ -51,7 +51,7 @@ async function withAdvisoryLock(
 ): Promise<boolean> {
   if (stats) stats.totalAttempts++;
   const result = await db.execute(sql`SELECT pg_try_advisory_lock(${lockKey}) as locked`);
-  const locked = Boolean((result as { rows?: Array<{ locked: boolean }> }).rows?.[0]?.locked);
+  const locked = Boolean((result as unknown as { rows?: Array<{ locked: boolean }> }).rows?.[0]?.locked);
   if (!locked) {
     if (stats) stats.failed++;
     return false;

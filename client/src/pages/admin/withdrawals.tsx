@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";

@@ -14,6 +14,9 @@ export interface Calibration {
   stdHourlyReturn: number;
   avgVolume: number;
   lastPrice: number;
+  driftPctPerDay: string;
+  volPctPerDay: string;
+  stepClampPct: string;
 }
 
 export async function getCalibration(params: CalibrationParams): Promise<Calibration | null> {

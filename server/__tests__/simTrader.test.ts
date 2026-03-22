@@ -196,6 +196,7 @@ describe("SimTrader", () => {
     const store = createMemoryStore({ position });
     const trader = createSimTrader(
       {
+        userId: "test-user-1",
         strategyId: "strategy-1",
         profileSlug: "btc_squeeze_breakout",
         strategyConfigOverride: testConfig,

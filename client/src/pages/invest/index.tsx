@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSetPageTitle } from "@/hooks/use-page-title";
 import { useEngineStream } from "@/hooks/use-engine-stream";
 import { useLiveMetrics } from "@/hooks/use-live-metrics";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, AlertTriangle } from "lucide-react";
 import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
 import { InvestmentCalculator } from "@/components/investment-calculator";
 
@@ -25,7 +25,7 @@ export default function Invest() {
   const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
   const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
 
-  const { data: strategies, isLoading } = useQuery<Strategy[]>({
+  const { data: strategies, isLoading, isError } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
   });
 
@@ -113,6 +113,12 @@ export default function Invest() {
             </div>
           ))}
         </div>
+      ) : isError ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title="Failed to load strategies"
+          description="Could not fetch investment strategies. Please refresh the page or try again later."
+        />
       ) : activeTiers.length > 0 ? (
         <div className="space-y-6">
           {activeTiers.map((tierKey) => (

@@ -20,7 +20,7 @@ import {
   notifications,
   type KycStatusType,
 } from "@shared/schema";
-import { eq, desc, and, lt, or, ilike, sql, count, sum, gte } from "drizzle-orm";
+import { eq, desc, and, lt, or, ilike, sql, count, sum, gte, inArray } from "drizzle-orm";
 import {
   AdminListQuery,
   encodeCursor,
@@ -204,24 +204,22 @@ adminRouter.get("/users", requirePermission("users.read"), async (req, res) => {
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit);
 
-    const kycStatuses = await Promise.all(
-      items.map(async (u) => {
-        const [kyc] = await db
-          .select({ status: kycApplicants.status })
+    const userIds = items.map((u) => u.id);
+    const kycRows = userIds.length > 0
+      ? await db
+          .select({ userId: kycApplicants.userId, status: kycApplicants.status })
           .from(kycApplicants)
-          .where(eq(kycApplicants.userId, u.id))
-          .limit(1);
-        return kyc?.status || null;
-      })
-    );
+          .where(inArray(kycApplicants.userId, userIds))
+      : [];
+    const kycStatusMap = new Map(kycRows.map((k) => [k.userId, k.status]));
 
-    const result: AdminUserListItem[] = items.map((u, i) => ({
+    const result: AdminUserListItem[] = items.map((u) => ({
       id: u.id,
       email: u.email,
       firstName: u.firstName,
       lastName: u.lastName,
       createdAt: u.createdAt?.toISOString() || new Date().toISOString(),
-      kycStatus: kycStatuses[i],
+      kycStatus: kycStatusMap.get(u.id) || null,
       isActive: true,
     }));
 
@@ -1977,6 +1975,29 @@ adminRouter.post(
         await tx.update(operations)
           .set(opUpdates)
           .where(eq(operations.id, withdrawal.operationId));
+      }
+
+      // MARK_FAILED: refund amount + fee back to user's available balance
+      if (action === "MARK_FAILED") {
+        const refundAmount = BigInt(withdrawal.amountMinor) + BigInt(withdrawal.feeMinor);
+        const [currentBalance] = await tx
+          .select()
+          .from(balances)
+          .where(and(eq(balances.userId, withdrawal.userId), eq(balances.asset, withdrawal.currency)));
+        
+        if (currentBalance) {
+          const newAvailable = (BigInt(currentBalance.available) + refundAmount).toString();
+          await tx.update(balances)
+            .set({ available: newAvailable, updatedAt: new Date() })
+            .where(eq(balances.id, currentBalance.id));
+        } else {
+          await tx.insert(balances).values({
+            userId: withdrawal.userId,
+            asset: withdrawal.currency,
+            available: refundAmount.toString(),
+            locked: "0",
+          });
+        }
       }
 
       return updatedWithdrawal;

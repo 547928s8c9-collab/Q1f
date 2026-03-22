@@ -21,6 +21,7 @@ const defaultVaultData: VaultData = {
   goalAmount: null,
   autoSweepPct: 0,
   autoSweepEnabled: false,
+  progress: 0,
 };
 
 const vaultItems = [

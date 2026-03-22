@@ -13,6 +13,21 @@ import { startOutboxWorker } from "./workers/outboxWorker";
 import { initializeEngineScheduler } from "./app/engineInit";
 import { engineScheduler } from "./app/engineScheduler";
 
+// ── Startup environment validation ───────────────────────────────────────────
+function validateEnv() {
+  const required: string[] = ["DATABASE_URL", "SESSION_SECRET"];
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(
+      `[FATAL] Missing required environment variables: ${missing.join(", ")}. ` +
+      "Set them and restart the server."
+    );
+    process.exit(1);
+  }
+}
+validateEnv();
+// ─────────────────────────────────────────────────────────────────────────────
+
 const app = express();
 const httpServer = createServer(app);
 
