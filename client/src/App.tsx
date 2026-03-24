@@ -46,6 +46,7 @@ const AdminDashboard = React.lazy(() => import("@/pages/admin/dashboard"));
 const AdminManagementFees = React.lazy(() => import("@/pages/admin/management-fees"));
 const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
 const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
+const Q1FApp = React.lazy(() => import("@/pages/q1f/index"));
 import { Loader2 } from "lucide-react";
 import Risk from "@/pages/risk";
 import { FloatingProfitToastContainer } from "@/components/floating-profit-toast";
@@ -161,6 +162,7 @@ function App() {
             )}
           >
             <Switch>
+              <Route path="/q1f" component={Q1FApp} />
               <Route path="/tg" component={TelegramMiniAppV2} />
               <Route path="/tg/v2" component={TelegramMiniAppV2} />
               <Route path="/tg/legacy" component={TelegramMiniAppLegacy} />

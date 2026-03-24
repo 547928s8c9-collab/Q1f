@@ -1,5 +1,16 @@
 # ZEON Fintech Dashboard
 
+## Q1F Mobile Web App
+Route `/q1f` serves a standalone mobile web app for the Q1F crypto platform. Built with Apple-inspired design system (white bg, shadows, glassmorphism nav, SF Pro fonts). All UI in Russian. Files in `client/src/pages/q1f/`:
+- `tokens.ts` — design tokens (colors, spacing, typography, shadows, transitions)
+- `components.tsx` — shared components (Card, Badge, Button, TabBar, Icon, CryptoIcon, Sparkline)
+- `index.tsx` — app shell with bottom nav and screen switching
+- `screens/portfolio.tsx` — main portfolio screen with balance, chart, quick actions, asset list
+- `screens/exchange.tsx` — buy/sell crypto with currency selectors
+- `screens/ai-invest.tsx` — AI investment strategies (Conservative, Balanced, Aggressive)
+- `screens/wallet.tsx` — wallet balances, BTC address, transaction history
+- `screens/profile.tsx` — user profile, verification, settings menu
+
 ## Overview
 ZEON is a production-grade fintech web dashboard MVP for digital asset management, inspired by Revolut with an Anthropic-style minimal design. It enables portfolio management, investment strategies, wallet operations, activity tracking, and security settings, supporting both cryptocurrency (USDT) and fiat (RUB) operations. The platform aims to provide a secure, transparent, and user-friendly experience for managing digital finances, offering real-time portfolio charts, investment strategy tracking, vault management, and comprehensive transaction history.
 
