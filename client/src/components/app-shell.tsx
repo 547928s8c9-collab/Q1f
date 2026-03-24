@@ -182,7 +182,7 @@ function TopBar() {
   const showDesktopButton = forceMobile && !isNativeMobile;
 
   return (
-    <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background border-b border-border sticky top-0 z-[999]">
+    <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-[999]">
       <div className="flex items-center gap-3">
         {showMobileLayout ? (
           <h1 
@@ -235,7 +235,7 @@ function MobileBottomNav() {
   if (!showMobileLayout) return null;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-pb">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-xl border-t border-border/50 z-50 safe-area-pb">
       <div className="flex justify-around items-center h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;

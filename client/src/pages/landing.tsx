@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2 } from "lucide-react";
+import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2, Sparkles } from "lucide-react";
 
 const showDemoButtons = import.meta.env.DEV || import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
@@ -21,177 +20,108 @@ export default function Landing() {
     window.location.href = "/api/admin/auth/demo";
   };
 
+  const features = [
+    { icon: TrendingUp, title: "Портфель", desc: "Аналитика в реальном времени" },
+    { icon: ChartLine, title: "Стратегии", desc: "Автоматизированные инвестиции" },
+    { icon: Wallet, title: "Кошелёк", desc: "Мультивалютные операции" },
+    { icon: Shield, title: "Безопасность", desc: "Банковский уровень защиты" },
+  ];
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container max-w-6xl mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">Z</span>
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl">
+        <div className="container max-w-5xl mx-auto flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+              <span className="text-primary-foreground font-bold text-sm">Z</span>
             </div>
-            <span className="text-xl font-semibold tracking-tight">ZEON</span>
+            <span className="text-lg font-semibold tracking-tight">ZEON</span>
           </div>
           <div className="flex items-center gap-2">
             {showDemoButtons && (
-              <>
-                <Button variant="outline" onClick={handleDemoLogin} data-testid="button-demo-header">
-                  Попробовать демо →
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDemoAdmin} 
-                  disabled={isDemoAdminLoading}
-                  data-testid="button-demo-admin-header"
-                >
-                  {isDemoAdminLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Загрузка...
-                    </>
-                  ) : (
-                    "Демо Админ"
-                  )}
-                </Button>
-              </>
+              <Button variant="ghost" size="sm" onClick={handleDemoLogin} data-testid="button-demo-header">
+                Демо
+              </Button>
             )}
-            <Button onClick={handleLogin} data-testid="button-login-header">
+            <Button size="sm" onClick={handleLogin} data-testid="button-login-header">
               Войти
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1">
-        <section className="container max-w-6xl mx-auto px-4 py-24 md:py-32">
-          <div className="flex flex-col items-center text-center space-y-8">
-            <div className="space-y-4 max-w-3xl">
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-                Приумножайте капитал с умным инвестированием
-              </h1>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Профессиональное управление портфелем, автоматизированные инвестиционные стратегии и безопасный мультивалютный кошелёк. Всё в одной платформе.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
-                Войти
-                <ArrowRight className="ml-2 h-5 w-5" />
+      <main className="flex-1 flex flex-col items-center justify-center px-4">
+        <section className="w-full max-w-2xl mx-auto py-20 md:py-32 text-center">
+          <div className="inline-flex items-center gap-1.5 bg-primary/8 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-8">
+            <Sparkles className="w-3.5 h-3.5" />
+            Умные инвестиции
+          </div>
+          
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.08] mb-6">
+            Приумножайте
+            <br />
+            <span className="text-primary">капитал</span>
+          </h1>
+          
+          <p className="text-lg text-muted-foreground max-w-md mx-auto mb-10 leading-relaxed">
+            Автоматизированные стратегии, прозрачная аналитика и безопасный кошелёк. Всё в одной платформе.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-center mb-6">
+            <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
+              Начать
+              <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Button>
+            {showDemoButtons && (
+              <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
+                Попробовать демо
               </Button>
-              {showDemoButtons && (
+            )}
+          </div>
+          
+          {showDemoButtons && (
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={handleDemoAdmin} 
+              disabled={isDemoAdminLoading}
+              data-testid="button-demo-admin-access"
+              className="text-muted-foreground"
+            >
+              {isDemoAdminLoading ? (
                 <>
-                  <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
-                    Попробовать демо →
-                  </Button>
-                  <Button 
-                    size="lg" 
-                    variant="outline" 
-                    onClick={handleDemoAdmin} 
-                    disabled={isDemoAdminLoading}
-                    data-testid="button-demo-admin-access"
-                  >
-                    {isDemoAdminLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Загрузка...
-                      </>
-                    ) : (
-                      "Демо Админ"
-                    )}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">Только для разработки</span>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Загрузка...
                 </>
+              ) : (
+                "Демо Админ →"
               )}
-            </div>
-          </div>
+            </Button>
+          )}
         </section>
 
-        <section className="container max-w-6xl mx-auto px-4 py-16">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader>
-                <TrendingUp className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Отслеживание портфеля</CardTitle>
-                <CardDescription>
-                  Аналитика портфеля в реальном времени с подробными графиками доходности
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <ChartLine className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Инвестиционные стратегии</CardTitle>
-                <CardDescription>
-                  Проверенные стратегии с прозрачными показателями эффективности
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Wallet className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Мультивалютный кошелёк</CardTitle>
-                <CardDescription>
-                  Управляйте USDT и RUB с удобными депозитами и выводами
-                </CardDescription>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader>
-                <Shield className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Банковская безопасность</CardTitle>
-                <CardDescription>
-                  Двухфакторная аутентификация, белый список адресов и многое другое
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          </div>
-        </section>
-
-        <section className="container max-w-6xl mx-auto px-4 py-16">
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="flex flex-col items-center text-center py-12 space-y-6">
-              <h2 className="text-3xl font-bold">Готовы начать?</h2>
-              <p className="text-muted-foreground max-w-lg">
-                Присоединяйтесь к ZEON сегодня и возьмите под контроль своё финансовое будущее с мощными инструментами и прозрачным инвестированием.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 items-center">
-                <Button size="lg" onClick={handleLogin} data-testid="button-sign-in-cta">
-                  Войти
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-                {showDemoButtons && (
-                  <>
-                    <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-cta">
-                      Попробовать демо →
-                    </Button>
-                    <Button 
-                      size="lg" 
-                      variant="outline" 
-                      onClick={handleDemoAdmin} 
-                      disabled={isDemoAdminLoading}
-                      data-testid="button-demo-admin-cta"
-                    >
-                      {isDemoAdminLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Загрузка...
-                        </>
-                      ) : (
-                        "Демо Админ"
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">Только для разработки</span>
-                  </>
-                )}
+        <section className="w-full max-w-3xl mx-auto pb-20">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {features.map((f) => (
+              <div
+                key={f.title}
+                className="flex flex-col items-center text-center p-6 rounded-2xl bg-card shadow-sm hover:shadow-md transition-all duration-200"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center mb-3">
+                  <f.icon className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="font-semibold text-sm mb-1">{f.title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
               </div>
-            </CardContent>
-          </Card>
+            ))}
+          </div>
         </section>
       </main>
 
-      <footer className="border-t py-8">
-        <div className="container max-w-6xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>ZEON — финтех-платформа для инвестиций</p>
-        </div>
+      <footer className="py-6">
+        <p className="text-center text-xs text-muted-foreground">
+          ZEON — финтех-платформа для инвестиций
+        </p>
       </footer>
     </div>
   );
