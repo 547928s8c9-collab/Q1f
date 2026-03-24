@@ -59,18 +59,31 @@ def main() -> None:
     print("=== Q1F Trading Bot ===")
     print(f"Testnet : {config.BYBIT_TESTNET}")
     print(f"Capital : {config.INITIAL_CAPITAL} USDT")
-    config.validate()
-    print("[Config] OK")
 
     init_db()
     for sid, name in STRATEGIES.items():
         ensure_strategy(sid, name)
 
+    try:
+        config.validate()
+    except ValueError:
+        print("\n[Config] BYBIT_API_KEY / BYBIT_SECRET not set.")
+        print("Bot ready. Set BYBIT_API_KEY and BYBIT_SECRET in .env to start trading.")
+        print("Register at https://testnet.bybit.com for a free testnet API key.")
+        return
+
+    print("[Config] OK")
+
     # ------------------------------------------------------------------
     # 2. Connect to Bybit
     # ------------------------------------------------------------------
     exchange = BybitAdapter()
-    exchange.connect()
+    try:
+        exchange.connect()
+    except Exception as exc:
+        print(f"\n[Connection] Failed to connect to Bybit: {exc}")
+        print("Check your API key/secret and network connection.")
+        return
 
     engine = PnLEngine(exchange)
 

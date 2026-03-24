@@ -17,8 +17,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import talib
 
+from bot import indicators as talib
 from .base import AbstractStrategy, Action, Signal
 
 log = logging.getLogger(__name__)

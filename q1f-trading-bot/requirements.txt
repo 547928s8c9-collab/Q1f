@@ -1,7 +1,6 @@
 ccxt>=4.2.0
 pandas>=2.0.0
 numpy>=1.24.0
-ta-lib>=0.4.28
 python-telegram-bot>=20.0
 apscheduler>=3.10.0
 python-dotenv>=1.0.0
