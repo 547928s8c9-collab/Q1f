@@ -1,5 +1,18 @@
 # ZEON Fintech Dashboard
 
+## Apple Design System (Global)
+The entire ZEON app uses the Q1F Apple design system:
+- **Primary**: #0071E3 (HSL 211 100% 45%) — Apple Blue
+- **Success/Positive**: #34C759 — Apple Green
+- **Destructive/Negative**: #FF3B30 — Apple Red
+- **Warning**: #FF9F0A (HSL 37 100% 52%) — Apple Orange
+- **Typography**: SF Pro Display/Text, Inter fallback, tight heading tracking (-0.5px to -1.5px)
+- **Shadows**: Real Apple shadows on cards (shadow-sm, hover:shadow-md), no borders on Card component
+- **Border Radius**: lg=1.25rem/20px, md=1rem/16px, sm=0.75rem/12px
+- **Transitions**: All interactive elements get 150ms cubic-bezier(0.25, 0.1, 0.25, 1)
+- **Glassmorphism**: ONLY on navigation bars (never cards/modals/buttons)
+- All orange/amber/yellow references replaced with `warning` design token
+
 ## Q1F Mobile Web App
 Route `/q1f` serves a standalone mobile web app for the Q1F crypto platform. Built with Apple-inspired design system (white bg, shadows, glassmorphism nav, SF Pro fonts). All UI in Russian. Files in `client/src/pages/q1f/`:
 - `tokens.ts` — design tokens (colors, spacing, typography, shadows, transitions)

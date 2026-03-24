@@ -1305,7 +1305,7 @@ function TradeDetailsContent({
                 <div className={cn(
                   "w-2 h-2 rounded-full",
                   event.type === "TRADE_INTENT" ? "bg-blue-500" :
-                  event.type === "ORDER_PLACED" ? "bg-yellow-500" :
+                  event.type === "ORDER_PLACED" ? "bg-warning" :
                   event.type === "FILLED" ? "bg-green-500" :
                   event.type === "CLOSED" ? "bg-red-500" : "bg-gray-500"
                 )} />

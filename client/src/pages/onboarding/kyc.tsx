@@ -32,8 +32,8 @@ const KYC_STATUS_CONFIG = {
     title: "Верификация в процессе",
     description: "Мы проверяем ваши документы. Обычно это занимает несколько минут.",
     icon: Clock,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-500/10",
+    iconColor: "text-warning",
+    iconBg: "bg-warning/10",
     showIntro: false,
   },
   APPROVED: {
@@ -48,8 +48,8 @@ const KYC_STATUS_CONFIG = {
     title: "Требуется действие",
     description: "Нам нужна дополнительная информация для завершения верификации.",
     icon: AlertCircle,
-    iconColor: "text-amber-500",
-    iconBg: "bg-amber-500/10",
+    iconColor: "text-warning",
+    iconBg: "bg-warning/10",
     showIntro: false,
   },
   REJECTED: {
@@ -215,7 +215,7 @@ export default function OnboardingKyc() {
 
         {status === "IN_REVIEW" && (
           <Card className="p-8 flex flex-col items-center">
-            <Loader2 className="w-12 h-12 animate-spin text-amber-500 mb-4" />
+            <Loader2 className="w-12 h-12 animate-spin text-warning mb-4" />
             <h3 className="font-medium mb-2">Обработка...</h3>
             <p className="text-sm text-muted-foreground text-center">
               Пожалуйста, подождите, пока мы проверяем вашу личность
@@ -243,7 +243,7 @@ export default function OnboardingKyc() {
         {status === "NEEDS_ACTION" && (
           <Card className="p-6">
             <div className="flex items-start gap-4 mb-4">
-              <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0" />
+              <AlertCircle className="w-6 h-6 text-warning flex-shrink-0" />
               <div>
                 <h3 className="font-medium mb-1">Требуется дополнительная информация</h3>
                 <p className="text-sm text-muted-foreground">

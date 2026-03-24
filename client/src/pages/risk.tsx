@@ -34,7 +34,7 @@ function getRiskColor(level: string) {
     case "Низкий":
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
     case "Средний":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200";
+      return "bg-warning/10 text-warning dark:bg-warning/20 dark:text-warning";
     case "Высокий":
       return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
     default:

@@ -523,7 +523,7 @@ function LatestActivityWidget() {
 
   const getEventColor = (type: string, severity: string) => {
     if (severity === "error") return "text-red-500 bg-red-500/10";
-    if (severity === "warn") return "text-yellow-500 bg-yellow-500/10";
+    if (severity === "warn") return "text-warning bg-warning/10";
     if (type === "TICK_OK") return "text-green-500 bg-green-500/10";
     if (type === "TRADE_OPEN") return "text-blue-500 bg-blue-500/10";
     if (type === "TRADE_CLOSE") return "text-purple-500 bg-purple-500/10";

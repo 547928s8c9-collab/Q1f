@@ -15,8 +15,8 @@ const statusConfig: Record<LiveBadgeStatus, { dot: string; wrapper: string; labe
     label: "Live",
   },
   delayed: {
-    dot: "bg-yellow-500",
-    wrapper: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    dot: "bg-warning",
+    wrapper: "bg-warning/10 text-warning dark:bg-warning/20 dark:text-warning",
     label: "Задержка",
   },
   disconnected: {

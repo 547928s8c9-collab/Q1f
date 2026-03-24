@@ -369,7 +369,7 @@ export default function AdminDashboard() {
                     user.status === "active"
                       ? "bg-emerald-500/10 text-emerald-600"
                       : user.status === "pending"
-                      ? "bg-amber-500/10 text-amber-600"
+                      ? "bg-warning/10 text-warning"
                       : "bg-rose-500/10 text-rose-600"
                   }`}
                 >
