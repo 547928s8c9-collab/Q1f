@@ -122,7 +122,7 @@ class ConservativeStrategy(AbstractStrategy):
         rsi      = talib.RSI(close, timeperiod=RSI_PERIOD)
         sma_fast = talib.SMA(close, timeperiod=SMA_FAST)
         sma_slow = talib.SMA(close, timeperiod=SMA_SLOW)
-        _, _, bb_upper = talib.BBANDS(
+        bb_upper, _, _ = talib.BBANDS(
             close,
             timeperiod=BB_PERIOD,
             nbdevup=BB_STDDEV,

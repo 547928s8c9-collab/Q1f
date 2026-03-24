@@ -145,25 +145,40 @@ class BotScheduler:
 
         try:
             side = "buy" if signal.action == Action.BUY else "sell"
-            # Derive amount from size_pct of NAV
-            latest_nav = self.engine._get_latest_nav(strategy_id)
-            if latest_nav <= 0:
-                logger.warning("[Scheduler] NAV is 0, skipping trade")
-                return False
 
-            notional = latest_nav * (signal.size_pct / 100.0)
             ticker = self.engine.exchange.fetch_ticker(signal.symbol)
             price = ticker.get("last", 0.0)
             if price <= 0:
                 logger.warning("[Scheduler] Price is 0 for %s, skipping", signal.symbol)
                 return False
 
-            amount = notional / price
+            if side == "buy":
+                latest_nav = self.engine._get_latest_nav(strategy_id)
+                if latest_nav <= 0:
+                    logger.warning("[Scheduler] NAV is 0, skipping trade")
+                    return False
+                notional = latest_nav * (signal.size_pct / 100.0)
+                amount = notional / price
+            else:
+                asset = signal.symbol.split("/")[0]
+                balance = self.engine.exchange.fetch_balance()
+                asset_info = balance.get(asset)
+                held = float(asset_info.get("free", 0.0)) if isinstance(asset_info, dict) else 0.0
+                if held <= 0:
+                    logger.warning("[Scheduler] No %s held, skipping sell", asset)
+                    return False
+                sell_pct = min(signal.size_pct / 100.0, 1.0)
+                amount = held * sell_pct
+
+            if amount <= 0:
+                return False
+
+            notional_display = amount * price
 
             logger.info(
                 "[Scheduler] Placing %s %s  amount=%.6f  price=%.2f  "
                 "notional=%.2f USDT  reason=%s",
-                side.upper(), signal.symbol, amount, price, notional, signal.reason,
+                side.upper(), signal.symbol, amount, price, notional_display, signal.reason,
             )
 
             order = self.engine.exchange.place_order(

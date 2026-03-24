@@ -89,7 +89,7 @@ class BalancedStrategy(AbstractStrategy):
 
         rsi      = talib.RSI(close, timeperiod=RSI_PERIOD)
         sma_fast = talib.SMA(close, timeperiod=SMA_FAST)
-        _, _, bb_upper = talib.BBANDS(close, timeperiod=BB_PERIOD, nbdevup=BB_STDDEV, nbdevdn=BB_STDDEV)
+        bb_upper, _, _ = talib.BBANDS(close, timeperiod=BB_PERIOD, nbdevup=BB_STDDEV, nbdevdn=BB_STDDEV)
 
         price   = close[-1]
         rsi_val = float(rsi[-1])
