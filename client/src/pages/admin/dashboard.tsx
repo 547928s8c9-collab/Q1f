@@ -367,10 +367,10 @@ export default function AdminDashboard() {
                 <span
                   className={`text-xs font-medium px-2 py-1 rounded-full ${
                     user.status === "active"
-                      ? "bg-emerald-500/10 text-emerald-600"
+                      ? "bg-positive/10 text-positive"
                       : user.status === "pending"
                       ? "bg-warning/10 text-warning"
-                      : "bg-rose-500/10 text-rose-600"
+                      : "bg-destructive/10 text-destructive"
                   }`}
                 >
                   {user.status === "active" ? "Активен" : user.status === "pending" ? "На проверке" : "Заблокирован"}

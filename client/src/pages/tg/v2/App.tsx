@@ -338,7 +338,7 @@ export default function TelegramMiniAppV2() {
                     <span
                       className={cn(
                         "text-xs font-medium tabular-nums",
-                        BigInt(dailyPnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                        BigInt(dailyPnlMinor) >= 0n ? "text-positive" : "text-negative"
                       )}
                     >
                       {BigInt(dailyPnlMinor) >= 0n ? "+" : ""}
@@ -394,7 +394,7 @@ export default function TelegramMiniAppV2() {
                           <span
                             className={cn(
                               "tabular-nums",
-                              BigInt(strategy.pnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                              BigInt(strategy.pnlMinor) >= 0n ? "text-positive" : "text-negative"
                             )}
                           >
                             {BigInt(strategy.pnlMinor) >= 0n ? "+" : ""}
@@ -405,7 +405,7 @@ export default function TelegramMiniAppV2() {
                       <SparklineSVG
                         points={buildSparklinePoints(strategy.sparkline)}
                         className="h-12 w-32"
-                        strokeClassName={BigInt(strategy.pnlMinor) >= 0n ? "stroke-emerald-500" : "stroke-rose-500"}
+                        strokeClassName={BigInt(strategy.pnlMinor) >= 0n ? "stroke-positive" : "stroke-negative"}
                       />
                     </CardContent>
                   </Card>
@@ -478,7 +478,7 @@ export default function TelegramMiniAppV2() {
                       <SparklineSVG
                         points={buildSparklinePoints(strategy.sparkline)}
                         className="h-12 w-full"
-                        strokeClassName={BigInt(strategy.pnlMinor) >= 0n ? "stroke-emerald-500" : "stroke-rose-500"}
+                        strokeClassName={BigInt(strategy.pnlMinor) >= 0n ? "stroke-positive" : "stroke-negative"}
                       />
                     </CardContent>
                   </Card>
@@ -510,7 +510,7 @@ export default function TelegramMiniAppV2() {
                   <p
                     className={cn(
                       "font-medium tabular-nums",
-                      BigInt(strategyDetailQuery.data.pnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                      BigInt(strategyDetailQuery.data.pnlMinor) >= 0n ? "text-positive" : "text-negative"
                     )}
                   >
                     {BigInt(strategyDetailQuery.data.pnlMinor) >= 0n ? "+" : ""}
@@ -537,7 +537,7 @@ export default function TelegramMiniAppV2() {
                 <SparklineSVG
                   points={equitySeriesPoints}
                   className="h-20 w-full"
-                  strokeClassName={BigInt(strategyDetailQuery.data.pnlMinor) >= 0n ? "stroke-emerald-500" : "stroke-rose-500"}
+                  strokeClassName={BigInt(strategyDetailQuery.data.pnlMinor) >= 0n ? "stroke-positive" : "stroke-negative"}
                   height={80}
                 />
               </CardContent>
@@ -591,7 +591,7 @@ export default function TelegramMiniAppV2() {
                     <span
                       className={cn(
                         "text-sm font-semibold tabular-nums",
-                        BigInt(trade.netPnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                        BigInt(trade.netPnlMinor) >= 0n ? "text-positive" : "text-negative"
                       )}
                     >
                       {BigInt(trade.netPnlMinor) >= 0n ? "+" : ""}
@@ -642,7 +642,7 @@ export default function TelegramMiniAppV2() {
                       <p
                         className={cn(
                           "text-sm font-semibold tabular-nums",
-                          BigInt(trade.netPnlMinor) >= 0n ? "text-emerald-500" : "text-rose-500"
+                          BigInt(trade.netPnlMinor) >= 0n ? "text-positive" : "text-negative"
                         )}
                       >
                         {BigInt(trade.netPnlMinor) >= 0n ? "+" : ""}

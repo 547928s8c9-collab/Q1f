@@ -10,8 +10,8 @@ interface LiveBadgeProps {
 
 const statusConfig: Record<LiveBadgeStatus, { dot: string; wrapper: string; label: string }> = {
   connected: {
-    dot: "bg-green-500",
-    wrapper: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    dot: "bg-positive",
+    wrapper: "bg-positive/10 text-positive",
     label: "Live",
   },
   delayed: {
@@ -20,8 +20,8 @@ const statusConfig: Record<LiveBadgeStatus, { dot: string; wrapper: string; labe
     label: "Задержка",
   },
   disconnected: {
-    dot: "bg-gray-400",
-    wrapper: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    dot: "bg-muted-foreground",
+    wrapper: "bg-muted text-muted-foreground",
     label: "Офлайн",
   },
 };

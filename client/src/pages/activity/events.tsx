@@ -70,7 +70,7 @@ function DailyPnlRow({ event }: { event: EventData }) {
     <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
       <div className={cn(
         "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
-        positive ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500",
+        positive ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative",
       )}>
         <Icon className="h-4 w-4" />
       </div>
@@ -79,7 +79,7 @@ function DailyPnlRow({ event }: { event: EventData }) {
           <p className="text-sm font-medium">{EVENT_LABELS.daily_pnl}</p>
           <span className={cn(
             "text-sm font-semibold tabular-nums",
-            positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+            positive ? "text-positive" : "text-negative",
           )}>
             {positive ? "+" : "−"}{Math.abs(amount).toFixed(2)} USDT
           </span>
@@ -108,8 +108,8 @@ function TradeEventRow({ event }: { event: EventData }) {
       <div className={cn(
         "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
         isClose
-          ? positive ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
-          : "bg-blue-500/10 text-blue-500",
+          ? positive ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative"
+          : "bg-primary/10 text-primary",
       )}>
         <Icon className="h-4 w-4" />
       </div>
@@ -119,7 +119,7 @@ function TradeEventRow({ event }: { event: EventData }) {
           {isClose && (
             <span className={cn(
               "text-sm font-semibold tabular-nums",
-              positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
+              positive ? "text-positive" : "text-negative",
             )}>
               {positive ? "+" : ""}{pnl.toFixed(2)} USDT
             </span>

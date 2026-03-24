@@ -31,8 +31,8 @@ function ProfitToastItem({ toast, onRemove }: { toast: ProfitToast; onRemove: (i
       className={cn(
         "pointer-events-none select-none font-mono text-sm font-bold px-3 py-1.5 rounded-md shadow-lg transition-all duration-500 ease-out whitespace-nowrap",
         isProfit
-          ? "text-emerald-400 bg-emerald-950/80 border border-emerald-800/50"
-          : "text-red-400 bg-red-950/80 border border-red-800/50",
+          ? "text-positive bg-positive/10 border border-positive/20"
+          : "text-negative bg-negative/10 border border-negative/20",
         visible
           ? "opacity-100 translate-y-0"
           : "opacity-0 -translate-y-4"

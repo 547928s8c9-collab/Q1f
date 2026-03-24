@@ -90,7 +90,7 @@ export function DepositSheet({ open, onClose }: DepositSheetProps) {
                 className="shrink-0 text-muted-foreground"
               >
                 {copied ? (
-                  <Check className="h-4 w-4 text-emerald-500" />
+                  <Check className="h-4 w-4 text-positive" />
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}

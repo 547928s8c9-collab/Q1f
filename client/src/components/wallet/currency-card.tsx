@@ -22,13 +22,13 @@ const currencyConfig = {
     name: "Tether",
     network: "TRC20",
     icon: "₮",
-    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    color: "bg-positive/10 text-positive",
   },
   RUB: {
     name: "Российский рубль",
     network: "Банковский перевод",
     icon: "₽",
-    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    color: "bg-primary/10 text-primary",
   },
 };
 

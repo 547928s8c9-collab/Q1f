@@ -168,7 +168,7 @@ export default function DepositCard() {
             </div>
           )}
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded border text-xs font-bold text-blue-700 border-blue-300 bg-blue-50">VISA</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-primary bg-primary/10">VISA</span>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-warning bg-warning/10">MC</span>
           </div>
           <Button

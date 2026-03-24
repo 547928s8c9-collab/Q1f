@@ -1304,10 +1304,10 @@ function TradeDetailsContent({
               <div className="flex flex-col items-center">
                 <div className={cn(
                   "w-2 h-2 rounded-full",
-                  event.type === "TRADE_INTENT" ? "bg-blue-500" :
+                  event.type === "TRADE_INTENT" ? "bg-primary" :
                   event.type === "ORDER_PLACED" ? "bg-warning" :
-                  event.type === "FILLED" ? "bg-green-500" :
-                  event.type === "CLOSED" ? "bg-red-500" : "bg-gray-500"
+                  event.type === "FILLED" ? "bg-positive" :
+                  event.type === "CLOSED" ? "bg-destructive" : "bg-muted-foreground"
                 )} />
                 {index < sortedEvents.length - 1 && (
                   <div className="w-px h-8 bg-border mt-1" />

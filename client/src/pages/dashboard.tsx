@@ -268,8 +268,8 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="dashboardGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(24, 85%, 48%)" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="hsl(24, 85%, 48%)" stopOpacity={0} />
+                    <stop offset="5%" stopColor="hsl(211, 100%, 45%)" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="hsl(211, 100%, 45%)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <XAxis
@@ -309,7 +309,7 @@ export default function Dashboard() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="hsl(24, 85%, 48%)"
+                  stroke="hsl(211, 100%, 45%)"
                   strokeWidth={2}
                   fill="url(#dashboardGradient)"
                 />
@@ -522,11 +522,11 @@ function LatestActivityWidget() {
   };
 
   const getEventColor = (type: string, severity: string) => {
-    if (severity === "error") return "text-red-500 bg-red-500/10";
+    if (severity === "error") return "text-destructive bg-destructive/10";
     if (severity === "warn") return "text-warning bg-warning/10";
-    if (type === "TICK_OK") return "text-green-500 bg-green-500/10";
-    if (type === "TRADE_OPEN") return "text-blue-500 bg-blue-500/10";
-    if (type === "TRADE_CLOSE") return "text-purple-500 bg-purple-500/10";
+    if (type === "TICK_OK") return "text-positive bg-positive/10";
+    if (type === "TRADE_OPEN") return "text-primary bg-primary/10";
+    if (type === "TRADE_CLOSE") return "text-negative bg-negative/10";
     return "text-muted-foreground bg-muted";
   };
 

@@ -32,11 +32,11 @@ const riskFactors = [
 function getRiskColor(level: string) {
   switch (level) {
     case "Низкий":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      return "bg-positive/10 text-positive";
     case "Средний":
       return "bg-warning/10 text-warning dark:bg-warning/20 dark:text-warning";
     case "Высокий":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+      return "bg-destructive/10 text-destructive";
     default:
       return "bg-muted text-muted-foreground";
   }
