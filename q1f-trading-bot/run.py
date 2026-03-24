@@ -4,14 +4,15 @@ Entry point for the Q1F crypto trading bot.
 
 Modes
 -----
-  python run.py          – run one-shot test (original behaviour)
-  python run.py --live   – start the full scheduler loop (blocks until Ctrl-C)
+  python run.py          – run one-shot test (place a single market order)
+  python run.py --live   – start the full scheduler loop + Telegram bot
 
 Scheduler mode
 --------------
   • Strategy ticks every SCHEDULE_INTERVAL_MIN minutes (default 15)
   • NAV snapshot updated after each tick
   • Daily report at 23:59 UTC
+  • Telegram bot: /status, /halt, /resume, /backtest
 """
 import logging
 import sys
@@ -32,10 +33,15 @@ from bot.adapters.bybit_adapter import BybitAdapter
 from bot.pnl.engine import PnLEngine
 
 
-STRATEGY_ID   = "conservative_dca"
-STRATEGY_NAME = "Conservative DCA Strategy"
-TEST_SYMBOL   = "BTC/USDT"
-TEST_AMOUNT   = 0.001  # BTC
+# All strategies the bot manages
+STRATEGIES = {
+    "conservative_dca": "Conservative DCA Strategy",
+    "balanced_v1":      "Balanced Strategy",
+    "aggressive_v1":    "Aggressive Strategy",
+}
+
+TEST_SYMBOL = "BTC/USDT"
+TEST_AMOUNT = 0.001  # BTC
 
 
 def main() -> None:
@@ -43,7 +49,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Q1F Trading Bot")
     parser.add_argument(
         "--live", action="store_true",
-        help="Start the full scheduler loop (blocks until Ctrl-C)"
+        help="Start the full scheduler loop + Telegram bot (blocks until Ctrl-C)"
     )
     args = parser.parse_args()
 
@@ -57,7 +63,8 @@ def main() -> None:
     print("[Config] OK")
 
     init_db()
-    ensure_strategy(STRATEGY_ID, STRATEGY_NAME)
+    for sid, name in STRATEGIES.items():
+        ensure_strategy(sid, name)
 
     # ------------------------------------------------------------------
     # 2. Connect to Bybit
@@ -80,16 +87,59 @@ def main() -> None:
         print("  (no non-zero balances found)")
 
     # ------------------------------------------------------------------
-    # 4a. Live scheduler mode
+    # 4a. Live scheduler mode + Telegram bot
     # ------------------------------------------------------------------
     if args.live:
         from bot.scheduler import BotScheduler
-        print(f"\n[Scheduler] Starting live loop for strategy={STRATEGY_ID!r} ...")
+        from bot.telegram_bot import (
+            create_bot_application,
+            start_bot_polling,
+            is_strategy_halted,
+        )
+
+        # Start Telegram bot in background thread
+        telegram_started = False
+        if config.TELEGRAM_TOKEN:
+            try:
+                tg_app = create_bot_application()
+                start_bot_polling(tg_app)
+                telegram_started = True
+                print("[Telegram] Bot started — /status, /halt, /resume, /backtest")
+            except Exception as exc:
+                print(f"[Telegram] Failed to start: {exc}")
+        else:
+            print("[Telegram] TELEGRAM_TOKEN not set, skipping bot")
+
+        # Signal handler that respects halt state
+        def signal_handler(strategy_id: str) -> list:
+            if is_strategy_halted(strategy_id):
+                logging.getLogger("run").info(
+                    "[Scheduler] Strategy %s is HALTED, skipping tick", strategy_id
+                )
+                return []
+
+            from bot.strategies.conservative import ConservativeStrategy
+            from bot.strategies.balanced import BalancedStrategy
+            from bot.strategies.aggressive import AggressiveStrategy
+
+            strategy_map = {
+                "conservative_dca": ConservativeStrategy,
+                "balanced_v1": BalancedStrategy,
+                "aggressive_v1": AggressiveStrategy,
+            }
+            cls = strategy_map.get(strategy_id)
+            if cls is None:
+                return []
+            strategy_instance = cls(exchange_adapter=exchange, db=None)
+            return strategy_instance.generate_signal()
+
+        strategy_ids = list(STRATEGIES.keys())
+        print(f"\n[Scheduler] Starting live loop for strategies: {strategy_ids}")
 
         scheduler = BotScheduler(
             engine=engine,
-            strategy_ids=[STRATEGY_ID],
-            signal_handler=None,  # replace with ConservativeStrategy.generate_signal
+            strategy_ids=strategy_ids,
+            signal_handler=signal_handler,
         )
         scheduler.start()  # blocks
         return
@@ -97,6 +147,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 4b. One-shot test (original behaviour)
     # ------------------------------------------------------------------
+    strategy_id = "conservative_dca"
     print(f"\n[Order] Placing market BUY {TEST_AMOUNT} {TEST_SYMBOL} ...")
     order = exchange.place_order(
         symbol=TEST_SYMBOL,
@@ -114,7 +165,7 @@ def main() -> None:
     cost_usdt: float = order.get("cost") or TEST_AMOUNT * filled_price
 
     trade_id = insert_trade(
-        strategy_id=STRATEGY_ID,
+        strategy_id=strategy_id,
         symbol=TEST_SYMBOL,
         side="buy",
         amount=TEST_AMOUNT,
@@ -125,7 +176,7 @@ def main() -> None:
     print(f"[DB] Trade recorded: row_id={trade_id}  price={filled_price:.2f}  cost={cost_usdt:.4f} USDT")
 
     # Update NAV snapshot after the trade
-    nav = engine.post_trade_nav_update(STRATEGY_ID)
+    nav = engine.post_trade_nav_update(strategy_id)
     print(f"[PnL] NAV updated: {nav:.2f} USDT")
 
     print("\nBot skeleton OK")
