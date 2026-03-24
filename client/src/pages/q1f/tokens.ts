@@ -25,6 +25,20 @@ export const t = {
     usdt: "#26A17B",
     sol: "#9945FF",
     ton: "#0098EA",
+    // Interaction tokens
+    white: "#FFFFFF",
+    accentShadow: "rgba(0,113,227,0.3)",
+    secondaryHover: "rgba(0,0,0,0.06)",
+    ghostHover: "rgba(0,0,0,0.04)",
+    dangerHover: "#FF453A",
+    // Dark surface tokens (for dark gradient cards)
+    darkSurface2: "#2C2C2E",
+    accentDecorative: "rgba(0,113,227,0.12)",
+    positiveDecorative: "rgba(52,199,89,0.08)",
+    onDark50: "rgba(255,255,255,0.5)",
+    onDark40: "rgba(255,255,255,0.4)",
+    // Avatar gradient
+    avatarGradient: "#5AC8FA",
   },
   radius: { xs: 8, sm: 12, md: 16, lg: 20, xl: 24, pill: 9999 },
   space: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32, section: 48 },

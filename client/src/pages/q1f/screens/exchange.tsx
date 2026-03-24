@@ -49,7 +49,7 @@ export function ExchangeScreen() {
             >
               {mode === "buy" ? (
                 <>
-                  <span style={{ fontSize: 18 }}>🇰🇬</span>
+                  <span style={{ fontSize: t.font.size.lg }}>🇰🇬</span>
                   <span style={{ fontWeight: t.font.weight.semibold, fontSize: t.font.size.md }}>KGS</span>
                 </>
               ) : (
@@ -72,7 +72,7 @@ export function ExchangeScreen() {
             style={{
               width: 44,
               height: 44,
-              borderRadius: 22,
+              borderRadius: t.radius.pill,
               background: t.color.surface,
               border: `2px solid ${t.color.border}`,
               display: "flex",
@@ -119,7 +119,7 @@ export function ExchangeScreen() {
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 18 }}>🇰🇬</span>
+                  <span style={{ fontSize: t.font.size.lg }}>🇰🇬</span>
                   <span style={{ fontWeight: t.font.weight.semibold, fontSize: t.font.size.md }}>KGS</span>
                 </>
               )}

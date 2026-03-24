@@ -25,8 +25,8 @@ export function AIInvestScreen() {
       <Card
         style={{
           marginBottom: t.space.xxl,
-          background: `linear-gradient(135deg, ${t.color.text} 0%, #2C2C2E 100%)`,
-          color: "#FFF",
+          background: `linear-gradient(135deg, ${t.color.text} 0%, ${t.color.darkSurface2} 100%)`,
+          color: t.color.white,
           position: "relative",
           overflow: "hidden",
         }}
@@ -38,8 +38,8 @@ export function AIInvestScreen() {
             right: -40,
             width: 120,
             height: 120,
-            borderRadius: 60,
-            background: "rgba(0,113,227,0.12)",
+            borderRadius: t.radius.pill,
+            background: t.color.accentDecorative,
           }}
         />
         <div
@@ -49,31 +49,31 @@ export function AIInvestScreen() {
             right: 40,
             width: 80,
             height: 80,
-            borderRadius: 40,
-            background: "rgba(52,199,89,0.08)",
+            borderRadius: t.radius.pill,
+            background: t.color.positiveDecorative,
           }}
         />
 
-        <p style={{ fontSize: t.font.size.sm, color: "rgba(255,255,255,0.5)", margin: `0 0 ${t.space.sm}px` }}>
+        <p style={{ fontSize: t.font.size.sm, color: t.color.onDark50, margin: `0 0 ${t.space.sm}px` }}>
           Ваш AI-портфель
         </p>
         <div style={{ display: "flex", alignItems: "baseline", gap: t.space.sm, marginBottom: t.space.xl }}>
           <span data-testid="text-ai-balance" style={{ fontSize: t.font.size.hero, fontWeight: t.font.weight.bold, letterSpacing: -1 }}>
-            $4 231<span style={{ color: "rgba(255,255,255,0.5)" }}>.60</span>
+            $4 231<span style={{ color: t.color.onDark50 }}>.60</span>
           </span>
           <Badge variant="positive" style={{ background: t.color.positiveLight }}>+$842.60</Badge>
         </div>
         <div style={{ display: "flex", gap: t.space.xxxl }}>
           <div>
-            <p style={{ fontSize: t.font.size.xs, color: "rgba(255,255,255,0.4)", margin: 0 }}>Доходность</p>
+            <p style={{ fontSize: t.font.size.xs, color: t.color.onDark40, margin: 0 }}>Доходность</p>
             <p style={{ fontSize: t.font.size.lg, fontWeight: t.font.weight.semibold, margin: "4px 0 0" }}>+24.8%</p>
           </div>
           <div>
-            <p style={{ fontSize: t.font.size.xs, color: "rgba(255,255,255,0.4)", margin: 0 }}>Стратегия</p>
+            <p style={{ fontSize: t.font.size.xs, color: t.color.onDark40, margin: 0 }}>Стратегия</p>
             <p style={{ fontSize: t.font.size.lg, fontWeight: t.font.weight.semibold, margin: "4px 0 0" }}>Сбалансированная</p>
           </div>
           <div>
-            <p style={{ fontSize: t.font.size.xs, color: "rgba(255,255,255,0.4)", margin: 0 }}>Срок</p>
+            <p style={{ fontSize: t.font.size.xs, color: t.color.onDark40, margin: 0 }}>Срок</p>
             <p style={{ fontSize: t.font.size.lg, fontWeight: t.font.weight.semibold, margin: "4px 0 0" }}>3 мес</p>
           </div>
         </div>
@@ -89,7 +89,7 @@ export function AIInvestScreen() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: t.space.md }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: t.space.sm, marginBottom: t.space.xs }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 4, background: s.color }} />
+                  <div style={{ width: 8, height: 8, borderRadius: t.radius.pill, background: s.color }} />
                   <h4
                     data-testid={`strategy-name-${s.name}`}
                     style={{ margin: 0, fontSize: t.font.size.lg, fontWeight: t.font.weight.semibold, letterSpacing: -0.2 }}
