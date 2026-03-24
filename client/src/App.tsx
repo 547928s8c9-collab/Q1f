@@ -46,9 +46,9 @@ const AdminDashboard = React.lazy(() => import("@/pages/admin/dashboard"));
 const AdminManagementFees = React.lazy(() => import("@/pages/admin/management-fees"));
 const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
 const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
-const Q1FApp = React.lazy(() => import("@/pages/q1f/index"));
 import { Loader2 } from "lucide-react";
 import Risk from "@/pages/risk";
+const Q1FApp = React.lazy(() => import("@/pages/q1f/index"));
 import { FloatingProfitToastContainer } from "@/components/floating-profit-toast";
 import { useTradeToasts } from "@/hooks/use-trade-toasts";
 
