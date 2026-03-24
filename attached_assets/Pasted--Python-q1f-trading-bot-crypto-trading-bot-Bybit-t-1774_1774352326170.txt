@@ -1,0 +1,52 @@
+Проверь работоспособность Python-проекта q1f-trading-bot. Это автономный crypto trading bot (Bybit testnet + ccxt + SQLite).
+
+ПОРЯДОК ПРОВЕРКИ:
+
+1. ЗАВИСИМОСТИ
+- Проверь requirements.txt — все пакеты установлены?
+- Запусти: pip install -r requirements.txt
+- Если ta-lib не ставится (нужна C-библиотека) — замени на ta (pip install ta) или pandas-ta. Перепиши импорты.
+- Проверь что ccxt, pandas, python-dotenv, apscheduler импортируются без ошибок
+
+2. КОНФИГУРАЦИЯ
+- Проверь .env.example — все переменные описаны?
+- Создай .env из .env.example с тестовыми значениями:
+  BYBIT_API_KEY=test
+  BYBIT_SECRET=test
+  BYBIT_TESTNET=true
+  TELEGRAM_TOKEN=test
+  TELEGRAM_CHAT_ID=test
+  INITIAL_CAPITAL=10000
+  STRATEGIES=conservative,balanced,aggressive
+- Проверь что config.py загружает .env без ошибок
+
+3. БАЗА ДАННЫХ
+- Запусти init_db() — таблицы создаются?
+- Проверь что все 5 таблиц существуют: strategies, trades, nav_snapshots, client_positions, daily_reports
+- Попробуй insert и select — работает?
+
+4. ИМПОРТЫ И СТРУКТУРА
+- Проверь что ВСЕ файлы импортируются без ошибок:
+  from bot.config import Config (или как реализовано)
+  from bot.db.database import ...
+  from bot.db.models import ...
+  from bot.adapters.exchange_base import ...
+  from bot.adapters.bybit_adapter import ...
+- Если есть circular imports — исправь
+
+5. АДАПТЕРЫ
+- Проверь что ExchangeAdapter (ABC) имеет все методы: connect, fetch_ohlcv, fetch_balance, place_order, fetch_ticker, cancel_all_orders
+- Проверь что BybitAdapter наследует ExchangeAdapter и реализует все методы
+- Проверь что ccxt.bybit инициализируется с sandbox=True без ошибки (без реального API key)
+
+6. DRY RUN
+- Запусти python run.py в сухом режиме (без реального подключения к Bybit)
+- Если run.py падает — исправь и покажи что именно было сломано
+- Если run.py требует реальный API key для старта — добавь try/except чтобы бот показывал понятную ошибку вместо traceback
+
+7. ОТЧЁТ
+Выведи:
+- Список файлов проекта (tree)
+- Статус каждой проверки: ✅ OK или ❌ FAIL + что исправил
+- Список найденных проблем и как починил
+- Что нужно сделать руками (например: "зарегистрируйся на testnet.bybit.com и вставь API key в .env")
