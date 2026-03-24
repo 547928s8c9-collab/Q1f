@@ -89,7 +89,7 @@ export function WalletScreen() {
               style={{
                 width: 40,
                 height: 40,
-                borderRadius: 20,
+                borderRadius: t.radius.pill,
                 background: t.color.bgSecondary,
                 display: "flex",
                 alignItems: "center",

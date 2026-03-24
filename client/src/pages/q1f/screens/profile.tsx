@@ -18,13 +18,13 @@ export function ProfileScreen() {
           style={{
             width: 64,
             height: 64,
-            borderRadius: 32,
-            background: `linear-gradient(135deg, ${t.color.accent}, #5AC8FA)`,
+            borderRadius: t.radius.pill,
+            background: `linear-gradient(135deg, ${t.color.accent}, ${t.color.avatarGradient})`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            color: "#FFF",
-            fontSize: 26,
+            color: t.color.white,
+            fontSize: t.font.size.xxl,
             fontWeight: t.font.weight.bold,
             flexShrink: 0,
           }}

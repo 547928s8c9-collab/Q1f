@@ -117,22 +117,22 @@ export function Button({ children, variant = "primary", size = "md", icon, style
   const variants = {
     primary: {
       bg: hovered ? t.color.accentHover : t.color.accent,
-      color: "#FFFFFF",
-      shadow: hovered ? "0 4px 12px rgba(0,113,227,0.3)" : "none",
+      color: t.color.white,
+      shadow: hovered ? `0 4px 12px ${t.color.accentShadow}` : "none",
     },
     secondary: {
-      bg: hovered ? "rgba(0,0,0,0.06)" : t.color.bgSecondary,
+      bg: hovered ? t.color.secondaryHover : t.color.bgSecondary,
       color: t.color.text,
       shadow: "none",
     },
     ghost: {
-      bg: hovered ? "rgba(0,0,0,0.04)" : "transparent",
+      bg: hovered ? t.color.ghostHover : "transparent",
       color: t.color.accent,
       shadow: "none",
     },
     danger: {
-      bg: hovered ? "#FF453A" : t.color.negative,
-      color: "#FFFFFF",
+      bg: hovered ? t.color.dangerHover : t.color.negative,
+      color: t.color.white,
       shadow: "none",
     },
   };
@@ -238,7 +238,7 @@ export function CryptoIcon({ symbol, color, size = 40 }: CryptoIconProps) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "#FFF",
+        color: t.color.white,
         fontWeight: 700,
         fontSize: size * 0.4,
         flexShrink: 0,

@@ -100,22 +100,13 @@ export function PortfolioScreen() {
         <h3 style={{ fontSize: t.font.size.xl, fontWeight: t.font.weight.semibold, margin: 0, letterSpacing: -0.3 }}>
           Активы
         </h3>
-        <button
+        <Button
           data-testid="link-all-assets"
-          style={{
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            padding: 0,
-            fontFamily: "inherit",
-            color: t.color.accent,
-            fontSize: t.font.size.md,
-            fontWeight: t.font.weight.medium,
-            transition: `all ${t.transition.fast}`,
-          }}
+          variant="ghost"
+          size="sm"
         >
           Все →
-        </button>
+        </Button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
