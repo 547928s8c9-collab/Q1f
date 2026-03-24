@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { useSetPageTitle } from "@/hooks/use-page-title";
 import {
   TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpFromLine,
   RefreshCw, Wallet, Receipt, BarChart2,
@@ -160,6 +161,7 @@ function ManagementEventRow({ event }: { event: EventData }) {
 // ── page ───────────────────────────────────────────────────────────
 
 export default function ActivityEvents() {
+  useSetPageTitle("Активность");
   const { data, isLoading } = useQuery<{ events: EventData[] }>({
     queryKey: ["/api/activity"],
     queryFn: async () => {

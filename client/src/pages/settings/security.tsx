@@ -44,6 +44,8 @@ export default function SecuritySettings() {
   const [addAddressDialog, setAddAddressDialog] = useState(false);
   const [antiPhishingCode, setAntiPhishingCode] = useState("");
   const [newAddress, setNewAddress] = useState({ address: "", label: "" });
+  const [addressFormError, setAddressFormError] = useState("");
+  const [antiPhishingError, setAntiPhishingError] = useState("");
 
   const { data: bootstrap, isLoading: bootstrapLoading } = useQuery<BootstrapResponse>({
     queryKey: ["/api/bootstrap"],
@@ -131,6 +133,9 @@ export default function SecuritySettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({ title: "Настройки 2FA обновлены" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Не удалось обновить 2FA", description: error.message, variant: "destructive" });
+    },
   });
 
   const toggleWhitelistMutation = useMutation({
@@ -141,6 +146,9 @@ export default function SecuritySettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({ title: "Настройки белого списка обновлены" });
     },
+    onError: (error: Error) => {
+      toast({ title: "Не удалось обновить белый список", description: error.message, variant: "destructive" });
+    },
   });
 
   const setAddressDelayMutation = useMutation({
@@ -150,6 +158,9 @@ export default function SecuritySettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       toast({ title: "Задержка для адреса обновлена" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Не удалось обновить задержку", description: error.message, variant: "destructive" });
     },
   });
 
@@ -162,6 +173,7 @@ export default function SecuritySettings() {
       toast({ title: "Антифишинговый код обновлён" });
       setAntiPhishingDialog(false);
       setAntiPhishingCode("");
+      setAntiPhishingError("");
     },
   });
 
@@ -174,6 +186,7 @@ export default function SecuritySettings() {
       toast({ title: "Адрес добавлен в белый список" });
       setAddAddressDialog(false);
       setNewAddress({ address: "", label: "" });
+      setAddressFormError("");
     },
     onError: (error: Error) => {
       toast({ title: "Не удалось добавить адрес", description: error.message, variant: "destructive" });
@@ -223,6 +236,7 @@ export default function SecuritySettings() {
                 type="toggle"
                 value={bootstrap?.security.twoFactorEnabled ?? false}
                 onChange={(enabled) => toggle2FAMutation.mutate(enabled)}
+                disabled={toggle2FAMutation.isPending}
               />
               <SecuritySettingRow
                 icon={<Eye className="w-5 h-5 text-muted-foreground" />}
@@ -244,6 +258,7 @@ export default function SecuritySettings() {
                 type="toggle"
                 value={bootstrap?.security.whitelistEnabled ?? false}
                 onChange={(enabled) => toggleWhitelistMutation.mutate(enabled)}
+                disabled={toggleWhitelistMutation.isPending}
               />
               <div className="p-4">
                 <div className="flex items-center justify-between">
@@ -259,6 +274,7 @@ export default function SecuritySettings() {
                   <Select
                     value={String(bootstrap?.security.addressDelay || 0)}
                     onValueChange={(value) => setAddressDelayMutation.mutate(parseInt(value))}
+                    disabled={setAddressDelayMutation.isPending}
                   >
                     <SelectTrigger className="w-32" data-testid="select-address-delay">
                       <SelectValue />
@@ -417,9 +433,24 @@ export default function SecuritySettings() {
                 data-testid="input-anti-phishing-code"
               />
             </div>
+            {antiPhishingError && (
+              <p className="text-sm text-destructive">{antiPhishingError}</p>
+            )}
             <Button
               className="w-full"
-              onClick={() => setAntiPhishingMutation.mutate(antiPhishingCode)}
+              onClick={() => {
+                setAntiPhishingError("");
+                const code = antiPhishingCode.trim();
+                if (code.length < 4) {
+                  setAntiPhishingError("Минимальная длина кода — 4 символа");
+                  return;
+                }
+                if (code.length > 32) {
+                  setAntiPhishingError("Максимальная длина кода — 32 символа");
+                  return;
+                }
+                setAntiPhishingMutation.mutate(code);
+              }}
               disabled={setAntiPhishingMutation.isPending || !antiPhishingCode}
               data-testid="button-save-anti-phishing"
             >
@@ -460,9 +491,24 @@ export default function SecuritySettings() {
                 data-testid="input-whitelist-address"
               />
             </div>
+            {addressFormError && (
+              <p className="text-sm text-destructive">{addressFormError}</p>
+            )}
             <Button
               className="w-full"
-              onClick={() => addAddressMutation.mutate(newAddress)}
+              onClick={() => {
+                setAddressFormError("");
+                const addr = newAddress.address.trim();
+                if (!addr) {
+                  setAddressFormError("Введите адрес кошелька");
+                  return;
+                }
+                if (!addr.startsWith("T") || addr.length !== 34) {
+                  setAddressFormError("Некорректный TRC20-адрес (должен начинаться с T и содержать 34 символа)");
+                  return;
+                }
+                addAddressMutation.mutate({ ...newAddress, address: addr });
+              }}
               disabled={addAddressMutation.isPending || !newAddress.address}
               data-testid="button-add-whitelist-address"
             >
