@@ -7,17 +7,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSetPageTitle } from "@/hooks/use-page-title";
-import { LifeBuoy } from "lucide-react";
-import type { BootstrapResponse } from "@shared/schema";
+import { LifeBuoy, MessageSquare } from "lucide-react";
+
+interface SupportTicket {
+  id: string;
+  subject: string;
+  status: string;
+}
 
 export default function SettingsSupport() {
   useSetPageTitle("Поддержка");
   const [, navigate] = useLocation();
-  const { isLoading, error } = useQuery<BootstrapResponse>({
-    queryKey: ["/api/bootstrap"],
+
+  const { isLoading, error, data } = useQuery<{ tickets: SupportTicket[] }>({
+    queryKey: ["/api/support/tickets"],
+    // Если эндпоинт вернёт 404 — обрабатываем как пустой список
+    retry: false,
   });
 
-  const openRequests: Array<{ id: string; subject: string }> = [];
+  // TODO: Реализовать API /api/support/tickets для получения обращений
+  const openRequests: SupportTicket[] = data?.tickets ?? [];
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
@@ -34,23 +43,56 @@ export default function SettingsSupport() {
           <Skeleton className="h-24 w-full" />
         </Card>
       ) : error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Не удалось загрузить поддержку</AlertTitle>
-          <AlertDescription>
-            {error instanceof Error ? error.message : "Пожалуйста, попробуйте позже."}
-          </AlertDescription>
-        </Alert>
+        <Card>
+          <EmptyState
+            icon={LifeBuoy}
+            title="Нет открытых обращений"
+            description="Когда вы свяжетесь с нами, ваши обращения в поддержку появятся здесь."
+          >
+            <div className="flex flex-col gap-3 items-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate("/status")}
+              >
+                Проверить статус сервиса
+              </Button>
+              <Button
+                onClick={() => {
+                  // TODO: Открыть форму создания тикета или чат поддержки
+                  alert("Функция в разработке. Для связи с поддержкой используйте Telegram или email.");
+                }}
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Написать в поддержку
+              </Button>
+            </div>
+          </EmptyState>
+        </Card>
       ) : openRequests.length === 0 ? (
         <Card>
           <EmptyState
             icon={LifeBuoy}
             title="Нет открытых обращений"
             description="Когда вы свяжетесь с нами, ваши обращения в поддержку появятся здесь."
-            action={{
-              label: "Проверить статус сервиса",
-              onClick: () => navigate("/status"),
-            }}
-          />
+          >
+            <div className="flex flex-col gap-3 items-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate("/status")}
+              >
+                Проверить статус сервиса
+              </Button>
+              <Button
+                onClick={() => {
+                  // TODO: Открыть форму создания тикета или чат поддержки
+                  alert("Функция в разработке. Для связи с поддержкой используйте Telegram или email.");
+                }}
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Написать в поддержку
+              </Button>
+            </div>
+          </EmptyState>
         </Card>
       ) : (
         <Card className="p-6 space-y-4">
