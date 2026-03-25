@@ -79,7 +79,7 @@ interface TierStats {
   pairs: string[];
 }
 
-function computeTierStats(strategies: Strategy[]): TierStats {
+export function computeTierStats(strategies: Strategy[]): TierStats {
   if (strategies.length === 0) {
     return {
       returnRangeMin: "0",
