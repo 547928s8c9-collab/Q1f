@@ -18,6 +18,7 @@ import {
   Plus
 } from "lucide-react";
 import { DepositSheet, WithdrawSheet, TransferSheet, InvestSheet } from "@/components/operations";
+import { TIER_META, type RiskTierKey } from "@/components/strategy/tier-card";
 import { LiveQuotesBar } from "@/components/live-quotes-bar";
 import { useMarketStream } from "@/hooks/use-market-stream";
 
@@ -329,12 +330,9 @@ function StrategiesPreview({ strategies, isLoading }: { strategies?: Strategy[];
   }
 
   const getRiskColor = (tier: string) => {
-    switch (tier) {
-      case "LOW": return "bg-positive/10 text-positive";
-      case "CORE": return "bg-warning/10 text-warning";
-      case "HIGH": return "bg-negative/10 text-negative";
-      default: return "bg-muted text-muted-foreground";
-    }
+    const meta = TIER_META[tier as RiskTierKey];
+    if (!meta) return "bg-muted text-muted-foreground";
+    return `${meta.iconColor} bg-gradient-to-br ${meta.bgGradient}`;
   };
 
   return (
