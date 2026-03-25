@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { LiveBadge } from "@/components/ui/live-badge";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { formatMoney } from "@shared/schema";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -190,7 +191,7 @@ export default function Dashboard() {
           <>
             <Card className="p-4" data-testid="metric-pnl-30d">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                PnL за 30д
+                {FINANCE_LABELS.pnl30d}
               </p>
               <div className="flex items-baseline gap-1">
                 <AnimatedNumber
@@ -213,7 +214,7 @@ export default function Dashboard() {
             </Card>
             <Card className="p-4" data-testid="metric-roi-30d">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                ROI за 30д
+                {FINANCE_LABELS.roi30d}
               </p>
               <div className="flex items-baseline gap-1">
                 <AnimatedNumber
@@ -230,7 +231,7 @@ export default function Dashboard() {
               </span>
             </Card>
             <MetricCard
-              label="Макс. просадка"
+              label={FINANCE_LABELS.drawdownMax}
               value={`${(data?.metrics.maxDrawdown30dPct || 0).toFixed(2)}%`}
               trend="neutral"
             />
@@ -428,13 +429,13 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">PnL</span>
+                      <span className="text-muted-foreground">{FINANCE_LABELS.pnl}</span>
                       <span className={cn("font-medium tabular-nums", isProfitable ? "text-positive" : "text-negative")}>
                         {isProfitable ? "+" : ""}{formatMoney(pnlMinor, "USDT")} USDT
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">ROI за 30д</span>
+                      <span className="text-muted-foreground">{FINANCE_LABELS.roi30d}</span>
                       <span className={cn("font-medium tabular-nums", roiPct >= 0 ? "text-positive" : "text-negative")}>
                         {roiPct >= 0 ? "+" : ""}{roiPct.toFixed(2)}%
                       </span>
@@ -449,7 +450,7 @@ export default function Dashboard() {
                     )}
                     {liveMetric?.maxDrawdown30dBps !== undefined && liveMetric.maxDrawdown30dBps > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Макс. просадка 30д</span>
+                        <span className="text-muted-foreground">{FINANCE_LABELS.drawdownMax30d}</span>
                         <span className="font-medium tabular-nums text-muted-foreground">
                           {(liveMetric.maxDrawdown30dBps / 100).toFixed(2)}%
                         </span>

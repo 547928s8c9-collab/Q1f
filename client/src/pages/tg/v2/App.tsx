@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { formatMoney } from "@shared/schema";
 import type {
   TgActivityResponse,
@@ -356,11 +357,11 @@ export default function TelegramMiniAppV2() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">ROI 30д</p>
+                  <p className="text-muted-foreground">{FINANCE_LABELS.roi30d}</p>
                   <p className="font-medium tabular-nums">{formatBps(aggregatedMetrics.roiBps)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Макс. просадка 30д</p>
+                  <p className="text-muted-foreground">{FINANCE_LABELS.drawdownMax30d}</p>
                   <p className="font-medium tabular-nums">{formatBps(aggregatedMetrics.maxDrawdown)}</p>
                 </div>
               </CardContent>
@@ -474,7 +475,7 @@ export default function TelegramMiniAppV2() {
                           <p className="font-medium tabular-nums">{formatMinor(strategy.equityMinor)}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">ROI 30д</p>
+                          <p className="text-muted-foreground">{FINANCE_LABELS.roi30d}</p>
                           <p className="font-medium tabular-nums">{formatBps(strategy.roi30dBps)}</p>
                         </div>
                         <div>
@@ -513,7 +514,7 @@ export default function TelegramMiniAppV2() {
                   <p className="font-medium tabular-nums">{formatMinor(strategyDetailQuery.data.equityMinor)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">PnL</p>
+                  <p className="text-muted-foreground">{FINANCE_LABELS.pnl}</p>
                   <p
                     className={cn(
                       "font-medium tabular-nums",
@@ -525,11 +526,11 @@ export default function TelegramMiniAppV2() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">ROI 30д</p>
+                  <p className="text-muted-foreground">{FINANCE_LABELS.roi30d}</p>
                   <p className="font-medium tabular-nums">{formatBps(strategyDetailQuery.data.roi30dBps)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Макс. просадка 30д</p>
+                  <p className="text-muted-foreground">{FINANCE_LABELS.drawdownMax30d}</p>
                   <p className="font-medium tabular-nums">{formatBps(strategyDetailQuery.data.maxDrawdown30dBps)}</p>
                 </div>
               </CardContent>

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { platformStats } from "@/lib/platform-stats";
 import { cn } from "@/lib/utils";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { type Strategy } from "@shared/schema";
 import type { LiveMetrics } from "@/hooks/use-live-metrics";
 
@@ -187,7 +188,7 @@ export function TierCard({
             <p className="text-xs text-muted-foreground">/мес</p>
           </div>
           <div className="bg-muted/40 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Макс. просадка</p>
+            <p className="text-xs text-muted-foreground mb-1">{FINANCE_LABELS.drawdownMax}</p>
             <p className="text-base font-bold text-negative tabular-nums">
               {stats.maxDrawdown}
             </p>
@@ -294,14 +295,14 @@ export function TierCard({
                       <span className="text-muted-foreground">/мес</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Просадка </span>
+                      <span className="text-muted-foreground">{FINANCE_LABELS.drawdown} </span>
                       <span className="font-medium text-negative tabular-nums">
                         {strategy.maxDrawdown || "Н/Д"}
                       </span>
                     </div>
                     {live && live.pnlMinor !== "0" && (
                       <div>
-                        <span className="text-muted-foreground">PnL </span>
+                        <span className="text-muted-foreground">{FINANCE_LABELS.pnl} </span>
                         <span
                           className={cn(
                             "font-medium tabular-nums",

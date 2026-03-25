@@ -12,6 +12,7 @@ import { Chip } from "@/components/ui/chip";
 import { Sparkline } from "@/components/charts/sparkline";
 import { TrendingUp, Shield, Zap, AlertTriangle, ChevronRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { toMajorUnits } from "@/lib/money";
 import { type Strategy, type StrategyPerformance } from "@shared/schema";
 import { Link } from "wouter";
@@ -153,7 +154,7 @@ export function StrategyDetailsSheet({
             </p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground mb-1">Макс. просадка</p>
+            <p className="text-xs text-muted-foreground mb-1">{FINANCE_LABELS.drawdownMax}</p>
             <p className="text-lg font-semibold text-negative tabular-nums">
               {strategy.maxDrawdown || "Н/Д"}
             </p>
