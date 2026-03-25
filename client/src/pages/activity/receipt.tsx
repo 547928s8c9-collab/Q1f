@@ -84,7 +84,7 @@ export default function Receipt() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Детали транзакции" backHref="/activity" />
+      <PageHeader title="Детали транзакции" backHref="/profile" />
 
       {isLoading ? (
         <div className="space-y-4">

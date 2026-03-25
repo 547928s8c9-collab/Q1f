@@ -213,7 +213,7 @@ function InvestmentsSection({
           <p className="text-sm text-muted-foreground mb-3">
             Начните зарабатывать со стратегиями
           </p>
-          <Link href="/invest">
+          <Link href="/strategies">
             <Button size="sm" data-testid="button-start-investing">
               <TrendingUp className="w-4 h-4 mr-1" />
               Инвестировать
@@ -353,7 +353,7 @@ function ChartSection() {
           title="Нет истории портфеля"
           description="Начните инвестировать, чтобы увидеть рост вашего капитала."
         >
-          <Link href="/invest">
+          <Link href="/strategies">
             <Button data-testid="button-go-invest">Начать инвестировать</Button>
           </Link>
         </EmptyState>

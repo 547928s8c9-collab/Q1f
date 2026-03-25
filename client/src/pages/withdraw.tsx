@@ -79,7 +79,7 @@ export default function Withdraw() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Вывод USDT" subtitle="Сеть TRC20" backHref="/wallet" />
+      <PageHeader title="Вывод USDT" subtitle="Сеть TRC20" backHref="/" />
 
       {!bootstrap?.gate?.canWithdraw && (
         <Card className="p-4 mb-6 border-warning/50 bg-warning/5">

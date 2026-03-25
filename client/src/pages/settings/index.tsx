@@ -51,7 +51,7 @@ export default function Settings() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <PageHeader title="Настройки" />
+      {/* Title shown in TopBar via useSetPageTitle */}
 
       <div className="space-y-4">
         <Card className="divide-y divide-border">

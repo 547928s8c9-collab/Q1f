@@ -474,7 +474,7 @@ export default function StrategyDetail() {
       <PageHeader
         title={strategy?.name || "Стратегия"}
         subtitle={strategy?.description || undefined}
-        backHref="/invest"
+        backHref="/strategies"
       />
 
       {isLoading ? (

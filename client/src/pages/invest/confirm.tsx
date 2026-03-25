@@ -40,7 +40,7 @@ export default function InvestConfirm() {
         title: "Инвестиция успешна",
         description: `Вы инвестировали в ${strategy?.name}`,
       });
-      setLocation("/invest");
+      setLocation("/strategies");
     },
     onError: (error: Error) => {
       toast({

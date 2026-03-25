@@ -176,7 +176,7 @@ function AppSidebar() {
   );
 }
 
-function TopBar() {
+function TopBar({ demoBadge }: { demoBadge?: boolean }) {
   const { title } = usePageTitle();
   const { user, logout } = useAuth();
   const { forceMobile, toggleForceMobile, isNativeMobile } = useForceMobile();
@@ -187,7 +187,7 @@ function TopBar() {
 
   return (
     <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-[999]">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {showMobileLayout ? (
           <h1
             className="text-lg font-semibold tracking-tight"
@@ -203,6 +203,7 @@ function TopBar() {
             {title}
           </h1>
         )}
+        {demoBadge && <DemoModeBanner isDemo />}
       </div>
       <div className="flex items-center gap-2">
         {showDesktopButton && (
@@ -316,8 +317,7 @@ function AppShellContent({ children }: AppShellProps) {
           </div>
         )}
         <div className="flex-1 flex flex-col min-h-screen w-full">
-          <DemoModeBanner isDemo={showDemoBanner} />
-          <TopBar />
+          <TopBar demoBadge={showDemoBanner} />
           <GlobalBanner />
           <main className={cn("flex-1 overflow-auto", showMobileLayout ? "pb-20" : "pb-0")}>
             {children}

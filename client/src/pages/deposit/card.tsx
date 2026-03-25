@@ -79,7 +79,7 @@ export default function DepositCard() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Карта → USDT" subtitle="Пополнение банковской картой" backHref="/wallet" />
+      <PageHeader title="Карта → USDT" subtitle="Пополнение банковской картой" backHref="/" />
 
       <Card className="p-5 mb-6">
         <div className="flex items-center gap-3 mb-6">

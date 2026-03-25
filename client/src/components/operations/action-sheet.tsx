@@ -355,7 +355,7 @@ export function ResultStep({ title, message, onClose }: ResultStepProps) {
       </div>
       
       {operationId && (
-        <Link href="/activity">
+        <Link href="/profile">
           <Button variant="outline" className="w-full" data-testid="button-view-activity">
             Показать в Активности
           </Button>
