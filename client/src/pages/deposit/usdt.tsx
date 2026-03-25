@@ -63,7 +63,7 @@ export default function DepositUSDT() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-lg mx-auto">
-      <PageHeader title="Пополнение USDT" subtitle="Сеть TRC20" backHref="/wallet" />
+      <PageHeader title="Пополнение USDT" subtitle="Сеть TRC20" backHref="/" />
 
       <Card className="p-5 mb-6">
         <div className="mb-4">

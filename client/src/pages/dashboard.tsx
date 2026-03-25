@@ -259,7 +259,7 @@ export default function Dashboard() {
             title="Нет истории портфеля"
             description="Начните инвестировать, чтобы увидеть рост вашего капитала."
           >
-            <Link href="/invest">
+            <Link href="/strategies">
               <Button data-testid="button-go-invest">Начать инвестировать</Button>
             </Link>
           </EmptyState>
@@ -356,7 +356,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Ваши стратегии</h2>
           {data && data.strategies.length > 0 && (
-            <Link href="/invest">
+            <Link href="/strategies">
               <Button variant="outline" size="sm" data-testid="button-view-all-strategies">
                 Показать все
               </Button>
@@ -377,7 +377,7 @@ export default function Dashboard() {
               title="Нет активных стратегий"
               description="Изучите наши инвестиционные стратегии и начните увеличивать свой портфель."
             >
-              <Link href="/invest">
+              <Link href="/strategies">
                 <Button data-testid="button-explore-strategies">Обзор стратегий</Button>
               </Link>
             </EmptyState>
@@ -470,7 +470,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Последняя активность</h2>
-            <Link href="/activity">
+            <Link href="/profile">
               <Button variant="outline" size="sm">
                 Показать все
               </Button>

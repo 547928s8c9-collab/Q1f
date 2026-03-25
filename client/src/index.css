@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe area support for notched devices */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* LIGHT MODE - Apple-inspired Q1F design system */
 :root {
   --button-outline: rgba(0,0,0, .10);

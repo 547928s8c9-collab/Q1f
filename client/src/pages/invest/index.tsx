@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PageHeader } from "@/components/ui/page-header";
 import { TIER_META, type RiskTierKey, computeTierStats } from "@/components/strategy/tier-card";
 import { StrategyDetailsSheet } from "@/components/strategy/strategy-details-sheet";
 import { InvestSheet } from "@/components/operations/invest-sheet";
@@ -116,10 +115,7 @@ export default function Invest() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
-      <PageHeader
-        title="Стратегии"
-        subtitle="Выберите уровень риска"
-      />
+      <p className="text-sm text-muted-foreground mb-4">Выберите уровень риска</p>
 
       {isLoading ? (
         <div className="flex flex-col gap-3">

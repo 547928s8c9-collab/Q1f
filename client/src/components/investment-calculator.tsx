@@ -131,7 +131,7 @@ export function InvestmentCalculator() {
         </p>
 
         {/* CTA */}
-        <Button className="w-full" onClick={() => navigate("/invest")}>
+        <Button className="w-full" onClick={() => navigate("/strategies")}>
           Начать инвестировать →
         </Button>
       </CardContent>
