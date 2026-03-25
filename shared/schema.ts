@@ -1179,16 +1179,18 @@ export const ASSET_DECIMALS: Record<string, number> = {
 export function formatMoney(minorUnits: string, asset: string): string {
   const decimals = ASSET_DECIMALS[asset] || 2;
   const value = BigInt(minorUnits || "0");
+  const negative = value < 0n;
+  const abs = negative ? -value : value;
   const divisor = BigInt(10 ** decimals);
-  const whole = value / divisor;
-  const fraction = value % divisor;
+  const whole = abs / divisor;
+  const fraction = abs % divisor;
   const fractionStr = fraction.toString().padStart(decimals, "0");
-  
+
   // Format with appropriate decimal places
   const displayDecimals = asset === "USDT" ? 2 : decimals;
   const truncatedFraction = fractionStr.slice(0, displayDecimals);
-  
-  return `${whole.toLocaleString()}.${truncatedFraction}`;
+
+  return `${negative ? "-" : ""}${whole.toLocaleString()}.${truncatedFraction}`;
 }
 
 export function parseMoney(value: string, asset: string): string {
