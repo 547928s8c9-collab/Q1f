@@ -9,9 +9,9 @@ interface BottomNavProps {
 }
 
 const tabs: Array<{ key: TgTabKey; label: string; icon?: React.ElementType }> = [
-  { key: "overview",   label: "Overview" },
-  { key: "strategies", label: "Strategies" },
-  { key: "activity",  label: "Activity" },
+  { key: "overview",   label: "Обзор" },
+  { key: "strategies", label: "Стратегии" },
+  { key: "activity",  label: "Активность" },
   { key: "deposit",   label: "Пополнить", icon: PlusCircle },
 ];
 

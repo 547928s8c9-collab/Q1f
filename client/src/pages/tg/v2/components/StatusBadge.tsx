@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 
 const STATE_LABELS: Record<string, string> = {
-  ACTIVE: "Active",
-  RUNNING: "Running",
-  PAUSED: "Paused",
-  NOT_INVESTED: "Not invested",
-  STOPPED: "Stopped",
+  ACTIVE: "Активна",
+  RUNNING: "Работает",
+  PAUSED: "На паузе",
+  NOT_INVESTED: "Не инвестирована",
+  STOPPED: "Остановлена",
 };
 
 export function StatusBadge({ state }: { state: string }) {

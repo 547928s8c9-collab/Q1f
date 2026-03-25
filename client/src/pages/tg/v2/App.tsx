@@ -24,6 +24,13 @@ import { formatBps, formatMinor, formatTs } from "./lib/format";
 
 const RISK_FILTERS = ["ALL", "LOW", "CORE", "HIGH"] as const;
 
+const RISK_LABELS: Record<typeof RISK_FILTERS[number], string> = {
+  ALL: "Все",
+  LOW: "Низкий",
+  CORE: "Средний",
+  HIGH: "Высокий",
+};
+
 type RiskFilter = typeof RISK_FILTERS[number];
 
 type Strategy = NonNullable<NonNullable<TgStrategiesResponse["data"]>["strategies"]>[number];
@@ -241,10 +248,10 @@ export default function TelegramMiniAppV2() {
     <div className="flex items-center justify-between">
       <div>
         <p className="text-sm text-muted-foreground">TG Strategy Mini App v2</p>
-        <h1 className="text-lg font-semibold">Portfolio</h1>
+        <h1 className="text-lg font-semibold">Портфель</h1>
       </div>
       <Button variant="secondary" size="sm" onClick={handleRefresh}>
-        Refresh
+        Обновить
       </Button>
     </div>
   );
@@ -328,7 +335,7 @@ export default function TelegramMiniAppV2() {
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">Total equity</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">Общий капитал</CardTitle>
                 <div className="text-3xl font-semibold tabular-nums">{formatMoney(totalEquityMinor, "USDT")}</div>
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Доход сегодня</span>
@@ -349,19 +356,19 @@ export default function TelegramMiniAppV2() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">ROI 30d</p>
+                  <p className="text-muted-foreground">ROI 30д</p>
                   <p className="font-medium tabular-nums">{formatBps(aggregatedMetrics.roiBps)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Max DD 30d</p>
+                  <p className="text-muted-foreground">Макс. просадка 30д</p>
                   <p className="font-medium tabular-nums">{formatBps(aggregatedMetrics.maxDrawdown)}</p>
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Top strategies</h2>
-              <span className="text-xs text-muted-foreground">Live · 12s</span>
+              <h2 className="text-sm font-semibold">Топ стратегии</h2>
+              <span className="text-xs text-muted-foreground">Live · 12с</span>
             </div>
 
             <div className="grid gap-3">
@@ -430,7 +437,7 @@ export default function TelegramMiniAppV2() {
                       : "border-border/60 text-muted-foreground"
                   )}
                 >
-                  {filter}
+                  {RISK_LABELS[filter]}
                 </button>
               ))}
             </div>
@@ -463,15 +470,15 @@ export default function TelegramMiniAppV2() {
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div>
-                          <p className="text-muted-foreground">Equity</p>
+                          <p className="text-muted-foreground">Капитал</p>
                           <p className="font-medium tabular-nums">{formatMinor(strategy.equityMinor)}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">ROI 30d</p>
+                          <p className="text-muted-foreground">ROI 30д</p>
                           <p className="font-medium tabular-nums">{formatBps(strategy.roi30dBps)}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Trades 24h</p>
+                          <p className="text-muted-foreground">Сделки 24ч</p>
                           <p className="font-medium tabular-nums">{strategy.trades24h}</p>
                         </div>
                       </div>
@@ -502,7 +509,7 @@ export default function TelegramMiniAppV2() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Equity</p>
+                  <p className="text-muted-foreground">Капитал</p>
                   <p className="font-medium tabular-nums">{formatMinor(strategyDetailQuery.data.equityMinor)}</p>
                 </div>
                 <div>
@@ -518,11 +525,11 @@ export default function TelegramMiniAppV2() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">ROI 30d</p>
+                  <p className="text-muted-foreground">ROI 30д</p>
                   <p className="font-medium tabular-nums">{formatBps(strategyDetailQuery.data.roi30dBps)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Max DD 30d</p>
+                  <p className="text-muted-foreground">Макс. просадка 30д</p>
                   <p className="font-medium tabular-nums">{formatBps(strategyDetailQuery.data.maxDrawdown30dBps)}</p>
                 </div>
               </CardContent>
@@ -530,8 +537,8 @@ export default function TelegramMiniAppV2() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm text-muted-foreground">Equity curve</CardTitle>
-                <span className="text-xs text-muted-foreground">30d</span>
+                <CardTitle className="text-sm text-muted-foreground">Кривая капитала</CardTitle>
+                <span className="text-xs text-muted-foreground">30д</span>
               </CardHeader>
               <CardContent>
                 <SparklineSVG
@@ -545,9 +552,9 @@ export default function TelegramMiniAppV2() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-sm text-muted-foreground">Price chart</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">График цены</CardTitle>
                 <Button variant="secondary" size="sm" onClick={() => setShowPriceChart((prev) => !prev)}>
-                  {showPriceChart ? "Hide" : "Show"}
+                  {showPriceChart ? "Скрыть" : "Показать"}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -570,7 +577,7 @@ export default function TelegramMiniAppV2() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">Recent trades</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">Последние сделки</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {tradesQuery.isLoading && <p className="text-xs text-muted-foreground">Загрузка трейдов…</p>}
@@ -608,19 +615,19 @@ export default function TelegramMiniAppV2() {
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">Notifications</CardTitle>
+                <CardTitle className="text-sm text-muted-foreground">Уведомления</CardTitle>
               </CardHeader>
               <CardContent className="text-sm">
                 <div className="flex items-center justify-between">
-                  <span>Unread</span>
+                  <span>Непрочитанные</span>
                   <span className="font-medium tabular-nums">{activityQuery.data?.notifications.unreadCount ?? 0}</span>
                 </div>
               </CardContent>
             </Card>
 
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Recent trades</h2>
-              <span className="text-xs text-muted-foreground">Live · 12s</span>
+              <h2 className="text-sm font-semibold">Последние сделки</h2>
+              <span className="text-xs text-muted-foreground">Live · 12с</span>
             </div>
 
             <div className="grid gap-3">
@@ -665,7 +672,7 @@ export default function TelegramMiniAppV2() {
       <Drawer open={Boolean(selectedTrade)} onOpenChange={(open) => !open && setSelectedTrade(null)}>
         <DrawerContent>
           <DrawerHeader>
-            <DrawerTitle>Trade details</DrawerTitle>
+            <DrawerTitle>Детали сделки</DrawerTitle>
           </DrawerHeader>
           <div className="px-4 pb-6">
             {tradeEventsLoading && <p className="text-sm text-muted-foreground">Загрузка событий…</p>}
