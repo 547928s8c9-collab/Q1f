@@ -7,9 +7,9 @@ import { SparklineSVG } from "../components/SparklineSVG";
 describe("TG v2 UI", () => {
   it("renders bottom tabs", () => {
     const html = renderToString(<BottomNav active="overview" onChange={() => undefined} />);
-    expect(html).toContain("Overview");
-    expect(html).toContain("Strategies");
-    expect(html).toContain("Activity");
+    expect(html).toContain("Обзор");
+    expect(html).toContain("Стратегии");
+    expect(html).toContain("Активность");
   });
 
   it("renders sparkline svg", () => {

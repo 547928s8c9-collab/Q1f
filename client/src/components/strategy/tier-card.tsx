@@ -22,6 +22,7 @@ import type { LiveMetrics } from "@/hooks/use-live-metrics";
 type SingleStrategyMetrics = LiveMetrics[string] | null;
 
 export type RiskTierKey = "LOW" | "CORE" | "HIGH";
+export type RiskTier = RiskTierKey;
 
 export interface TierMeta {
   key: RiskTierKey;

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Sparkline } from "@/components/charts/sparkline";
 import { Money } from "@/components/ui/money";
-import { TrendingUp, Shield, Zap, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { toMajorUnits } from "@/lib/money";
@@ -20,16 +20,10 @@ interface StrategyCardProps {
   liveMetrics?: LiveStrategyMetrics;
 }
 
-const riskConfig: Record<string, { color: string; chipVariant: "success" | "warning" | "danger"; icon: React.ElementType; label: string }> = {
-  LOW: { color: "bg-positive/10 text-positive", chipVariant: "success", icon: Shield, label: "Низкий риск" },
-  CORE: { color: "bg-warning/10 text-warning", chipVariant: "warning", icon: TrendingUp, label: "Средний риск" },
-  HIGH: { color: "bg-negative/10 text-negative", chipVariant: "danger", icon: Zap, label: "Высокий риск" },
-};
-
 export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails, liveMetrics }: StrategyCardProps) {
-  const tier = strategy.riskTier || "CORE";
-  const config = riskConfig[tier] || riskConfig.CORE;
-  const Icon = config.icon;
+  const tier = (strategy.riskTier || "CORE") as keyof typeof TIER_META;
+  const meta = TIER_META[tier] || TIER_META.CORE;
+  const Icon = meta.icon;
   
   const minReturn = strategy.expectedMonthlyRangeBpsMin ? (strategy.expectedMonthlyRangeBpsMin / 100).toFixed(1) : "0";
   const maxReturn = strategy.expectedMonthlyRangeBpsMax ? (strategy.expectedMonthlyRangeBpsMax / 100).toFixed(1) : "0";
@@ -75,13 +69,13 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className={cn("w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0", config.color)}>
+          <div className={cn("w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0", meta.iconColor, meta.bgGradient && `bg-gradient-to-br ${meta.bgGradient}`)}>
             <Icon className="w-5 h-5" />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-foreground truncate">{strategy.name}</h3>
-            <Chip variant={config.chipVariant} size="sm" className="mt-1">
-              {config.label}
+            <Chip variant={meta.chipVariant} size="sm" className="mt-1">
+              {meta.name}
             </Chip>
           </div>
         </div>

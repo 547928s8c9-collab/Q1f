@@ -18,8 +18,6 @@ import { CompareChart } from "@/components/charts/compare-chart";
 import {
   TrendingUp,
   AlertTriangle,
-  Shield,
-  Zap,
   Calculator,
   Wallet,
   Info,
@@ -29,6 +27,7 @@ import {
   Play,
   Activity,
 } from "lucide-react";
+import { TIER_META } from "@/components/strategy/tier-card";
 import { cn } from "@/lib/utils";
 import { FINANCE_LABELS } from "@/lib/finance-labels";
 import {
@@ -51,10 +50,10 @@ import { toMajorUnits } from "@/lib/money";
 import { useMarketStream } from "@/hooks/use-market-stream";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 
-const riskConfig: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  LOW: { color: "bg-positive/10 text-positive border-positive/20", icon: Shield, label: "Низкий риск" },
-  CORE: { color: "bg-warning/10 text-warning border-warning/20", icon: TrendingUp, label: "Средний риск" },
-  HIGH: { color: "bg-negative/10 text-negative border-negative/20", icon: Zap, label: "Высокий риск" },
+const CHIP_TO_BORDER: Record<string, string> = {
+  success: "bg-positive/10 text-positive border-positive/20",
+  warning: "bg-warning/10 text-warning border-warning/20",
+  danger: "bg-negative/10 text-negative border-negative/20",
 };
 
 const timeframeOptions: { value: Timeframe; label: string }[] = [
@@ -304,9 +303,10 @@ export default function StrategyDetail() {
 
   const isLoading = strategyLoading || perfLoading;
 
-  const tier = strategy?.riskTier || "CORE";
-  const config = riskConfig[tier] || riskConfig.CORE;
-  const Icon = config.icon;
+  const tier = (strategy?.riskTier || "CORE") as keyof typeof TIER_META;
+  const meta = TIER_META[tier] || TIER_META.CORE;
+  const Icon = meta.icon;
+  const config = { color: CHIP_TO_BORDER[meta.chipVariant] || CHIP_TO_BORDER.warning, label: meta.name };
 
   const filteredPerf = performance || [];
 
