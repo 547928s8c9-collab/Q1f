@@ -1,3 +1,5 @@
+// DEPRECATED: Use @/lib/design-tokens instead. This file will be removed.
+// Colors here are light-only and don't support dark mode.
 export const t = {
   color: {
     bg: "#FFFFFF",
