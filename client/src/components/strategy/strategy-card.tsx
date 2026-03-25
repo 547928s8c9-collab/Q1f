@@ -6,6 +6,7 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { Money } from "@/components/ui/money";
 import { TrendingUp, Shield, Zap, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import { toMajorUnits } from "@/lib/money";
 import { type Strategy } from "@shared/schema";
 import { type LiveStrategyMetrics } from "@/hooks/use-live-metrics";
@@ -114,13 +115,13 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">PnL</p>
+            <p className="text-xs text-muted-foreground mb-0.5">{FINANCE_LABELS.pnl}</p>
             <p className={cn("text-sm font-semibold tabular-nums", isProfitable ? "text-positive" : "text-negative")}>
               {isProfitable ? "+" : ""}{formatMoney(pnl, "USDT")}
             </p>
           </div>
           <div className="bg-muted/30 rounded-lg p-2.5">
-            <p className="text-xs text-muted-foreground mb-0.5">ROI 30д</p>
+            <p className="text-xs text-muted-foreground mb-0.5">{FINANCE_LABELS.roi30d}</p>
             <p className={cn("text-sm font-semibold tabular-nums", roi30dBps >= 0 ? "text-positive" : "text-negative")}>
               {roi30dBps >= 0 ? "+" : ""}{(roi30dBps / 100).toFixed(2)}%
             </p>
@@ -160,7 +161,7 @@ export function StrategyCard({ strategy, sparklineData, onInvest, onViewDetails,
           </Badge>
           {maxDrawdown30dBps > 0 && (
             <span className="text-xs text-muted-foreground">
-              Макс. просадка: {(maxDrawdown30dBps / 100).toFixed(2)}%
+              {FINANCE_LABELS.drawdownMax}: {(maxDrawdown30dBps / 100).toFixed(2)}%
             </span>
           )}
         </div>

@@ -30,6 +30,7 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FINANCE_LABELS } from "@/lib/finance-labels";
 import {
   type Strategy,
   type StrategyPerformance,
@@ -1032,7 +1033,7 @@ export default function StrategyDetail() {
               {/* Current Drawdown */}
               {riskControls.currentDrawdownPct > 0 && (
                 <div className="p-3 rounded-lg bg-muted/50 mb-4">
-                  <p className="text-sm text-muted-foreground">Текущая просадка</p>
+                  <p className="text-sm text-muted-foreground">{FINANCE_LABELS.drawdownCurrent}</p>
                   <p
                     className={cn(
                       "text-xl font-semibold tabular-nums",
@@ -1130,7 +1131,7 @@ export default function StrategyDetail() {
               <p className="text-xl font-semibold text-negative">{strategy?.worstMonth || "N/A"}</p>
             </Card>
             <Card className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Макс. просадка</p>
+              <p className="text-xs text-muted-foreground uppercase">{FINANCE_LABELS.drawdownMax}</p>
               <p className="text-xl font-semibold text-negative">{strategy?.maxDrawdown || "N/A"}</p>
             </Card>
             <Card className="p-4">
