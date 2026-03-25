@@ -1,29 +1,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { PageHeader } from "@/components/ui/page-header";
 import { TierCard, type RiskTierKey } from "@/components/strategy/tier-card";
 import { StrategyDetailsSheet } from "@/components/strategy/strategy-details-sheet";
 import { InvestSheet } from "@/components/operations/invest-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LiveBadge } from "@/components/ui/live-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSetPageTitle } from "@/hooks/use-page-title";
-import { useEngineStream } from "@/hooks/use-engine-stream";
-import { useLiveMetrics } from "@/hooks/use-live-metrics";
 import { TrendingUp, AlertTriangle } from "lucide-react";
-import { type Strategy, type StrategyPerformance, type BootstrapResponse } from "@shared/schema";
-import { InvestmentCalculator } from "@/components/investment-calculator";
+import { type Strategy, type BootstrapResponse, formatMoney } from "@shared/schema";
 
 const TIER_ORDER: RiskTierKey[] = ["LOW", "CORE", "HIGH"];
 
 export default function Invest() {
-  useSetPageTitle("Инвестиции");
+  useSetPageTitle("Стратегии");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [investOpen, setInvestOpen] = useState(false);
-
-  const { status: engineStatus, lastUpdated, isRunning } = useEngineStream();
-  const { metrics: liveMetrics, getMetrics } = useLiveMetrics();
 
   const { data: strategies, isLoading, isError } = useQuery<Strategy[]>({
     queryKey: ["/api/strategies"],
@@ -35,11 +27,13 @@ export default function Invest() {
     refetchInterval: 15_000,
   });
 
-  const { data: allPerformance } = useQuery<Record<string, StrategyPerformance[]>>({
-    queryKey: ["/api/strategies/performance-all"],
-    enabled: !isLoading && !!strategies?.length,
-    refetchInterval: 15_000,
-  });
+  const hasActiveInvestment = bootstrap
+    ? BigInt(bootstrap.invested?.current || "0") > 0n
+    : false;
+
+  const investedPnl = bootstrap
+    ? (BigInt(bootstrap.invested?.current || "0") - BigInt(bootstrap.invested?.principal || "0")).toString()
+    : "0";
 
   const strategiesByTier: Record<RiskTierKey, Strategy[]> = {
     LOW: [],
@@ -57,11 +51,6 @@ export default function Invest() {
   const activeTiers = TIER_ORDER.filter(
     (tier) => strategiesByTier[tier].length > 0
   );
-
-  const handleViewDetails = (strategy: Strategy) => {
-    setSelectedStrategy(strategy);
-    setDetailsOpen(true);
-  };
 
   const handleInvest = (strategy: Strategy) => {
     setSelectedStrategy(strategy);
@@ -89,30 +78,48 @@ export default function Invest() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto pb-24">
-      <PageHeader
-        title="Инвестиционные стратегии"
-        subtitle="Выберите уровень риска, соответствующий вашим целям"
-        badge={
-          <LiveBadge
-            pulse={isRunning}
-          />
-        }
-      />
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-foreground">Стратегии</h1>
+        <p className="text-sm text-muted-foreground mt-1">Выберите уровень риска</p>
+      </div>
+
+      {/* Active investment section */}
+      {hasActiveInvestment && bootstrap && (
+        <div className="mb-6 p-4 rounded-2xl border border-primary/20 bg-primary/5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Ваша стратегия</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">
+                {formatMoney(bootstrap.invested.current, "USDT")}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">PnL</p>
+              <p
+                className={`text-lg font-bold tabular-nums ${
+                  BigInt(investedPnl) >= 0n ? "text-positive" : "text-negative"
+                }`}
+              >
+                {BigInt(investedPnl) >= 0n ? "+" : ""}
+                {formatMoney(investedPnl, "USDT")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
-        <div className="space-y-6">
+        <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-xl border border-border overflow-hidden">
-              <Skeleton className="h-28 w-full" />
-              <div className="p-6 space-y-4">
-                <Skeleton className="h-4 w-3/4" />
-                <div className="grid grid-cols-3 gap-3">
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                </div>
-                <Skeleton className="h-10 w-full rounded-lg" />
+            <div key={i} className="rounded-2xl border border-black/[0.06] p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <Skeleton className="h-5 w-24" />
               </div>
+              <Skeleton className="h-8 w-40 mb-3" />
+              <Skeleton className="h-4 w-full mb-5" />
+              <Skeleton className="h-12 w-full rounded-xl" />
             </div>
           ))}
         </div>
@@ -120,19 +127,17 @@ export default function Invest() {
         <EmptyState
           icon={AlertTriangle}
           title="Не удалось загрузить стратегии"
-          description="Не удалось получить инвестиционные стратегии. Обновите страницу или попробуйте позже."
+          description="Обновите страницу или попробуйте позже."
         />
       ) : activeTiers.length > 0 ? (
-        <div className="space-y-6">
+        <div className="space-y-3">
           {activeTiers.map((tierKey) => (
             <TierCard
               key={tierKey}
               tierKey={tierKey}
               strategies={strategiesByTier[tierKey]}
-              allPerformance={allPerformance}
-              getMetrics={getMetrics}
+              isActive={false}
               onInvest={handleInvest}
-              onViewDetails={handleViewDetails}
             />
           ))}
         </div>
@@ -143,8 +148,6 @@ export default function Invest() {
           description="Загляните позже — скоро появятся инвестиционные возможности."
         />
       )}
-
-      {!isLoading && <InvestmentCalculator />}
 
       <StrategyDetailsSheet
         strategy={selectedStrategy}
