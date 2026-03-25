@@ -42,6 +42,7 @@ interface ActionSheetProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  hideStepIndicator?: boolean;
   children: React.ReactNode;
 }
 
@@ -50,6 +51,7 @@ export function ActionSheet({
   onOpenChange,
   title,
   description,
+  hideStepIndicator,
   children,
 }: ActionSheetProps) {
   const [step, setStep] = useState<ActionStep>("amount");
@@ -81,7 +83,7 @@ export function ActionSheet({
             <SheetTitle data-testid="sheet-title">{title}</SheetTitle>
             {description && <SheetDescription>{description}</SheetDescription>}
           </SheetHeader>
-          <StepIndicator currentStep={step} />
+          {!hideStepIndicator && <StepIndicator currentStep={step} />}
           {children}
         </SheetContent>
       </Sheet>
