@@ -70,6 +70,7 @@ function DepositFlow({
       setStep("result");
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
         title: "Пополнение выполнено",
         description: `${formatMoney(minorAmount, "USDT")} USDT добавлено в кошелёк`,
