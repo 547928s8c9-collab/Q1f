@@ -50,11 +50,7 @@ import { toMajorUnits } from "@/lib/money";
 import { useMarketStream } from "@/hooks/use-market-stream";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 
-const CHIP_TO_BORDER: Record<string, string> = {
-  success: "bg-positive/10 text-positive border-positive/20",
-  warning: "bg-warning/10 text-warning border-warning/20",
-  danger: "bg-negative/10 text-negative border-negative/20",
-};
+// Removed CHIP_TO_BORDER — no longer used with Apple-style tier-based header
 
 const timeframeOptions: { value: Timeframe; label: string }[] = [
   { value: "15m", label: "15m" },
@@ -306,7 +302,7 @@ export default function StrategyDetail() {
   const tier = (strategy?.riskTier || "CORE") as keyof typeof TIER_META;
   const meta = TIER_META[tier] || TIER_META.CORE;
   const Icon = meta.icon;
-  const config = { color: CHIP_TO_BORDER[meta.chipVariant] || CHIP_TO_BORDER.warning, label: meta.name };
+  // Tier-based display: show meta.name as title, strategy.name as subtitle
 
   const filteredPerf = performance || [];
 
@@ -472,8 +468,8 @@ export default function StrategyDetail() {
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <PageHeader
-        title={strategy?.name || "Стратегия"}
-        subtitle={strategy?.description || undefined}
+        title={meta.name}
+        subtitle={meta.description}
         backHref="/strategies"
       />
 
@@ -492,24 +488,10 @@ export default function StrategyDetail() {
         <>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div
-                className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center",
-                  tier === "LOW" ? "bg-positive/10" : tier === "HIGH" ? "bg-negative/10" : "bg-primary/10"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "w-5 h-5",
-                    tier === "LOW" ? "text-positive" : tier === "HIGH" ? "text-negative" : "text-primary"
-                  )}
-                />
-              </div>
+              <Icon className="w-5 h-5" style={{ color: "#86868B" }} strokeWidth={1.5} />
               <div>
-                <h2 className="text-xl font-semibold">{strategy?.name}</h2>
-                <Badge variant="outline" className={cn("text-xs", config.color)}>
-                  {config.label}
-                </Badge>
+                <h2 style={{ fontSize: 20, fontWeight: 600, color: "#1D1D1F" }}>{meta.name}</h2>
+                <p style={{ fontSize: 13, color: "#86868B" }}>{strategy?.name}</p>
               </div>
             </div>
             {(() => {

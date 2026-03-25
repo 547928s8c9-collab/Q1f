@@ -180,10 +180,13 @@ function TopBar({ demoBadge }: { demoBadge?: boolean }) {
   const { title } = usePageTitle();
   const { user, logout } = useAuth();
   const { forceMobile, toggleForceMobile, isNativeMobile } = useForceMobile();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const initials = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
   const showMobileLayout = forceMobile || isNativeMobile;
   const showDesktopButton = forceMobile && !isNativeMobile;
+
+  // On strategies page, show minimal Apple-style header: title + avatar only
+  const isStrategiesPage = location === "/strategies" || location === "/invest";
 
   return (
     <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-[999]">
@@ -218,8 +221,8 @@ function TopBar({ demoBadge }: { demoBadge?: boolean }) {
             <Monitor className="h-4 w-4" />
           </Button>
         )}
-        <NotificationBell />
-        <ThemeToggle />
+        {!isStrategiesPage && <NotificationBell />}
+        {!isStrategiesPage && <ThemeToggle />}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="outline-none" data-testid="button-avatar">
