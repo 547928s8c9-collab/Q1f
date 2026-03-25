@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, LayoutDashboard, Smartphone, Monitor } from "lucide-react";
+import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, LayoutDashboard, Smartphone, Monitor, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -10,6 +10,12 @@ import { GlobalBanner } from "@/components/global-banner";
 import { DemoModeBanner } from "@/components/admin/demo-mode-banner";
 import { PageProvider, usePageTitle } from "@/contexts/page-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDemoDataSeeder } from "@/hooks/use-demo-data-seeder";
 import {
   Sidebar,
@@ -98,7 +104,6 @@ const navItems: NavItem[] = [
   { href: "/wallet", label: "Кошелёк", icon: Wallet },
   { href: "/invest", label: "Инвестиции", icon: TrendingUp },
   { href: "/activity", label: "Активность", icon: Activity },
-  { href: "/settings", label: "Настройки", icon: Settings },
 ];
 
 function AppSidebar() {
@@ -175,8 +180,9 @@ function AppSidebar() {
 
 function TopBar() {
   const { title } = usePageTitle();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { forceMobile, toggleForceMobile, isNativeMobile } = useForceMobile();
+  const [, navigate] = useLocation();
   const initials = user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U";
   const showMobileLayout = forceMobile || isNativeMobile;
   const showDesktopButton = forceMobile && !isNativeMobile;
@@ -185,14 +191,14 @@ function TopBar() {
     <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-background/80 backdrop-blur-xl border-b border-border/50 sticky top-0 z-[999]">
       <div className="flex items-center gap-3">
         {showMobileLayout ? (
-          <h1 
+          <h1
             className="text-lg font-semibold tracking-tight"
             data-testid="text-page-title"
           >
             {title}
           </h1>
         ) : (
-          <h1 
+          <h1
             className="text-xl font-semibold tracking-tight"
             data-testid="text-page-title-desktop"
           >
@@ -215,13 +221,31 @@ function TopBar() {
         )}
         <NotificationBell />
         <ThemeToggle />
-        <Link href="/settings">
-          <Avatar className="h-8 w-8 cursor-pointer hover-elevate" data-testid="button-avatar">
-            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="outline-none" data-testid="button-avatar">
+              <Avatar className="h-8 w-8 cursor-pointer hover-elevate">
+                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => navigate("/settings/profile")} data-testid="menu-profile">
+              <User className="mr-2 h-4 w-4" />
+              Профиль
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/settings")} data-testid="menu-settings">
+              <Settings className="mr-2 h-4 w-4" />
+              Настройки
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => logout()} data-testid="menu-logout">
+              <LogOut className="mr-2 h-4 w-4" />
+              Выход
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
