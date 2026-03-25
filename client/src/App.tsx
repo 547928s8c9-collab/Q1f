@@ -39,6 +39,7 @@ const SmartStart = React.lazy(() => import("@/pages/onboarding/smart-start"));
 const SmartStartResults = React.lazy(() => import("@/pages/onboarding/smart-start-results"));
 const DuDeclaration = React.lazy(() => import("@/pages/onboarding/du-declaration"));
 const Inbox = React.lazy(() => import("@/pages/inbox"));
+const Portfolio = React.lazy(() => import("@/pages/portfolio"));
 const Dashboard = React.lazy(() => import("@/pages/dashboard"));
 const AdminKyc = React.lazy(() => import("@/pages/admin/kyc"));
 const AdminWithdrawals = React.lazy(() => import("@/pages/admin/withdrawals"));
@@ -71,7 +72,8 @@ function ProtectedRouter() {
           )}
         >
           <Switch>
-            <Route path="/" component={Home} />
+            <Route path="/" component={Portfolio} />
+            <Route path="/home" component={Home} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/risk" component={Risk} />
             <Route path="/analytics" component={Analytics} />
