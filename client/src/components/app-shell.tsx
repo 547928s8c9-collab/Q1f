@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, TrendingUp, Wallet, Activity, Settings, LogOut, LayoutDashboard, Smartphone, Monitor, User } from "lucide-react";
+import { TrendingUp, Wallet, Settings, LogOut, Smartphone, Monitor, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -99,11 +99,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Главная", icon: Home },
-  { href: "/dashboard", label: "Панель", icon: LayoutDashboard },
-  { href: "/wallet", label: "Кошелёк", icon: Wallet },
-  { href: "/invest", label: "Инвестиции", icon: TrendingUp },
-  { href: "/activity", label: "Активность", icon: Activity },
+  { href: "/", label: "Портфель", icon: Wallet },
+  { href: "/strategies", label: "Стратегии", icon: TrendingUp },
+  { href: "/profile", label: "Профиль", icon: User },
 ];
 
 function AppSidebar() {

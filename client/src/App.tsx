@@ -11,6 +11,8 @@ import { GateGuard } from "@/components/onboarding/gate-guard";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
+const Portfolio = React.lazy(() => import("@/pages/portfolio"));
+const ProfilePage = React.lazy(() => import("@/pages/profile"));
 const Analytics = React.lazy(() => import("@/pages/analytics"));
 const Invest = React.lazy(() => import("@/pages/invest/index"));
 const StrategyDetail = React.lazy(() => import("@/pages/invest/strategy-detail"));
@@ -71,7 +73,9 @@ function ProtectedRouter() {
           )}
         >
           <Switch>
-            <Route path="/" component={Home} />
+            <Route path="/" component={Portfolio} />
+            <Route path="/strategies" component={Invest} />
+            <Route path="/profile" component={ProfilePage} />
             <Route path="/dashboard" component={Dashboard} />
             <Route path="/risk" component={Risk} />
             <Route path="/analytics" component={Analytics} />
