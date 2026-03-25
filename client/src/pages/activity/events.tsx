@@ -1,178 +1,42 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { useSetPageTitle } from "@/hooks/use-page-title";
-import {
-  TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpFromLine,
-  RefreshCw, Wallet, Receipt, BarChart2,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-
-// ── types ──────────────────────────────────────────────────────────
-
-type ManagementEventType =
-  | "daily_pnl" | "deposit" | "withdrawal"
-  | "strategy_change" | "settlement" | "fee_charged"
-  | "TRADE_OPEN" | "TRADE_CLOSE";
-
-const EVENT_LABELS: Record<ManagementEventType, string> = {
-  daily_pnl:       "Начислен дневной доход",
-  deposit:         "Пополнение зачислено",
-  withdrawal:      "Вывод выполнен",
-  strategy_change: "Стратегия изменена",
-  settlement:      "Расчёт по портфелю",
-  fee_charged:     "Комиссия управляющего",
-  TRADE_OPEN:      "Сделка открыта",
-  TRADE_CLOSE:     "Сделка закрыта",
-};
-
-const MANAGEMENT_TYPES = new Set<string>(Object.keys(EVENT_LABELS));
-
-interface EventData {
-  id: string;
-  type: string;
-  message: string;
-  strategyId: string | null;
-  createdAt: string | null;
-  payloadJson: unknown;
-}
-
-// ── helpers ────────────────────────────────────────────────────────
-
-const MONTHS_RU = [
-  "января", "февраля", "марта", "апреля", "мая", "июня",
-  "июля", "августа", "сентября", "октября", "ноября", "декабря",
-];
-
-function formatRuDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS_RU[d.getMonth()]}, ${d.getFullYear()}`;
-}
-
-const EVENT_ICONS: Partial<Record<string, typeof BarChart2>> = {
-  deposit:         ArrowDownToLine,
-  withdrawal:      ArrowUpFromLine,
-  strategy_change: RefreshCw,
-  settlement:      Wallet,
-  fee_charged:     Receipt,
-  TRADE_OPEN:      TrendingUp,
-  TRADE_CLOSE:     TrendingDown,
-};
-
-// ── row components ─────────────────────────────────────────────────
-
-function DailyPnlRow({ event }: { event: EventData }) {
-  const p = (event.payloadJson ?? {}) as { amount?: number; tier?: string };
-  const amount   = p.amount ?? 0;
-  const positive = amount >= 0;
-  const Icon     = positive ? TrendingUp : TrendingDown;
-
-  return (
-    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-      <div className={cn(
-        "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
-        positive ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative",
-      )}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">{EVENT_LABELS.daily_pnl}</p>
-          <span className={cn(
-            "text-sm font-semibold tabular-nums",
-            positive ? "text-positive" : "text-negative",
-          )}>
-            {positive ? "+" : "−"}{Math.abs(amount).toFixed(2)} USDT
-          </span>
-        </div>
-        <div className="flex items-center justify-between mt-0.5">
-          {p.tier && <p className="text-xs text-muted-foreground">{p.tier}</p>}
-          {event.createdAt && (
-            <p className="text-xs text-muted-foreground ml-auto">{formatRuDate(event.createdAt)}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TradeEventRow({ event }: { event: EventData }) {
-  const p = (event.payloadJson ?? {}) as { netPnl?: number; symbol?: string; entryPrice?: number; exitPrice?: number };
-  const isClose = event.type === "TRADE_CLOSE";
-  const pnl = p.netPnl ?? 0;
-  const positive = pnl >= 0;
-  const Icon = isClose ? (positive ? TrendingUp : TrendingDown) : BarChart2;
-  const label = EVENT_LABELS[event.type as ManagementEventType] ?? event.type;
-
-  return (
-    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0" data-testid={`trade-event-${event.id}`}>
-      <div className={cn(
-        "h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0",
-        isClose
-          ? positive ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative"
-          : "bg-primary/10 text-primary",
-      )}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">{label}</p>
-          {isClose && (
-            <span className={cn(
-              "text-sm font-semibold tabular-nums",
-              positive ? "text-positive" : "text-negative",
-            )}>
-              {positive ? "+" : ""}{pnl.toFixed(2)} USDT
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between mt-0.5">
-          {p.symbol && <p className="text-xs text-muted-foreground">{p.symbol}</p>}
-          {event.createdAt && (
-            <p className="text-xs text-muted-foreground ml-auto">{formatRuDate(event.createdAt)}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ManagementEventRow({ event }: { event: EventData }) {
-  const label = EVENT_LABELS[event.type as ManagementEventType] ?? event.type;
-  const Icon  = EVENT_ICONS[event.type] ?? BarChart2;
-
-  return (
-    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-      <div className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0 bg-primary/10 text-primary">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        {event.message && (
-          <p className="text-sm text-muted-foreground truncate mt-0.5">{event.message}</p>
-        )}
-        {event.createdAt && (
-          <p className="text-xs text-muted-foreground mt-0.5">{formatRuDate(event.createdAt)}</p>
-        )}
-      </div>
-    </div>
-  );
-}
+import { OperationRow } from "@/components/operations/operation-row";
+import { OperationDetailsSheet } from "@/components/operations/operation-details-sheet";
+import { BarChart2 } from "lucide-react";
+import { type Operation } from "@shared/schema";
+import { useState } from "react";
 
 // ── page ───────────────────────────────────────────────────────────
 
 export default function ActivityEvents() {
   useSetPageTitle("Активность");
-  const { data, isLoading } = useQuery<{ events: EventData[] }>({
-    queryKey: ["/api/activity"],
+  const [selectedOperation, setSelectedOperation] = useState<Operation | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const { data, isLoading } = useQuery<{ operations: Operation[]; nextCursor?: string }>({
+    queryKey: ["/api/operations", { limit: 50 }],
     queryFn: async () => {
-      const res = await fetch("/api/activity", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch activity");
+      const res = await fetch("/api/operations?limit=50", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch operations");
       return res.json();
     },
     refetchInterval: 15_000,
   });
 
-  const events = (data?.events ?? []).filter((e) => MANAGEMENT_TYPES.has(e.type));
+  const operations = data?.operations ?? [];
+
+  const handleOperationClick = (operation: Operation) => {
+    setSelectedOperation(operation);
+    setSheetOpen(true);
+  };
+
+  const handleSheetOpenChange = (open: boolean) => {
+    setSheetOpen(open);
+    if (!open) {
+      setTimeout(() => setSelectedOperation(null), 300);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -199,7 +63,7 @@ export default function ActivityEvents() {
     <div className="p-4 md:p-6 lg:p-8 max-w-2xl mx-auto pb-24" data-testid="activity-events-page">
       <h1 className="text-2xl font-bold mb-6">Активность</h1>
 
-      {events.length === 0 ? (
+      {operations.length === 0 ? (
         <Card>
           <div
             className="flex flex-col items-center justify-center text-center py-12 px-6"
@@ -215,18 +79,22 @@ export default function ActivityEvents() {
           </div>
         </Card>
       ) : (
-        <Card className="p-5">
-          <div className="divide-y divide-border">
-            {events.map((event) =>
-              event.type === "daily_pnl"
-                ? <DailyPnlRow key={event.id} event={event} />
-                : event.type === "TRADE_OPEN" || event.type === "TRADE_CLOSE"
-                  ? <TradeEventRow key={event.id} event={event} />
-                  : <ManagementEventRow key={event.id} event={event} />
-            )}
-          </div>
+        <Card className="divide-y divide-border overflow-hidden">
+          {operations.map((operation) => (
+            <OperationRow
+              key={operation.id}
+              operation={operation}
+              onClick={() => handleOperationClick(operation)}
+            />
+          ))}
         </Card>
       )}
+
+      <OperationDetailsSheet
+        operation={selectedOperation}
+        open={sheetOpen}
+        onOpenChange={handleSheetOpenChange}
+      />
     </div>
   );
 }

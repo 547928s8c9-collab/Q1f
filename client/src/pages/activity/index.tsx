@@ -84,7 +84,7 @@ export default function ActivityPage() {
       if (search) params.set("q", search);
       
       const queryString = params.toString();
-      const exportUrl = `/api/activity/export${queryString ? `?${queryString}` : ""}`;
+      const exportUrl = `/api/operations/export${queryString ? `?${queryString}` : ""}`;
       
       const response = await fetch(exportUrl, {
         credentials: "include",

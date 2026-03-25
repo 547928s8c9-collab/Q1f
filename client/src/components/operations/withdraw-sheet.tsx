@@ -122,6 +122,7 @@ function WithdrawFlow({
       setStep("result");
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
       toast({
         title: "Вывод отправлен",
         description: `Вывод ${formatMoney(minorAmount, "USDT")} USDT обрабатывается`,
