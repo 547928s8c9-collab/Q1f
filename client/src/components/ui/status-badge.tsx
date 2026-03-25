@@ -7,27 +7,27 @@ interface StatusBadgeProps {
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   pending: {
-    label: "Pending",
+    label: "На рассмотрении",
     className: "bg-warning/10 text-warning border-warning/20",
   },
   processing: {
-    label: "Processing",
+    label: "В обработке",
     className: "bg-primary/10 text-primary border-primary/20 animate-pulse",
   },
   completed: {
-    label: "Completed",
+    label: "Завершено",
     className: "bg-positive/10 text-positive border-positive/20",
   },
   failed: {
-    label: "Failed",
+    label: "Ошибка",
     className: "bg-negative/10 text-negative border-negative/20",
   },
   cancelled: {
-    label: "Cancelled",
+    label: "Отменено",
     className: "bg-muted text-muted-foreground border-muted",
   },
   active: {
-    label: "Active",
+    label: "Активно",
     className: "bg-positive/10 text-positive border-positive/20",
   },
 };
