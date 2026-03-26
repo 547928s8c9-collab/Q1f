@@ -1200,18 +1200,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecentSimTrades(userId: string, limit: number = 20, sinceTs?: number): Promise<SimTrade[]> {
-    const conditions: ReturnType<typeof eq>[] = [
-      eq(simTrades.userId, userId),
-      eq(simTrades.status, "CLOSED"),
-    ];
-    if (sinceTs !== undefined) {
-      conditions.push(gte(simTrades.createdAt, new Date(sinceTs)));
+    try {
+      const conditions: ReturnType<typeof eq>[] = [
+        eq(simTrades.userId, userId),
+        eq(simTrades.status, "CLOSED"),
+      ];
+      if (sinceTs !== undefined) {
+        conditions.push(gte(simTrades.createdAt, new Date(sinceTs)));
+      }
+      return db.select()
+        .from(simTrades)
+        .where(and(...conditions))
+        .orderBy(desc(simTrades.createdAt))
+        .limit(limit);
+    } catch {
+      return [];
     }
-    return db.select()
-      .from(simTrades)
-      .where(and(...conditions))
-      .orderBy(desc(simTrades.createdAt))
-      .limit(limit);
   }
 
   async getLatestSimTradeExitTs(userId: string, strategyId: string): Promise<number | null> {
