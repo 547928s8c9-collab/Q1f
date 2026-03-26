@@ -61,7 +61,7 @@ export default function Analytics() {
         {isLoading ? (
           <ChartSkeleton height={280} />
         ) : (
-          <PortfolioChart data={filteredSeries} height={280} />
+          <PortfolioChart data={filteredSeries} height={280} period={period} />
         )}
       </Card>
 
