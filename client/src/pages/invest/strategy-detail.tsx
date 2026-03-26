@@ -466,7 +466,7 @@ export default function StrategyDetail() {
   const benchmarkLabel = candlePayload?.symbol ? `${candlePayload.symbol} Бенчмарк` : "Рыночный бенчмарк";
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto" style={{ backgroundColor: "#F5F5F7" }}>
       <PageHeader
         title={meta.name}
         subtitle={meta.description}
