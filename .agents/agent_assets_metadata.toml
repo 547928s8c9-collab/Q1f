@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "i1OvgwuSHr3pOreJuu4Tg"
+uri = "file://ZEON_Platform_Description.md"
+type = "text"
+title = "ZEON — Полное описание платформы и User Cases"
