@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 import { DemoLayout } from "./demo-layout";
 import { useDemo, STRATEGIES } from "./demo-context";
 
@@ -81,6 +82,7 @@ export default function DemoLivePortfolio() {
   const [balance, setBalance] = useState(initialBalance);
   const [history, setHistory] = useState<number[]>([initialBalance]);
   const [simTime, setSimTime] = useState(0);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const balanceRef = useRef(initialBalance);
 
   const tick = useCallback(() => {
@@ -173,11 +175,25 @@ export default function DemoLivePortfolio() {
 
         {/* Actions */}
         <div className="mt-auto flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => navigate("/")}>
-            На главную
-          </Button>
-          <Button className="flex-1" onClick={() => navigate("/demo/sumsub")}>
+          <Button variant="outline" className="flex-1" onClick={() => navigate("/demo/register")}>
             Начать заново
+          </Button>
+          <Button
+            className="flex-1"
+            disabled={isRedirecting}
+            onClick={() => {
+              setIsRedirecting(true);
+              window.location.href = "/api/demo-login";
+            }}
+          >
+            {isRedirecting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Создание...
+              </>
+            ) : (
+              "Открыть портфель"
+            )}
           </Button>
         </div>
       </div>
