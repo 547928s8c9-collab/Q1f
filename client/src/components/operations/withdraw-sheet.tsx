@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { createIdempotencyKey } from "@/lib/idempotency";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,7 +62,8 @@ function WithdrawFlow({
 
   const minorAmount = toMinorUnits(amount);
   const totalDeduction = (BigInt(minorAmount || "0") + BigInt(NETWORK_FEE)).toString();
-  const balanceAfter = (BigInt(availableBalance) - BigInt(totalDeduction)).toString();
+  const balanceAfterRaw = BigInt(availableBalance) - BigInt(totalDeduction);
+  const balanceAfter = (balanceAfterRaw < 0n ? 0n : balanceAfterRaw).toString();
 
   const appendToAmount = (value: string) => {
     const next = amount + value;
@@ -88,10 +90,11 @@ function WithdrawFlow({
 
   const handleNext = () => {
     const minVal = BigInt("1000000");
-    const maxVal = BigInt(availableBalance) - BigInt(NETWORK_FEE);
+    const availMinusFee = BigInt(availableBalance) - BigInt(NETWORK_FEE);
+    const maxVal = availMinusFee > 0n ? availMinusFee : 0n;
     
-    if (!address || address.length < 30) {
-      setError("Введите корректный адрес кошелька");
+    if (!address || !/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address)) {
+      setError("Введите корректный TRC20 адрес (начинается с T, 34 символа)");
       return;
     }
     if (BigInt(minorAmount) < minVal) {
@@ -124,6 +127,8 @@ function WithdrawFlow({
       const res = await apiRequest("POST", "/api/withdraw/usdt", {
         amount: minorAmount,
         address,
+      }, {
+        headers: { "Idempotency-Key": createIdempotencyKey("wd_usdt") },
       });
       if (!res.ok) {
         const data = await res.json();

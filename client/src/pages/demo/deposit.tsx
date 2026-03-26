@@ -12,6 +12,13 @@ type Phase = "input" | "processing" | "done";
 export default function DemoDeposit() {
   const [, navigate] = useLocation();
   const { state, setDepositAmount } = useDemo();
+
+  // Navigation guard: require strategy selection
+  useEffect(() => {
+    if (!state.strategy) {
+      navigate("/demo/register", { replace: true });
+    }
+  }, [state.strategy, navigate]);
   const [amount, setAmount] = useState("1000");
   const [phase, setPhase] = useState<Phase>("input");
 

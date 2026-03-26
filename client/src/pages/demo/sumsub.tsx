@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { CheckCircle2, ScanLine } from "lucide-react";
 import { DemoLayout } from "./demo-layout";
 

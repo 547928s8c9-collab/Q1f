@@ -9,7 +9,7 @@ interface NumericKeypadProps {
 }
 
 function triggerHaptic() {
-  if (navigator.vibrate) {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
     navigator.vibrate(10);
   }
 }
@@ -60,8 +60,8 @@ export function NumericKeypad({
       {keys.flat().map((key) => {
         if (key === "backspace") {
           return (
-            <KeypadButton key={key} onPress={onBackspace}>
-              <Delete className="h-6 w-6 text-muted-foreground" />
+            <KeypadButton key={key} onPress={onBackspace} className="aria-label-backspace">
+              <Delete className="h-6 w-6 text-muted-foreground" aria-label="Удалить" />
             </KeypadButton>
           );
         }

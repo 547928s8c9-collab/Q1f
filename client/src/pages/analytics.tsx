@@ -16,7 +16,7 @@ export default function Analytics() {
     queryKey: ["/api/bootstrap"],
   });
 
-  const filteredSeries = bootstrap?.portfolioSeries.slice(-period) || [];
+  const filteredSeries = bootstrap?.portfolioSeries?.slice(-period) || [];
 
   const calculateCashflow = () => {
     if (!bootstrap) return { netDeposits: "0", invested: "0", realizedPnl: "0", unrealizedPnl: "0" };
@@ -36,11 +36,11 @@ export default function Analytics() {
   const cashflow = calculateCashflow();
 
   const monthlyData = bootstrap?.portfolioSeries
-    .filter((_, i, arr) => i % 7 === 0 || i === arr.length - 1)
+    ?.filter((_, i, arr) => i % 7 === 0 || i === arr.length - 1)
     .map((d, i, arr) => {
       const prevValue = i > 0 ? parseFloat(arr[i - 1].value) : parseFloat(d.value);
       const currentValue = parseFloat(d.value);
-      const change = ((currentValue - prevValue) / prevValue) * 100;
+      const change = prevValue !== 0 ? ((currentValue - prevValue) / prevValue) * 100 : 0;
       return {
         date: d.date,
         change: parseFloat(change.toFixed(2)),

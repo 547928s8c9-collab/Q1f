@@ -38,7 +38,7 @@ export default function DemoQuestionnaire() {
   const handleSelect = (optionIndex: number) => {
     setAnswer(currentQ, optionIndex);
     if (currentQ < QUESTIONS.length - 1) {
-      setTimeout(() => setCurrentQ(currentQ + 1), 200);
+      setTimeout(() => setCurrentQ((q) => q + 1), 200);
     }
   };
 

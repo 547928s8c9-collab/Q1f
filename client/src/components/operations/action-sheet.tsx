@@ -135,8 +135,11 @@ export function AmountInput({
   if (step !== "amount") return null;
 
   const decimals = asset === "USDT" ? 6 : 2;
-  const maxVal = BigInt(availableBalance);
-  const minVal = BigInt(minAmount);
+  const safeParseBigInt = (val: string): bigint => {
+    try { return BigInt(val); } catch { return 0n; }
+  };
+  const maxVal = safeParseBigInt(availableBalance);
+  const minVal = safeParseBigInt(minAmount);
 
   const appendToAmount = (value: string) => {
     const next = amount + value;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useId } from "react";
 import {
   Area,
   Line,
@@ -45,20 +45,12 @@ async function fetchBtcPrices(days: number): Promise<PriceMap> {
   return map;
 }
 
-/** Fetch SPY daily close prices from Alpha Vantage. */
+/** Fetch SPY daily close prices via server proxy (keeps API key server-side). */
 async function fetchSpyPrices(days: number): Promise<PriceMap> {
-  const apiKey =
-    (typeof import.meta !== "undefined" &&
-      (import.meta as Record<string, unknown>).env &&
-      ((import.meta as { env: Record<string, string> }).env
-        .VITE_ALPHA_VANTAGE_KEY)) ||
-    "demo";
-  const outputsize = days > 100 ? "full" : "compact";
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=SPY&outputsize=${outputsize}&apikey=${apiKey}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`AlphaVantage ${res.status}`);
+  const res = await fetch(`/api/market/spy-prices?days=${days}`);
+  if (!res.ok) throw new Error(`SPY proxy ${res.status}`);
   const json = await res.json();
-  const series = (json["Time Series (Daily)"] ?? {}) as Record<
+  const series = (json.data?.["Time Series (Daily)"] ?? {}) as Record<
     string,
     Record<string, string>
   >;
@@ -70,6 +62,7 @@ async function fetchSpyPrices(days: number): Promise<PriceMap> {
 }
 
 export function PortfolioChart({ data, height = 280, period = 30 }: PortfolioChartProps) {
+  const gradientId = useId();
   const [showBtc, setShowBtc] = useState(false);
   const [showSp, setShowSp] = useState(false);
   const [btcPrices, setBtcPrices] = useState<PriceMap>({});
@@ -81,7 +74,7 @@ export function PortfolioChart({ data, height = 280, period = 30 }: PortfolioCha
     let cancelled = false;
     fetchBtcPrices(period)
       .then((m) => { if (!cancelled) setBtcPrices(m); })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setShowBtc(false); });
     return () => { cancelled = true; };
   }, [showBtc, period]);
 
@@ -91,7 +84,7 @@ export function PortfolioChart({ data, height = 280, period = 30 }: PortfolioCha
     let cancelled = false;
     fetchSpyPrices(period)
       .then((m) => { if (!cancelled) setSpPrices(m); })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setShowSp(false); });
     return () => { cancelled = true; };
   }, [showSp, period]);
 
@@ -208,7 +201,7 @@ export function PortfolioChart({ data, height = 280, period = 30 }: PortfolioCha
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
-              <linearGradient id="q1fGradient" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={`q1fGradient-${gradientId}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={Q1F_COLOR} stopOpacity={0.18} />
                 <stop offset="95%" stopColor={Q1F_COLOR} stopOpacity={0} />
               </linearGradient>
@@ -313,7 +306,7 @@ export function PortfolioChart({ data, height = 280, period = 30 }: PortfolioCha
               dataKey="q1f"
               stroke={Q1F_COLOR}
               strokeWidth={2.5}
-              fill="url(#q1fGradient)"
+              fill={`url(#q1fGradient-${gradientId})`}
               dot={false}
               activeDot={{ r: 3, fill: Q1F_COLOR }}
               isAnimationActive={false}
