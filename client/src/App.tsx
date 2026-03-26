@@ -49,6 +49,16 @@ const AdminManagementFees = React.lazy(() => import("@/pages/admin/management-fe
 const TelegramMiniAppLegacy = React.lazy(() => import("@/pages/tg"));
 const TelegramMiniAppV2 = React.lazy(() => import("@/pages/tg/v2"));
 const Q1FApp = React.lazy(() => import("@/pages/q1f/index"));
+
+// Demo flow steps (lazy-loaded except sumsub)
+import DemoSumsub from "@/pages/demo/sumsub";
+import { DemoProvider } from "@/pages/demo/demo-context";
+const DemoRegister = React.lazy(() => import("@/pages/demo/register"));
+const DemoQuestionnaire = React.lazy(() => import("@/pages/demo/questionnaire"));
+const DemoRecommendation = React.lazy(() => import("@/pages/demo/recommendation"));
+const DemoFundingMethod = React.lazy(() => import("@/pages/demo/funding-method"));
+const DemoDeposit = React.lazy(() => import("@/pages/demo/deposit"));
+const DemoLivePortfolio = React.lazy(() => import("@/pages/demo/live-portfolio"));
 import { Loader2 } from "lucide-react";
 import Risk from "@/pages/risk";
 import { FloatingProfitToastContainer } from "@/components/floating-profit-toast";
@@ -152,6 +162,31 @@ function AuthenticatedApp() {
   );
 }
 
+function DemoRouter() {
+  return (
+    <DemoProvider>
+      <Suspense
+        fallback={(
+          <div className="min-h-screen flex items-center justify-center bg-background">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      >
+        <Switch>
+          <Route path="/demo/sumsub" component={DemoSumsub} />
+          <Route path="/demo/register" component={DemoRegister} />
+          <Route path="/demo/questionnaire" component={DemoQuestionnaire} />
+          <Route path="/demo/recommendation" component={DemoRecommendation} />
+          <Route path="/demo/funding" component={DemoFundingMethod} />
+          <Route path="/demo/deposit" component={DemoDeposit} />
+          <Route path="/demo/portfolio" component={DemoLivePortfolio} />
+          <Route>{() => <DemoSumsub />}</Route>
+        </Switch>
+      </Suspense>
+    </DemoProvider>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -171,6 +206,7 @@ function App() {
               <Route path="/tg/v2" component={TelegramMiniAppV2} />
               <Route path="/tg/legacy" component={TelegramMiniAppLegacy} />
               <Route path="/telegram" component={TelegramMiniAppV2} />
+              <Route path="/demo/:step" component={DemoRouter} />
               <Route component={AuthenticatedApp} />
             </Switch>
           </Suspense>

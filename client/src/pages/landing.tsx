@@ -1,18 +1,24 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, TrendingUp, Wallet, Shield, ChartLine, Loader2, Sparkles, Play } from "lucide-react";
 
 const showDemoButtons = import.meta.env.DEV || import.meta.env.VITE_ALLOW_DEMO_ENDPOINTS === "true";
 
 export default function Landing() {
+  const [, navigate] = useLocation();
   const [isDemoAdminLoading, setIsDemoAdminLoading] = useState(false);
 
   const handleLogin = () => {
     window.location.href = "/api/login";
   };
-  
+
   const handleDemoLogin = () => {
     window.location.href = "/api/demo-login";
+  };
+
+  const handleDemoFlow = () => {
+    navigate("/demo/sumsub");
   };
   
   const handleDemoAdmin = () => {
@@ -67,17 +73,24 @@ export default function Landing() {
             Автоматизированные стратегии, прозрачная аналитика и безопасный кошелёк. Всё в одной платформе.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-center mb-6">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-center mb-4">
             <Button size="lg" onClick={handleLogin} data-testid="button-get-started">
               Начать
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
-            {showDemoButtons && (
-              <Button size="lg" variant="outline" onClick={handleDemoLogin} data-testid="button-demo-access">
-                Попробовать демо
-              </Button>
-            )}
+            <Button size="lg" variant="outline" onClick={handleDemoFlow} data-testid="button-try-demo">
+              <Play className="mr-1.5 h-4 w-4" />
+              Попробовать демо
+            </Button>
           </div>
+
+          {showDemoButtons && (
+            <div className="flex gap-3 items-center justify-center mb-6">
+              <Button size="sm" variant="ghost" onClick={handleDemoLogin} className="text-muted-foreground" data-testid="button-demo-access">
+                Демо-вход (с данными)
+              </Button>
+            </div>
+          )}
           
           {showDemoButtons && (
             <Button 
