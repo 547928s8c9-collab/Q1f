@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/ui/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { createIdempotencyKey } from "@/lib/idempotency";
 import { formatMoney, AddressStatus, type BootstrapResponse, type WhitelistAddress } from "@shared/schema";
 import { getMoneyInputState } from "@/lib/moneyInput";
 import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
@@ -38,7 +39,9 @@ export default function Withdraw() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: { amount: string; address: string }) => {
-      return apiRequest("POST", "/api/withdraw/usdt", data);
+      return apiRequest("POST", "/api/withdraw/usdt", data, {
+        headers: { "Idempotency-Key": createIdempotencyKey("wd_usdt") },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
@@ -66,7 +69,8 @@ export default function Withdraw() {
     getMoneyInputState(amount, "USDT");
   const isValidAmount = !!amountInMinor && BigInt(amountInMinor) > BigInt(0) && BigInt(amountInMinor) <= BigInt(availableBalance);
   const finalAddress = selectedWhitelist || address;
-  const canWithdraw = bootstrap?.gate?.canWithdraw && isValidAmount && finalAddress.length > 30 && !withdrawMutation.isPending;
+  const isValidTrc20Address = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(finalAddress);
+  const canWithdraw = bootstrap?.gate?.canWithdraw && isValidAmount && isValidTrc20Address && !withdrawMutation.isPending;
 
   const activeWhitelist = whitelist?.filter((w) => w.status === AddressStatus.ACTIVE) || [];
   const whitelistEnabled = bootstrap?.security?.whitelistEnabled;
@@ -77,7 +81,14 @@ export default function Withdraw() {
   };
 
   const handleMaxClick = () => {
-    setAmount(formatMoney(availableBalance, "USDT"));
+    // Use raw numeric value, not formatted (formatMoney may include commas)
+    const decimals = 6;
+    const bigVal = BigInt(availableBalance);
+    const divisor = BigInt(10 ** decimals);
+    const whole = bigVal / divisor;
+    const fraction = bigVal % divisor;
+    const fractionStr = fraction.toString().padStart(decimals, "0").replace(/0+$/, "");
+    setAmount(fractionStr ? `${whole}.${fractionStr}` : whole.toString());
   };
 
   return (
@@ -185,7 +196,14 @@ export default function Withdraw() {
             <div className="flex justify-between text-sm mt-2">
               <span className="text-muted-foreground">Вы получите</span>
               <span className="font-medium tabular-nums">
-                {normalizedAmount && !amountError ? (parseFloat(normalizedAmount) - parseFloat(formatMoney(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR, "USDT"))).toFixed(2) : "0.00"} USDT
+                {normalizedAmount && !amountError
+                  ? (() => {
+                      const amtMinor = BigInt(amountInMinor || "0");
+                      const feeMinor = BigInt(bootstrap?.config?.networkFee || NETWORK_FEE_MINOR);
+                      const receiveMinor = amtMinor > feeMinor ? amtMinor - feeMinor : 0n;
+                      return formatMoney(receiveMinor.toString(), "USDT");
+                    })()
+                  : "0.00"} USDT
               </span>
             </div>
           </div>

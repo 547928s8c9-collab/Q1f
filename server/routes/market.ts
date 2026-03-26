@@ -96,4 +96,23 @@ export function registerMarketRoutes({ app }: RouteDeps): void {
       res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: "Internal server error" } });
     }
   });
+
+  // Proxy for Alpha Vantage — keeps API key server-side
+  app.get("/api/market/spy-prices", async (req, res) => {
+    try {
+      const apiKey = process.env.ALPHA_VANTAGE_KEY || "demo";
+      const days = parseInt(String(req.query.days) || "30", 10);
+      const outputsize = days > 100 ? "full" : "compact";
+      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=SPY&outputsize=${outputsize}&apikey=${apiKey}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        return res.status(response.status).json({ ok: false, error: { code: "UPSTREAM_ERROR", message: `Alpha Vantage returned ${response.status}` } });
+      }
+      const data = await response.json();
+      res.json({ ok: true, data });
+    } catch (error) {
+      logger.error("SPY prices proxy error", "market-routes", {}, error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch SPY prices" } });
+    }
+  });
 }

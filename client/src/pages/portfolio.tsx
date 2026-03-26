@@ -78,7 +78,8 @@ function HeroSection({
     const diff = BigInt(todayValue) - BigInt(yesterdayValue);
     dailyChange = diff.toString();
     isPositive = diff >= 0n;
-    const percentChange = (Number(diff) / Number(yesterdayValue)) * 100;
+    const yestNum = Number(yesterdayValue);
+    const percentChange = yestNum !== 0 ? (Number(diff) / yestNum) * 100 : 0;
     dailyChangePercent = Math.abs(percentChange).toFixed(2);
   }
 
@@ -157,16 +158,17 @@ function InvestmentsSection({
   const principal = invested?.principal || "0";
   const hasInvested = BigInt(current) > 0n;
 
+  const principalNum = Number(principal);
   const profitPercent =
-    principal !== "0"
-      ? ((Number(BigInt(current) - BigInt(principal)) / Number(principal)) * 100).toFixed(2)
+    principalNum > 0
+      ? ((Number(BigInt(current) - BigInt(principal)) / principalNum) * 100).toFixed(2)
       : "0.00";
   const isProfit = BigInt(current) >= BigInt(principal);
 
   // Find the first active strategy with allocation
-  const activeStrategy = strategies?.find(
-    (s) => BigInt(bootstrap?.invested?.current || "0") > 0n
-  );
+  // Show the first strategy if user has active investments
+  // (bootstrap only provides aggregate invested data, not per-strategy)
+  const activeStrategy = hasInvested ? strategies?.[0] : undefined;
 
   const getRiskColor = (tier: string) => {
     const meta = TIER_META[tier as RiskTierKey];

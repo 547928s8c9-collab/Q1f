@@ -193,10 +193,11 @@ export default function Invest() {
 
   const selectedDbStrategy = findStrategyForTier(active.tierKey);
 
-  // Simulation values
-  const sim3 = Math.round(deposit * Math.pow(1 + active.returnMax / 100, 3));
-  const sim6 = Math.round(deposit * Math.pow(1 + active.returnMax / 100, 6));
-  const sim12 = Math.round(deposit * Math.pow(1 + active.returnMax / 100, 12));
+  // Simulation values — use average of min/max for realistic projection
+  const avgReturn = (active.returnMin + active.returnMax) / 2;
+  const sim3 = Math.round(deposit * Math.pow(1 + avgReturn / 100, 3));
+  const sim6 = Math.round(deposit * Math.pow(1 + avgReturn / 100, 6));
+  const sim12 = Math.round(deposit * Math.pow(1 + avgReturn / 100, 12));
 
   const animSim3 = useAnimatedValue(sim3);
   const animSim6 = useAnimatedValue(sim6);

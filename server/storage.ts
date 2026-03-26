@@ -440,21 +440,22 @@ export class DatabaseStorage implements IStorage {
       day7.setDate(day7.getDate() - 7);
 
       // Initial deposit 90 days ago
-      await db.insert(operations).values({
+      const [initDepositOp] = await db.insert(operations).values({
         userId,
         type: "DEPOSIT_USDT",
         status: "completed",
         asset: "USDT",
         amount: "8000000000",
         fee: "0",
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().returning();
 
-      // Update created_at via SQL for the initial deposit
-      await db.execute(sql`UPDATE operations SET created_at = ${day90} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '8000000000'`);
+      if (initDepositOp) {
+        await db.execute(sql`UPDATE operations SET created_at = ${day90} WHERE id = ${initDepositOp.id}`);
+      }
 
       // Initial investments 89 days ago
       for (let i = 0; i < selectedStrategies.length; i++) {
-        await db.insert(operations).values({
+        const [investOp] = await db.insert(operations).values({
           userId,
           type: "INVEST",
           status: "completed",
@@ -462,30 +463,36 @@ export class DatabaseStorage implements IStorage {
           amount: investmentAmounts[i].toString(),
           strategyId: selectedStrategies[i].id,
           strategyName: selectedStrategies[i].name,
-        });
+        }).returning();
+        if (investOp) {
+          await db.execute(sql`UPDATE operations SET created_at = ${day89} WHERE id = ${investOp.id}`);
+        }
       }
-      await db.execute(sql`UPDATE operations SET created_at = ${day89} WHERE user_id = ${userId} AND type = 'INVEST' AND created_at > ${day89}`);
 
       // Additional deposits
-      await db.insert(operations).values({
+      const [dep60Op] = await db.insert(operations).values({
         userId,
         type: "DEPOSIT_USDT",
         status: "completed",
         asset: "USDT",
         amount: "1000000000",
         fee: "0",
-      });
-      await db.execute(sql`UPDATE operations SET created_at = ${day60} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '1000000000' AND created_at > ${day60}`);
+      }).returning();
+      if (dep60Op) {
+        await db.execute(sql`UPDATE operations SET created_at = ${day60} WHERE id = ${dep60Op.id}`);
+      }
 
-      await db.insert(operations).values({
+      const [dep30Op] = await db.insert(operations).values({
         userId,
         type: "DEPOSIT_USDT",
         status: "completed",
         asset: "USDT",
         amount: "1000000000",
         fee: "0",
-      });
-      await db.execute(sql`UPDATE operations SET created_at = ${day30} WHERE user_id = ${userId} AND type = 'DEPOSIT_USDT' AND amount = '1000000000' AND created_at > ${day30}`);
+      }).returning();
+      if (dep30Op) {
+        await db.execute(sql`UPDATE operations SET created_at = ${day30} WHERE id = ${dep30Op.id}`);
+      }
 
       // Some profit accrual operations (weekly samples)
       for (let week = 1; week <= 8; week++) {
@@ -842,14 +849,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateBalance(userId: string, asset: string, available: string, locked: string): Promise<Balance> {
-    const existing = await this.getBalance(userId, asset);
-    if (existing) {
-      const [updated] = await db.update(balances).set({ available, locked, updatedAt: new Date() }).where(eq(balances.id, existing.id)).returning();
-      return updated;
-    } else {
-      const [created] = await db.insert(balances).values({ userId, asset, available, locked }).returning();
-      return created;
-    }
+    // Use a transaction with SELECT FOR UPDATE to prevent race conditions
+    const result = await db.transaction(async (tx) => {
+      const rows = await tx.execute(sql`
+        SELECT * FROM balances
+        WHERE user_id = ${userId} AND asset = ${asset}
+        LIMIT 1
+        FOR UPDATE
+      `);
+      const existing = rows.rows[0] as Balance | undefined;
+      if (existing) {
+        const [updated] = await tx.update(balances)
+          .set({ available, locked, updatedAt: new Date() })
+          .where(eq(balances.id, existing.id))
+          .returning();
+        return updated;
+      } else {
+        const [created] = await tx.insert(balances)
+          .values({ userId, asset, available, locked })
+          .returning();
+        return created;
+      }
+    });
+    return result;
   }
 
   async getVaults(userId: string): Promise<Vault[]> {
@@ -1469,16 +1491,22 @@ export class DatabaseStorage implements IStorage {
   async getOperations(userId: string, filter?: string, q?: string, cursor?: string, limit: number = 50): Promise<{ operations: Operation[]; nextCursor?: string }> {
     // Build WHERE conditions at DB level
     const conditions: ReturnType<typeof eq>[] = [eq(operations.userId, userId)];
-    
+
+    // Cursor-based pagination: cursor is the createdAt ISO string of the last item
+    if (cursor) {
+      conditions.push(lt(operations.createdAt, new Date(cursor)));
+    }
+
     // Filter by types
     if (filter && filter !== "all") {
       const types = filter.split(",");
       conditions.push(inArray(operations.type, types));
     }
-    
-    // Search query - use ilike for text matching
+
+    // Search query - use ilike for text matching (escape LIKE wildcards)
     if (q) {
-      const pattern = `%${q}%`;
+      const escaped = q.replace(/[%_\\]/g, "\\$&");
+      const pattern = `%${escaped}%`;
       conditions.push(
         or(
           ilike(operations.type, pattern),
@@ -1490,14 +1518,21 @@ export class DatabaseStorage implements IStorage {
         )!
       );
     }
-    
+
+    // Fetch limit+1 to determine if there are more results
     const results = await db.select()
       .from(operations)
       .where(and(...conditions))
       .orderBy(desc(operations.createdAt))
-      .limit(limit);
+      .limit(limit + 1);
 
-    return { operations: results };
+    const hasMore = results.length > limit;
+    const ops = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && ops.length > 0
+      ? ops[ops.length - 1].createdAt?.toISOString()
+      : undefined;
+
+    return { operations: ops, nextCursor };
   }
 
   async getOperationsByDate(userId: string, start: Date, end: Date): Promise<Operation[]> {

@@ -205,7 +205,7 @@ export default function DepositCard() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => window.open("https://t.me/your_support", "_blank", "noopener,noreferrer")}
+              onClick={() => window.open("https://t.me/zeon_support", "_blank", "noopener,noreferrer")}
               data-testid="button-telegram-support"
             >
               Написать в поддержку

@@ -14,8 +14,6 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { formatMoney, type BootstrapResponse } from "@shared/schema";
 import { getMoneyInputState } from "@/lib/moneyInput";
 
-const FALLBACK_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
-
 export default function DepositUSDT() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -25,7 +23,7 @@ export default function DepositUSDT() {
     queryKey: ["/api/bootstrap"],
   });
 
-  const depositAddress = bootstrap?.config?.depositAddress || FALLBACK_ADDRESS;
+  const depositAddress = bootstrap?.config?.depositAddress;
   const minDeposit = bootstrap?.config?.minDeposit || "10000000";
 
   const simulateMutation = useMutation({
@@ -76,12 +74,21 @@ export default function DepositUSDT() {
           </p>
         </div>
 
-        <div className="bg-muted rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between gap-2">
-            <code className="text-sm font-mono break-all">{depositAddress}</code>
-            <CopyButton value={depositAddress} />
+        {depositAddress ? (
+          <div className="bg-muted rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between gap-2">
+              <code className="text-sm font-mono break-all">{depositAddress}</code>
+              <CopyButton value={depositAddress} />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-destructive/5 border border-destructive/20 mb-4">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-destructive">
+              Не удалось загрузить адрес для пополнения. Обновите страницу или обратитесь в поддержку.
+            </p>
+          </div>
+        )}
 
         <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/5 border border-warning/20">
           <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />

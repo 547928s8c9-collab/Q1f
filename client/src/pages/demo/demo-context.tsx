@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 
 export type StrategyType = "stable" | "active" | "aggressive";
 export type FundingMethod = "card" | "crypto";
@@ -57,12 +57,15 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const setStrategy = useCallback((strategy: StrategyType) => setState((s) => ({ ...s, strategy })), []);
   const setFundingMethod = useCallback((method: FundingMethod) => setState((s) => ({ ...s, fundingMethod: method })), []);
   const setDepositAmount = useCallback((amount: number) => setState((s) => ({ ...s, depositAmount: amount })), []);
-  const reset = useCallback(() => setState(initialState), []);
+  const reset = useCallback(() => setState({ ...initialState, answers: {} }), []);
+
+  const value = useMemo(
+    () => ({ state, setPhone, setEmail, setOtpVerified, setAnswer, setStrategy, setFundingMethod, setDepositAmount, reset }),
+    [state, setPhone, setEmail, setOtpVerified, setAnswer, setStrategy, setFundingMethod, setDepositAmount, reset],
+  );
 
   return (
-    <DemoContext.Provider
-      value={{ state, setPhone, setEmail, setOtpVerified, setAnswer, setStrategy, setFundingMethod, setDepositAmount, reset }}
-    >
+    <DemoContext.Provider value={value}>
       {children}
     </DemoContext.Provider>
   );

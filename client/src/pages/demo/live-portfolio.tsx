@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,8 +7,8 @@ import { Loader2 } from "lucide-react";
 import { DemoLayout } from "./demo-layout";
 import { useDemo, STRATEGIES } from "./demo-context";
 
-const TICK_INTERVAL = 60; // ms
-const SIM_SECONDS_PER_TICK = 1800; // 30 min simulated per tick
+const TICK_INTERVAL = 500; // ms (was 60ms, reduced to avoid excessive re-renders)
+const SIM_SECONDS_PER_TICK = 14400; // compensate for slower tick interval
 
 function generateTick(
   balance: number,
@@ -19,15 +19,16 @@ function generateTick(
   const avgMonthlyRate = (monthlyRateMin + monthlyRateMax) / 2 / 100;
   const secondsInMonth = 30 * 24 * 3600;
   const ratePerSecond = avgMonthlyRate / secondsInMonth;
-  const noise = 1 + (Math.random() - 0.45) * 0.0005;
+  const noise = 1 + (Math.random() - 0.5) * 0.0005;
   return balance * (1 + ratePerSecond * simSeconds) * noise;
 }
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const gradientId = useId();
   if (data.length < 2) return null;
 
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const min = data.reduce((a, b) => Math.min(a, b), data[0]);
+  const max = data.reduce((a, b) => Math.max(a, b), data[0]);
   const range = max - min || 1;
   const width = 320;
   const height = 80;
@@ -44,7 +45,7 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-20" preserveAspectRatio="none">
       <defs>
-        <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.2" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
@@ -52,7 +53,7 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
       {/* Fill area */}
       <polygon
         points={`${padding},${height - padding} ${points.join(" ")} ${parseFloat(lastPoint[0])},${height - padding}`}
-        fill="url(#sparkGrad)"
+        fill={`url(#${gradientId})`}
       />
       {/* Line */}
       <polyline
@@ -75,6 +76,14 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
 export default function DemoLivePortfolio() {
   const [, navigate] = useLocation();
   const { state } = useDemo();
+
+  // Navigation guard: redirect to start if required state is missing
+  useEffect(() => {
+    if (!state.strategy || !state.depositAmount) {
+      navigate("/demo/register", { replace: true });
+    }
+  }, [state.strategy, state.depositAmount, navigate]);
+
   const strategyKey = state.strategy || "active";
   const strategy = STRATEGIES[strategyKey];
   const initialBalance = state.depositAmount || 1000;

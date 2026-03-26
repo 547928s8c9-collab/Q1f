@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +9,14 @@ import { useDemo, STRATEGIES, type StrategyType } from "./demo-context";
 export default function DemoRecommendation() {
   const [, navigate] = useLocation();
   const { state, setStrategy } = useDemo();
+
+  // Navigation guard: require questionnaire answers
+  useEffect(() => {
+    if (Object.keys(state.answers).length === 0) {
+      navigate("/demo/questionnaire", { replace: true });
+    }
+  }, [state.answers, navigate]);
+
   const recommended = state.strategy || "active";
 
   return (
