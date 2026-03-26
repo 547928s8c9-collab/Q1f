@@ -18,7 +18,7 @@ export default function Landing() {
   };
 
   const handleDemoFlow = () => {
-    navigate("/demo/sumsub");
+    navigate("/demo/register");
   };
   
   const handleDemoAdmin = () => {
@@ -45,7 +45,7 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-2">
             {showDemoButtons && (
-              <Button variant="ghost" size="sm" onClick={handleDemoLogin} data-testid="button-demo-header">
+              <Button variant="ghost" size="sm" onClick={handleDemoFlow} data-testid="button-demo-header">
                 Демо
               </Button>
             )}
