@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { NumericKeypad } from "@/components/ui/numeric-keypad";
 import {
   ActionSheet,
   ConfirmStep,
@@ -62,12 +63,26 @@ function WithdrawFlow({
   const totalDeduction = (BigInt(minorAmount || "0") + BigInt(NETWORK_FEE)).toString();
   const balanceAfter = (BigInt(availableBalance) - BigInt(totalDeduction)).toString();
 
-  const handleAmountChange = (value: string) => {
-    const cleanValue = value.replace(/[^0-9.]/g, "");
-    const parts = cleanValue.split(".");
+  const appendToAmount = (value: string) => {
+    const next = amount + value;
+    const parts = next.split(".");
     if (parts.length > 2) return;
     if (parts[1] && parts[1].length > 6) return;
-    setAmount(cleanValue);
+    setAmount(next);
+    setError("");
+  };
+
+  const handleDigit = (digit: string) => {
+    appendToAmount(digit);
+  };
+
+  const handleDecimal = () => {
+    if (amount.includes(".")) return;
+    setAmount(amount === "" ? "0." : amount + ".");
+  };
+
+  const handleBackspace = () => {
+    setAmount(amount.slice(0, -1));
     setError("");
   };
 
@@ -162,7 +177,7 @@ function WithdrawFlow({
   return (
     <>
       {step === "amount" && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3">
           <div>
             <Label htmlFor="address">Адрес кошелька</Label>
             <Input
@@ -176,27 +191,19 @@ function WithdrawFlow({
             />
           </div>
 
-          <div>
-            <Label htmlFor="amount">Сумма</Label>
-            <div className="relative mt-1.5">
-              <Input
-                id="amount"
-                type="text"
-                inputMode="decimal"
-                placeholder="100.00"
-                value={amount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                className="text-2xl font-semibold pr-20 tabular-nums"
-                data-testid="input-amount"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <span className="text-muted-foreground text-sm">USDT</span>
-              </div>
+          {/* Amount display */}
+          <div className="text-center py-3">
+            <p className="text-sm text-muted-foreground mb-2">Сумма</p>
+            <div className="flex items-baseline justify-center gap-2" data-testid="input-amount">
+              <span className="text-5xl font-bold tabular-nums tracking-tight">
+                {amount || "0"}
+              </span>
+              <span className="text-xl text-muted-foreground font-medium">USDT</span>
             </div>
-            {error && <p className="text-sm text-destructive mt-1">{error}</p>}
+            {error && <p className="text-sm text-destructive mt-2">{error}</p>}
           </div>
 
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center justify-between text-sm px-1">
             <span className="text-muted-foreground">Доступно</span>
             <button
               type="button"
@@ -212,8 +219,17 @@ function WithdrawFlow({
             Комиссия сети: {formatMoney(NETWORK_FEE, "USDT")} USDT
           </div>
 
+          {/* Custom numeric keypad */}
+          <NumericKeypad
+            onDigit={handleDigit}
+            onDecimal={handleDecimal}
+            onBackspace={handleBackspace}
+            className="mt-1"
+          />
+
           <Button
             className="w-full"
+            size="lg"
             onClick={handleNext}
             disabled={!amount || amount === "0" || !address}
             data-testid="button-next-step"
