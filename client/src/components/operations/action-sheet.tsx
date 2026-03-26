@@ -1,5 +1,5 @@
 import { useState, createContext, useContext, useCallback } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Sheet,
   SheetContent,
@@ -368,6 +368,7 @@ interface ResultStepProps {
 
 export function ResultStep({ title, message, onClose }: ResultStepProps) {
   const { step, status, operationId } = useActionSheet();
+  const [, setLocation] = useLocation();
 
   if (step !== "result") return null;
 
@@ -392,6 +393,13 @@ export function ResultStep({ title, message, onClose }: ResultStepProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
+  const handleDone = () => {
+    onClose();
+    if (status === "success") {
+      setLocation("/");
+    }
+  };
+
   return (
     <div className="text-center space-y-4">
       <div className={cn("w-16 h-16 rounded-full mx-auto flex items-center justify-center", config.bgClass)}>
@@ -403,14 +411,14 @@ export function ResultStep({ title, message, onClose }: ResultStepProps) {
       </div>
       
       {operationId && (
-        <Link href="/profile">
+        <Link href="/activity">
           <Button variant="outline" className="w-full" data-testid="button-view-activity">
             Показать в Активности
           </Button>
         </Link>
       )}
       
-      <Button onClick={onClose} className="w-full" data-testid="button-close-sheet">
+      <Button onClick={handleDone} className="w-full" data-testid="button-close-sheet">
         Готово
       </Button>
     </div>

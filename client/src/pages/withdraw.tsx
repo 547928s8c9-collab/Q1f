@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ const NETWORK_FEE_MINOR = "1000000"; // 1 USDT fallback
 
 export default function Withdraw() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [amount, setAmount] = useState("");
   const [address, setAddress] = useState("");
   const [selectedWhitelist, setSelectedWhitelist] = useState<string>("");
@@ -48,6 +50,7 @@ export default function Withdraw() {
       setAmount("");
       setAddress("");
       setSelectedWhitelist("");
+      setTimeout(() => setLocation("/"), 500);
     },
     onError: (error: Error) => {
       toast({

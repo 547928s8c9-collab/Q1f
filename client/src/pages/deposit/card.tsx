@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { createIdempotencyKey } from "@/lib/idempotency";
 
 export default function DepositCard() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [amount, setAmount] = useState("");
   const [moonpayAmount, setMoonpayAmount] = useState("");
   const [onramperOpen, setOnramperOpen] = useState(false);
@@ -41,6 +43,7 @@ export default function DepositCard() {
         description: "RUB зачислен и конвертирован в USDT",
       });
       setAmount("");
+      setTimeout(() => setLocation("/"), 500);
     },
     onError: (error: Error) => {
       toast({

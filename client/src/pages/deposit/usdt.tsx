@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ const FALLBACK_ADDRESS = "TNPeeaaFB7K9cmo4uQpcU32zGK8G1NYqeL";
 
 export default function DepositUSDT() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [simulateAmount, setSimulateAmount] = useState("");
 
   const { data: bootstrap } = useQuery<BootstrapResponse>({
@@ -43,6 +45,7 @@ export default function DepositUSDT() {
         description: "USDT зачислен в ваш кошелёк",
       });
       setSimulateAmount("");
+      setTimeout(() => setLocation("/"), 500);
     },
     onError: (error: Error) => {
       toast({
