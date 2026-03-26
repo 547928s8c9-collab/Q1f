@@ -113,7 +113,6 @@ function DepositFlow({
         onNext={() => setStep("confirm")}
         minAmount="10000000"
         label="Сумма пополнения"
-        placeholder="100.00"
       />
 
       <ConfirmStep

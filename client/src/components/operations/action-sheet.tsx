@@ -8,11 +8,10 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { formatMoney } from "@shared/schema";
 import { CheckCircle2, XCircle, Clock, ArrowRight, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NumericKeypad } from "@/components/ui/numeric-keypad";
 
 export type ActionStep = "amount" | "confirm" | "result";
 export type ActionStatus = "success" | "pending" | "failed";
@@ -121,7 +120,6 @@ interface AmountInputProps {
   minAmount?: string;
   maxAmount?: string;
   label?: string;
-  placeholder?: string;
 }
 
 export function AmountInput({
@@ -130,7 +128,6 @@ export function AmountInput({
   onNext,
   minAmount = "1000000",
   label = "Сумма",
-  placeholder = "0.00",
 }: AmountInputProps) {
   const { amount, setAmount, step } = useActionSheet();
   const [error, setError] = useState("");
@@ -141,12 +138,26 @@ export function AmountInput({
   const maxVal = BigInt(availableBalance);
   const minVal = BigInt(minAmount);
 
-  const handleAmountChange = (value: string) => {
-    const cleanValue = value.replace(/[^0-9.]/g, "");
-    const parts = cleanValue.split(".");
+  const appendToAmount = (value: string) => {
+    const next = amount + value;
+    const parts = next.split(".");
     if (parts.length > 2) return;
     if (parts[1] && parts[1].length > decimals) return;
-    setAmount(cleanValue);
+    setAmount(next);
+    setError("");
+  };
+
+  const handleDigit = (digit: string) => {
+    appendToAmount(digit);
+  };
+
+  const handleDecimal = () => {
+    if (amount.includes(".")) return;
+    setAmount(amount === "" ? "0." : amount + ".");
+  };
+
+  const handleBackspace = () => {
+    setAmount(amount.slice(0, -1));
     setError("");
   };
 
@@ -180,29 +191,33 @@ export function AmountInput({
     setError("");
   };
 
+  const addQuickAmount = (displayAmount: string) => {
+    const current = parseFloat(amount || "0");
+    const next = current + parseFloat(displayAmount);
+    const maxDisplay = Number(maxVal) / 10 ** decimals;
+    const clamped = Math.min(next, maxDisplay);
+    setAmount(clamped % 1 === 0 ? clamped.toString() : clamped.toFixed(decimals).replace(/0+$/, ""));
+    setError("");
+  };
+
+  const displayAmount = amount || "0";
+
   return (
-    <div className="space-y-4">
-      <div>
-        <Label htmlFor="amount">{label}</Label>
-        <div className="relative mt-1.5">
-          <Input
-            id="amount"
-            type="text"
-            inputMode="decimal"
-            placeholder={placeholder}
-            value={amount}
-            onChange={(e) => handleAmountChange(e.target.value)}
-            className="text-2xl font-semibold pr-20 tabular-nums"
-            data-testid="input-amount"
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-            <span className="text-muted-foreground text-sm">{asset}</span>
-          </div>
+    <div className="flex flex-col gap-3">
+      {/* Amount display */}
+      <div className="text-center py-4">
+        <p className="text-sm text-muted-foreground mb-2">{label}</p>
+        <div className="flex items-baseline justify-center gap-2" data-testid="input-amount">
+          <span className="text-5xl font-bold tabular-nums tracking-tight">
+            {displayAmount}
+          </span>
+          <span className="text-xl text-muted-foreground font-medium">{asset}</span>
         </div>
-        {error && <p className="text-sm text-destructive mt-1">{error}</p>}
+        {error && <p className="text-sm text-destructive mt-2">{error}</p>}
       </div>
 
-      <div className="flex items-center justify-between text-sm">
+      {/* Available balance */}
+      <div className="flex items-center justify-between text-sm px-1">
         <span className="text-muted-foreground">Доступно</span>
         <button
           type="button"
@@ -214,8 +229,39 @@ export function AmountInput({
         </button>
       </div>
 
+      {/* Quick amount pills */}
+      <div className="flex gap-2">
+        {["100", "500", "1000"].map((val) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => addQuickAmount(val)}
+            className="flex-1 rounded-full border border-border bg-background py-2 text-sm font-medium hover:bg-muted active:scale-95 transition-transform"
+          >
+            +{val}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={setMax}
+          className="flex-1 rounded-full border border-border bg-background py-2 text-sm font-medium hover:bg-muted active:scale-95 transition-transform"
+        >
+          MAX
+        </button>
+      </div>
+
+      {/* Custom numeric keypad */}
+      <NumericKeypad
+        onDigit={handleDigit}
+        onDecimal={handleDecimal}
+        onBackspace={handleBackspace}
+        className="mt-1"
+      />
+
+      {/* CTA */}
       <Button
         className="w-full"
+        size="lg"
         onClick={handleNext}
         disabled={!amount || amount === "0"}
         data-testid="button-next-step"
