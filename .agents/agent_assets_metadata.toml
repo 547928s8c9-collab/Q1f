@@ -6,3 +6,9 @@ id = "i1OvgwuSHr3pOreJuu4Tg"
 uri = "file://ZEON_Platform_Description.md"
 type = "text"
 title = "ZEON — Описание платформы со скриншотами (19 UC + 6 Admin UC)"
+
+[[outputs]]
+id = "_o0dnrx9peN7AQkuxvym8"
+uri = "file://ZEON_Platform_Description.pdf"
+type = "pdf"
+title = "ZEON — Описание платформы (PDF, 11 стр., со скриншотами)"
