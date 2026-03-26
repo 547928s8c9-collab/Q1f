@@ -9,20 +9,13 @@ import { formatMoney, type BootstrapResponse, type Strategy } from "@shared/sche
 import { RangeSelector, rangeToDays, type RangeOption } from "@/components/ui/range-selector";
 import { DepositSheet, WithdrawSheet } from "@/components/operations";
 import { TIER_META, type RiskTierKey } from "@/components/strategy/tier-card";
+import { PortfolioChart } from "@/components/charts/portfolio-chart";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   TrendingUp,
   ChevronRight,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 type SheetType = "deposit" | "withdraw" | null;
 
@@ -314,21 +307,14 @@ function ChartSection() {
     refetchInterval: 15_000,
   });
 
-  const chartData = useMemo(
+  const seriesData = useMemo(
     () =>
       (data?.equitySeries || []).map((d) => ({
         date: d.ts,
-        value: parseFloat(d.equityMinor) / 1000000,
-        displayValue: d.equityMinor,
+        value: d.equityMinor,
       })),
     [data?.equitySeries],
   );
-
-  const minValue =
-    chartData.length > 0 ? Math.min(...chartData.map((d) => d.value)) : 0;
-  const maxValue =
-    chartData.length > 0 ? Math.max(...chartData.map((d) => d.value)) : 100;
-  const padding = (maxValue - minValue) * 0.1 || 10;
 
   return (
     <div
@@ -347,7 +333,7 @@ function ChartSection() {
         <div style={{ height: 240 }}>
           <ChartSkeleton height={240} />
         </div>
-      ) : chartData.length === 0 ? (
+      ) : seriesData.length === 0 ? (
         <EmptyState
           icon={TrendingUp}
           title="Нет истории портфеля"
@@ -358,85 +344,7 @@ function ChartSection() {
           </Link>
         </EmptyState>
       ) : (
-        <div className="w-full" style={{ height: 240 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient
-                  id="portfolioGradient"
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop
-                    offset="5%"
-                    stopColor="hsl(var(--primary))"
-                    stopOpacity={0.2}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor="hsl(var(--primary))"
-                    stopOpacity={0}
-                  />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="date"
-                axisLine={false}
-                tickLine={false}
-                tick={{
-                  fontSize: 11,
-                  fill: "hsl(var(--muted-foreground))",
-                }}
-                tickFormatter={(value) => {
-                  const date = new Date(value);
-                  return date.toLocaleDateString("ru-RU", {
-                    month: "short",
-                    day: "numeric",
-                  });
-                }}
-                minTickGap={40}
-              />
-              <YAxis hide domain={[minValue - padding, maxValue + padding]} />
-              <RechartsTooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const point = payload[0].payload;
-                    return (
-                      <div className="bg-popover border border-popover-border rounded-lg p-3 shadow-lg">
-                        <p className="text-xs text-muted-foreground mb-1">
-                          {new Date(point.date).toLocaleDateString("ru-RU", {
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </p>
-                        <p className="text-lg font-semibold tabular-nums">
-                          {formatMoney(point.displayValue, "USDT")}{" "}
-                          <span className="text-sm text-muted-foreground">
-                            USDT
-                          </span>
-                        </p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                fill="url(#portfolioGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <PortfolioChart data={seriesData} height={240} period={days} />
       )}
     </div>
   );
