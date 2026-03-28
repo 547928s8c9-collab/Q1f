@@ -78,9 +78,15 @@ Preferred communication style: Simple, everyday language.
 - **Rate Limiting**: Tiered protection for various API endpoints using `express-rate-limit`.
 
 ### Demo Mode
+- **Demo Login**: `/api/demo-login` creates demo session, seeds 10,000 USDT + 500,000 RUB balances, sets all gates as passed (contactVerified, consentAccepted, kyc=APPROVED, twoFactorEnabled=true).
 - **Demo Data Seeder**: Client-side hook (`useDemoDataSeeder`) seeds TanStack Query cache with hardcoded "Алишер Н., Ташкент" persona data when `user.email === "demo@example.com"`.
 - **Seed Data**: `client/src/lib/demo-seed.ts` — portfolio history (Oct 2025–Mar 2026), 3 withdrawals, 11 activity events, monthly P&L with one negative month (Nov 2025: -31.50).
 - **Cache Targets**: `/api/bootstrap` (balances, portfolioSeries, invested), `/api/analytics/overview` (5 time windows), `/api/operations`, `/api/statements/summary` (per month).
+
+### Bootstrap API (`/api/bootstrap`)
+- **Balances**: Returned as `{ USDT: { available, locked }, RUB: { available, locked } }` (object, not array).
+- **Gate**: `gate` field with `canInvest`, `canDeposit`, `canWithdraw` booleans (true when `reasons.length === 0`). Also includes `consentRequired`, `kycRequired`, `twoFactorRequired`, `whitelistRequired`, `reasons`.
+- **Post-operation redirects**: All successful operations (invest, deposit, withdrawal) redirect to Portfolio (`/`) via `setLocation("/")`.
 
 ### Fiat On-Ramp
 - **Card Deposit**: Russian-localized page (`Карта → USDT`) with simulated RUB→USDT conversion.

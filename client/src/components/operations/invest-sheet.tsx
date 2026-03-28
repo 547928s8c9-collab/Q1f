@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowRight } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import {
   ActionSheet,
   ConfirmStep,
@@ -72,6 +73,7 @@ function InvestFlow({
   preselectedStrategyId?: string;
 }) {
   const { step, setStep, amount, setAmount, setStatus, setOperationId } = useActionSheet();
+  const [, setLocation] = useLocation();
   const [selectedTier, setSelectedTier] = useState<RiskTierKey | "">("");
   const [strategyId, setStrategyId] = useState(preselectedStrategyId || "");
   const [error, setError] = useState("");
@@ -186,9 +188,6 @@ function InvestFlow({
       return res.json();
     },
     onSuccess: (data) => {
-      setStatus("success");
-      setOperationId(data.operation?.id || null);
-      setStep("result");
       queryClient.invalidateQueries({ queryKey: ["/api/bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
       queryClient.invalidateQueries({ queryKey: ["/api/operations"] });
@@ -199,6 +198,8 @@ function InvestFlow({
         title: "Инвестиция выполнена",
         description: `${formatMoney(minorAmount, "USDT")} USDT инвестировано в «${tierName}»`,
       });
+      onClose();
+      setLocation("/");
     },
     onError: (error: Error) => {
       setStatus("failed");

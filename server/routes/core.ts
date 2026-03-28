@@ -149,7 +149,16 @@ export function registerCoreRoutes({ app, isAuthenticated, getUserId }: RouteDep
           email: user.email,
           name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || null,
         },
-        balances,
+        balances: {
+          USDT: (() => {
+            const b = balances.find((x) => x.asset === "USDT");
+            return { available: b?.available || "0", locked: b?.locked || "0" };
+          })(),
+          RUB: (() => {
+            const b = balances.find((x) => x.asset === "RUB");
+            return { available: b?.available || "0", locked: b?.locked || "0" };
+          })(),
+        },
         vaults,
         invested,
         portfolio: {
@@ -174,11 +183,14 @@ export function registerCoreRoutes({ app, isAuthenticated, getUserId }: RouteDep
           consentAccepted,
           isKycApproved,
         },
-        gates: {
+        gate: {
           consentRequired,
           kycRequired,
           twoFactorRequired,
           whitelistRequired,
+          canDeposit: reasons.length === 0,
+          canInvest: reasons.length === 0,
+          canWithdraw: reasons.length === 0,
           reasons,
         },
         quotes: {

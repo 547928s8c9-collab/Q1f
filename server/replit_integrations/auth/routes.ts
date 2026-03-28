@@ -40,7 +40,7 @@ export function registerAuthRoutes(app: Express): void {
         contactVerified: true,
         consentAccepted: true,
         kycStatus: "approved",
-        twoFactorEnabled: false,
+        twoFactorEnabled: true,
         whitelistEnabled: false,
       });
 
